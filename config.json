@@ -1,0 +1,45 @@
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 6868,
+    "debug": false
+  },
+  "epad": {
+    "api_base": "http://172.16.56.2:4001/api",
+    "username": "Thuan.Trinh@seazen.com.vn",
+    "password": "Thuantrinh@1516",
+    "timeout_sec": 6
+  },
+  "doors": [
+    {
+      "id": 1,
+      "code": "LAN_VAO",
+      "name": "Cửa Làn VÀO",
+      "direction": "IN",
+      "devices": [
+        { "sn": "1313244800040", "name": "Làn VÀO phải" },
+        { "sn": "1313244800129", "name": "Làn VÀO trái" }
+      ],
+      "default_open_seconds": 3
+    },
+    {
+      "id": 2,
+      "code": "LAN_RA",
+      "name": "Cửa Làn RA",
+      "direction": "OUT",
+      "devices": [
+        { "sn": "1313244800122", "name": "Làn RA trái" },
+        { "sn": "1313244800130", "name": "Làn RA phải" }
+      ],
+      "default_open_seconds": 3
+    }
+  ],
+  "sharepoint": {
+    "enabled": false,
+    "tenant_id": "29101901-3778-4339-827c-7d2b50914db0",
+    "client_id": "04b07795-8ddb-461a-bbee-02f9e1bf7b46",
+    "site_id": "",
+    "visitor_list_name": "ACCESS_CONTROL_VISITORS",
+    "log_list_name": "ACCESS_CONTROL_LOGS"
+  }
+}

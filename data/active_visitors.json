@@ -1,0 +1,22 @@
+[
+  {
+    "id": "2f57069a",
+    "cccd_number": "123456789112",
+    "full_name": "aaaaa",
+    "birth_date": "12/07/2001",
+    "birth_year": "2001",
+    "phone": "0",
+    "company": "0",
+    "host_person": "Đỗ Thị Hương (5058)",
+    "department": "HC QTNS",
+    "purpose": "0",
+    "vehicle_number": "0",
+    "card_number": "8052961",
+    "checkin_time": "2026-09-18 09:50:00",
+    "expected_checkout_time": "2026-09-18 16:45:00",
+    "checkout_time": null,
+    "duration_str": null,
+    "status": "ACTIVE",
+    "operator": "Bảo vệ"
+  }
+]

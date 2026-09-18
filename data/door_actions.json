@@ -1,0 +1,56 @@
+[
+  {
+    "id": "fdb848d6",
+    "timestamp": "2026-09-17 11:20:15",
+    "door_id": 1,
+    "door_name": "Cửa Làn VÀO",
+    "duration_sec": 3,
+    "operator": "Bảo vệ",
+    "success": true
+  },
+  {
+    "id": "b2b6717c",
+    "timestamp": "2026-09-17 11:22:39",
+    "door_id": 1,
+    "door_name": "Cửa Làn VÀO",
+    "duration_sec": 3,
+    "operator": "Bảo vệ trực",
+    "success": true
+  },
+  {
+    "id": "02833ad0",
+    "timestamp": "2026-09-17 11:27:06",
+    "door_id": 2,
+    "door_name": "Cửa Làn RA",
+    "duration_sec": 3,
+    "operator": "Bảo vệ",
+    "success": true
+  },
+  {
+    "id": "f32ca3e4",
+    "timestamp": "2026-09-17 11:33:48",
+    "door_id": 1,
+    "door_name": "Cửa Làn VÀO",
+    "duration_sec": 3,
+    "operator": "Bảo vệ",
+    "success": true
+  },
+  {
+    "id": "188f5f03",
+    "timestamp": "2026-09-17 11:34:02",
+    "door_id": 2,
+    "door_name": "Cửa Làn RA",
+    "duration_sec": 3,
+    "operator": "Bảo vệ",
+    "success": true
+  },
+  {
+    "id": "278957fe",
+    "timestamp": "2026-09-17 12:32:25",
+    "door_id": 1,
+    "door_name": "Cửa Làn VÀO",
+    "duration_sec": 3,
+    "operator": "Bảo vệ",
+    "success": true
+  }
+]
