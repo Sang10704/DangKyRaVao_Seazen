@@ -5,7 +5,9 @@ import SidebarShell from './components/shell/SidebarShell';
 import ClockSafetyModal from './components/common/ClockSafetyModal';
 import LoginPage from './pages/auth/LoginPage';
 import LiveCommandPage from './pages/live/LiveCommandPage';
+import AccessHistoryPage from './pages/history/AccessHistoryPage';
 import VisitorManagementPage from './pages/visitors/VisitorManagementPage';
+import CardManagementPage from './pages/cards/CardManagementPage';
 import HrmBiometricsPage from './pages/hrm/HrmBiometricsPage';
 import TimekeepingPage from './pages/attendance/TimekeepingPage';
 
@@ -271,6 +273,10 @@ export default function App() {
               />
             )}
 
+            {currentPath === ROUTES.HISTORY && (
+              <AccessHistoryPage notify={notify} />
+            )}
+
             {currentPath === ROUTES.VISITORS && (
               <VisitorManagementPage
                 departments={departments}
@@ -278,6 +284,18 @@ export default function App() {
                 activeVisitors={activeVisitors}
                 visitorHistory={visitorHistory}
                 customerCards={customerCards}
+                onRefreshData={() => {
+                  fetchLiveStreams();
+                  fetchCoreDirectory();
+                }}
+                notify={notify}
+              />
+            )}
+
+            {currentPath === ROUTES.CARDS && (
+              <CardManagementPage
+                customerCards={customerCards}
+                activeVisitors={activeVisitors}
                 onRefreshData={() => {
                   fetchLiveStreams();
                   fetchCoreDirectory();

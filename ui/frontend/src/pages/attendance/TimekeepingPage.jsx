@@ -29,66 +29,67 @@ export default function TimekeepingPage({ departments }) {
   };
 
   return (
-    <div className="tino-center" style={{ padding: '24px 32px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 16, marginBottom: 22 }}>
-        <div>
-          <div className="tino-greeting-sub">
-            Quy tắc tính công tự động: Đầu ngày quét (Giờ vào đầu) → Cuối ngày quét (Giờ ra cuối)
+    <div className="tino-body">
+      <div className="tino-center">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 16, marginBottom: 14, flexShrink: 0 }}>
+          <div>
+            <div className="tino-greeting-sub" style={{ fontSize: 13 }}>
+              Quy tắc tính công tự động: Đầu ngày quét (Giờ vào đầu) → Cuối ngày quét (Giờ ra cuối)
+            </div>
+            <h1 className="tino-greeting-title" style={{ fontSize: 22 }}>
+              Bảng Tổng hợp Công theo từng ngày ({rows.length} bản ghi)
+            </h1>
           </div>
-          <h1 className="tino-greeting-title">
-            Bảng Tổng hợp Công theo từng ngày ({rows.length} bản ghi)
-          </h1>
+
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className={`btn btn-sm ${selectedDate === 'ALL' ? 'btn-primary' : ''}`}
+              onClick={() => setSelectedDate('ALL')}
+            >
+              Tất cả các ngày
+            </button>
+            <button
+              type="button"
+              className={`btn btn-sm ${selectedDate !== 'ALL' ? 'btn-gold' : ''}`}
+              onClick={() => setSelectedDate(new Date().toISOString().slice(0, 10))}
+            >
+              Hôm nay
+            </button>
+            <input
+              type="date"
+              className="v-input"
+              style={{ width: 150 }}
+              value={selectedDate === 'ALL' ? '' : selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value || 'ALL')}
+            />
+            <select
+              className="v-input"
+              style={{ width: 175 }}
+              value={deptFilter}
+              onChange={(e) => setDeptFilter(e.target.value)}
+            >
+              <option value="">Tất cả phòng ban</option>
+              {departments.map((d) => (
+                <option key={d.DepartmentID} value={d.DepartmentName}>
+                  {d.DepartmentName}
+                </option>
+              ))}
+            </select>
+            <input
+              type="text"
+              className="v-input"
+              style={{ width: 220 }}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Tìm họ tên, mã nhân viên..."
+            />
+          </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            className={`btn btn-sm ${selectedDate === 'ALL' ? 'btn-primary' : ''}`}
-            onClick={() => setSelectedDate('ALL')}
-          >
-            Tất cả các ngày
-          </button>
-          <button
-            type="button"
-            className={`btn btn-sm ${selectedDate !== 'ALL' ? 'btn-gold' : ''}`}
-            onClick={() => setSelectedDate(new Date().toISOString().slice(0, 10))}
-          >
-            Hôm nay
-          </button>
-          <input
-            type="date"
-            className="v-input"
-            style={{ width: 150 }}
-            value={selectedDate === 'ALL' ? '' : selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value || 'ALL')}
-          />
-          <select
-            className="v-input"
-            style={{ width: 175 }}
-            value={deptFilter}
-            onChange={(e) => setDeptFilter(e.target.value)}
-          >
-            <option value="">Tất cả phòng ban</option>
-            {departments.map((d) => (
-              <option key={d.DepartmentID} value={d.DepartmentName}>
-                {d.DepartmentName}
-              </option>
-            ))}
-          </select>
-          <input
-            type="text"
-            className="v-input"
-            style={{ width: 220 }}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Tìm họ tên, mã nhân viên..."
-          />
-        </div>
-      </div>
-
-      <div className="card">
-        <div className="table-scroll" style={{ maxHeight: 580 }}>
-          <table className="data-table">
+        <div className="card card-table-fill">
+          <div className="table-scroll">
+            <table className="data-table">
             <thead>
               <tr>
                 <th>#</th>
@@ -161,6 +162,7 @@ export default function TimekeepingPage({ departments }) {
             </tbody>
           </table>
         </div>
+      </div>
       </div>
     </div>
   );

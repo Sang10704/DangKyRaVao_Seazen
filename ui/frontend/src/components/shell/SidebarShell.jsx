@@ -22,6 +22,16 @@ export default function SidebarShell({
       ),
     },
     {
+      path: ROUTES.HISTORY,
+      label: 'Lịch sử Ra vào',
+      svg: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+          <circle cx="12" cy="12" r="9"></circle>
+          <polyline points="12 7 12 12 15.5 14"></polyline>
+        </svg>
+      ),
+    },
+    {
       path: ROUTES.VISITORS,
       label: 'Đăng ký Khách',
       badge: activeVisitorsCount > 0 ? activeVisitorsCount : null,
@@ -30,6 +40,17 @@ export default function SidebarShell({
           <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
           <circle cx="9" cy="7" r="4"></circle>
           <path d="M19 8v6M22 11h-6"></path>
+        </svg>
+      ),
+    },
+    {
+      path: ROUTES.CARDS,
+      label: 'Quản lý Kho Thẻ',
+      svg: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+          <rect x="2" y="5" width="20" height="14" rx="2.5"></rect>
+          <line x1="2" y1="10" x2="22" y2="10"></line>
+          <line x1="6" y1="15" x2="10" y2="15"></line>
         </svg>
       ),
     },

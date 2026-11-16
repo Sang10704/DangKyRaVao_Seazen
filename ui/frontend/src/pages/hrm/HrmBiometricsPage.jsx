@@ -53,21 +53,31 @@ export default function HrmBiometricsPage({
   };
 
   return (
-    <div className="tino-center" style={{ padding: '24px 32px' }}>
-      <div style={{ marginBottom: 20 }}>
-        <div className="tino-greeting-sub">
-          {mode === 'biometrics' ? 'Quản lý Khuôn mặt, Vân tay & Thẻ NFC' : 'Quản lý Danh bạ Nội bộ'}
+    <div className="tino-body">
+      <div className="tino-center">
+        <div style={{ marginBottom: 14, flexShrink: 0 }}>
+          <div className="tino-greeting-sub" style={{ fontSize: 13 }}>
+            {mode === 'biometrics' ? 'Quản lý Khuôn mặt, Vân tay & Thẻ NFC' : 'Quản lý Danh bạ Nội bộ'}
+          </div>
+          <h1 className="tino-greeting-title" style={{ fontSize: 22 }}>
+            {mode === 'biometrics'
+              ? `Dữ liệu Sinh trắc học (${empTotal} hồ sơ)`
+              : `Nhân viên & Phòng ban (${empTotal} nhân sự · ${departments.length} phòng ban)`}
+          </h1>
         </div>
-        <h1 className="tino-greeting-title">
-          {mode === 'biometrics'
-            ? `Dữ liệu Sinh trắc học (${empTotal} hồ sơ)`
-            : `Nhân viên & Phòng ban (${empTotal} nhân sự · ${departments.length} phòng ban)`}
-        </h1>
-      </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: 20, alignItems: 'start' }}>
-        {/* Left Column: Employee / Biometrics / Department Form */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '370px 1fr',
+            gap: 18,
+            flex: 1,
+            minHeight: 0,
+            overflow: 'hidden',
+          }}
+        >
+          {/* Left Column: Employee / Biometrics / Department Form */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, overflowY: 'auto', paddingRight: 4 }}>
           <div className="card">
             <div className="card-header">
               <div className="card-title">
@@ -224,8 +234,8 @@ export default function HrmBiometricsPage({
         </div>
 
         {/* Right Column: Employee & Biometrics Table */}
-        <div className="card">
-          <div className="card-header">
+        <div className="card card-table-fill">
+          <div className="card-header" style={{ flexShrink: 0 }}>
             <div className="card-title">
               Danh sách Nhân viên & Trạng thái Sinh trắc học ({empTotal})
             </div>
@@ -254,7 +264,7 @@ export default function HrmBiometricsPage({
             </div>
           </div>
 
-          <div className="table-scroll" style={{ maxHeight: 540 }}>
+          <div className="table-scroll">
             <table className="data-table">
               <thead>
                 <tr>
@@ -319,6 +329,7 @@ export default function HrmBiometricsPage({
             </table>
           </div>
         </div>
+      </div>
       </div>
     </div>
   );

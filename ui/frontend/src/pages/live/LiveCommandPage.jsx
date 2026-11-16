@@ -77,35 +77,36 @@ export default function LiveCommandPage({
           </div>
         </div>
 
-        {/* Search Bar */}
-        <div className="tino-search-bar">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="11" cy="11" r="8"></circle>
-            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-          </svg>
-          <input
-            type="text"
-            value={scanSearch}
-            onChange={(e) => setScanSearch(e.target.value)}
-            placeholder="Tìm nhanh họ tên nhân viên, khách, mã chấm công hoặc làn cửa..."
-          />
+        {/* Search Bar & Date Filter Row */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, marginTop: 12, flexShrink: 0 }}>
+          <div className="tino-search-bar" style={{ marginTop: 0, padding: '9px 16px', flex: 1 }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input
+              type="text"
+              value={scanSearch}
+              onChange={(e) => setScanSearch(e.target.value)}
+              placeholder="Tìm nhanh họ tên nhân viên, khách, mã chấm công hoặc làn cửa..."
+            />
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <h2 style={{ fontSize: 15.5, fontWeight: 800, color: 'var(--jet)', whiteSpace: 'nowrap' }}>
+              Điều khiển 4 Làn Cổng
+            </h2>
+            <input
+              type="date"
+              className="v-input"
+              style={{ width: 145, borderRadius: 10 }}
+              value={scanDate}
+              onChange={(e) => setScanDate(e.target.value)}
+            />
+          </div>
         </div>
 
-        {/* Section Title & Filter Tabs */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 26 }}>
-          <h2 style={{ fontSize: 19, fontWeight: 800, color: 'var(--jet)' }}>
-            Điều khiển 4 Làn Cổng & Lịch sử Ra vào
-          </h2>
-          <input
-            type="date"
-            className="v-input"
-            style={{ width: 150, borderRadius: 10 }}
-            value={scanDate}
-            onChange={(e) => setScanDate(e.target.value)}
-          />
-        </div>
-
-        <div className="tino-tabs">
+        <div className="tino-tabs" style={{ margin: '12px 0 12px', flexShrink: 0 }}>
           {[
             { id: 'ALL_DIR', label: 'Tất cả lượt quét', dir: 'ALL', cat: 'ALL' },
             { id: 'IN_ONLY', label: 'Lượt VÀO', dir: 'IN', cat: 'ALL' },
@@ -206,15 +207,24 @@ export default function LiveCommandPage({
         </div>
 
         {/* Real-time Access History Table (Both Staff & Visitors) */}
-        <div className="card">
-          <div className="card-header">
+        <div className="card card-table-fill">
+          <div className="card-header" style={{ flexShrink: 0 }}>
             <div className="card-title">
               Lịch sử Ra vào Trực tuyến — Nhân viên & Khách ({realtimeLogs.length} lượt)
             </div>
-            <span className="badge badge-gold">Tự động bắt sự kiện trực tiếp</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className="badge badge-gold">Tự động bắt sự kiện trực tiếp</span>
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => onNavigate(ROUTES.HISTORY)}
+              >
+                Xem trang Lịch sử chi tiết
+              </button>
+            </div>
           </div>
 
-          <div className="table-scroll" style={{ maxHeight: 380 }}>
+          <div className="table-scroll">
             <table className="data-table">
               <thead>
                 <tr>
@@ -351,11 +361,11 @@ export default function LiveCommandPage({
         </div>
 
         {/* Vertical Gold Timeline of Latest Events */}
-        <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--jet)' }}>
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--jet)', flexShrink: 0 }}>
           Hoạt động vừa diễn ra tại 4 cổng
         </div>
 
-        <div className="tino-timeline">
+        <div className="tino-timeline" style={{ flex: 1, minHeight: 0, overflowY: 'auto', paddingRight: 4 }}>
           {realtimeLogs.slice(0, 5).map((item, idx) => {
             const isFirst = idx === 0;
             const timeShort = item.CheckTime?.split(' ')[1] || item.CheckTime;

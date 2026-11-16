@@ -854,6 +854,7 @@ def upsert_employee_and_biometrics_db(data: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def upsert_customer_card_db(data: Dict[str, Any]) -> Dict[str, Any]:
+    card_id = data.get("CardID")
     card_num = str(data.get("CardNumber") or "").strip()
     card_code = str(data.get("CardCode") or f"CARD-{card_num}").strip()
     card_type = str(data.get("CardType") or "VISITOR").strip()
@@ -861,25 +862,62 @@ def upsert_customer_card_db(data: Dict[str, Any]) -> Dict[str, Any]:
     notes = str(data.get("Notes") or "").strip()
 
     if not card_num:
-        return {"success": False, "error": "Số thẻ từ RFID không được để trống."}
+        return {"success": False, "error": "Số thẻ từ RFID/NFC không được để trống."}
 
     try:
         with pyodbc.connect(get_connection_string(), timeout=5) as conn:
             cur = conn.cursor()
-            cur.execute("SELECT CardID FROM tbl_CustomerCards WHERE CardNumber = ?", (card_num,))
-            if cur.fetchone():
+            if card_id:
                 cur.execute("""
                     UPDATE tbl_CustomerCards
-                    SET CardCode = ?, CardType = ?, Status = ?, Notes = ?, UpdatedAt = GETDATE()
-                    WHERE CardNumber = ?
-                """, (card_code, card_type, status, notes, card_num))
+                    SET CardCode = ?, CardNumber = ?, CardType = ?, Status = ?, Notes = ?, UpdatedAt = GETDATE()
+                    WHERE CardID = ?
+                """, (card_code, card_num, card_type, status, notes, int(card_id)))
             else:
-                cur.execute("""
-                    INSERT INTO tbl_CustomerCards (CardCode, CardNumber, CardType, Status, IsSyncedToDevices, Notes)
-                    VALUES (?, ?, ?, ?, 1, ?)
-                """, (card_code, card_num, card_type, status, notes))
+                cur.execute("SELECT CardID FROM tbl_CustomerCards WHERE CardNumber = ?", (card_num,))
+                if cur.fetchone():
+                    cur.execute("""
+                        UPDATE tbl_CustomerCards
+                        SET CardCode = ?, CardType = ?, Status = ?, Notes = ?, UpdatedAt = GETDATE()
+                        WHERE CardNumber = ?
+                    """, (card_code, card_type, status, notes, card_num))
+                else:
+                    cur.execute("""
+                        INSERT INTO tbl_CustomerCards (CardCode, CardNumber, CardType, Status, IsSyncedToDevices, Notes)
+                        VALUES (?, ?, ?, ?, 1, ?)
+                    """, (card_code, card_num, card_type, status, notes))
             conn.commit()
-            return {"success": True, "message": f"Đã lưu thẻ {card_num} vào kho thẻ."}
+            return {"success": True, "message": f"Đã lưu thẻ {card_num} ({card_code}) vào CSDL Kho thẻ."}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def delete_customer_card_db(card_id_or_number: Any) -> Dict[str, Any]:
+    key_str = str(card_id_or_number or "").strip()
+    if not key_str:
+        return {"success": False, "error": "Vui lòng chọn thẻ cần xóa."}
+
+    try:
+        with pyodbc.connect(get_connection_string(), timeout=5) as conn:
+            cur = conn.cursor()
+            target_card_num = key_str
+            if key_str.isdigit() and len(key_str) <= 6:
+                cur.execute("SELECT CardNumber, CardCode FROM tbl_CustomerCards WHERE CardID = ? OR CardNumber = ?", (int(key_str), key_str))
+            else:
+                cur.execute("SELECT CardNumber, CardCode FROM tbl_CustomerCards WHERE CardNumber = ? OR CardCode = ?", (key_str, key_str))
+            row = cur.fetchone()
+            if not row:
+                return {"success": False, "error": f"Không tìm thấy thẻ '{key_str}' trong kho thẻ."}
+            target_card_num = str(row[0])
+            target_card_code = str(row[1])
+            cur.execute("DELETE FROM tbl_CustomerCards WHERE CardNumber = ?", (target_card_num,))
+            conn.commit()
+            return {
+                "success": True,
+                "card_number": target_card_num,
+                "card_code": target_card_code,
+                "message": f"Đã xóa thẻ {target_card_num} ({target_card_code}) khỏi CSDL Kho thẻ."
+            }
     except Exception as e:
         return {"success": False, "error": str(e)}
 

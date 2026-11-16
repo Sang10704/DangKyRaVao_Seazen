@@ -1338,12 +1338,48 @@ def api_upsert_employee():
     return jsonify(res), (200 if res.get("success") else 400)
 
 
+@app.route("/api/visitor/cards", methods=["GET"])
+@require_role(["admin", "staff"])
+def api_get_customer_cards():
+    import db_mssql
+    rows = db_mssql.get_table_rows("tbl_CustomerCards", limit=500)
+    return jsonify({"success": True, "count": len(rows), "rows": rows})
+
+
 @app.route("/api/visitor/card", methods=["POST"])
 @require_role(["admin", "staff"])
 def api_upsert_customer_card():
     import db_mssql
     data = request.get_json(silent=True) or {}
     res = db_mssql.upsert_customer_card_db(data)
+    if res.get("success"):
+        try:
+            import threading
+            import sharepoint_vms_sync
+            threading.Thread(
+                target=sharepoint_vms_sync.sync_table_to_sharepoint,
+                args=("tbl_CustomerCards", 200),
+                daemon=True
+            ).start()
+        except Exception:
+            pass
+    return jsonify(res), (200 if res.get("success") else 400)
+
+
+@app.route("/api/visitor/card/delete", methods=["POST"])
+@app.route("/api/visitor/card/<card_key>", methods=["DELETE"])
+@require_role(["admin", "staff"])
+def api_delete_customer_card(card_key: str = ""):
+    import db_mssql
+    data = request.get_json(silent=True) or {}
+    target = card_key or data.get("CardNumber") or data.get("CardID") or data.get("card_number") or ""
+    res = db_mssql.delete_customer_card_db(target)
+    if res.get("success") and res.get("card_number"):
+        try:
+            if not EPAD_ENABLED:
+                zk_client.return_or_delete_card(str(res["card_number"]))
+        except Exception:
+            pass
     return jsonify(res), (200 if res.get("success") else 400)
 
 
