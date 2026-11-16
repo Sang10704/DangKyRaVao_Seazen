@@ -4,7 +4,13 @@
     "port": 6868,
     "debug": false
   },
+  "zk_direct": {
+    "enabled": true,
+    "timeout_sec": 4,
+    "protocol": "TCP"
+  },
   "epad": {
+    "enabled": false,
     "api_base": "http://172.16.56.2:4001/api",
     "username": "Thuan.Trinh@seazen.com.vn",
     "password": "Thuantrinh@1516",
@@ -17,8 +23,8 @@
       "name": "Cửa Làn VÀO",
       "direction": "IN",
       "devices": [
-        { "sn": "1313244800040", "name": "Làn VÀO phải" },
-        { "sn": "1313244800129", "name": "Làn VÀO trái" }
+        { "sn": "1313244800040", "name": "Làn VÀO phải", "ip": "172.16.56.139", "port": 4370 },
+        { "sn": "1313244800129", "name": "Làn VÀO trái", "ip": "172.16.56.138", "port": 4370 }
       ],
       "default_open_seconds": 3
     },
@@ -28,8 +34,8 @@
       "name": "Cửa Làn RA",
       "direction": "OUT",
       "devices": [
-        { "sn": "1313244800122", "name": "Làn RA trái" },
-        { "sn": "1313244800130", "name": "Làn RA phải" }
+        { "sn": "1313244800122", "name": "Làn RA trái", "ip": "172.16.56.137", "port": 4370 },
+        { "sn": "1313244800130", "name": "Làn RA phải", "ip": "172.16.56.136", "port": 4370 }
       ],
       "default_open_seconds": 3
     }
@@ -37,9 +43,21 @@
   "sharepoint": {
     "enabled": false,
     "tenant_id": "29101901-3778-4339-827c-7d2b50914db0",
-    "client_id": "04b07795-8ddb-461a-bbee-02f9e1bf7b46",
+    "client_id": "0390280b-12b8-49c4-adbf-a9c2b8bccfb5",
+    "site_url": "https://seazenvn.sharepoint.com/sites/ONESEAZEN",
     "site_id": "",
     "visitor_list_name": "ACCESS_CONTROL_VISITORS",
     "log_list_name": "ACCESS_CONTROL_LOGS"
+  },
+  "database": {
+    "enabled": true,
+    "server": "localhost",
+    "database": "SeaZen_AccessControl",
+    "driver": "ODBC Driver 18 for SQL Server",
+    "trusted_connection": true,
+    "username": "",
+    "password": "",
+    "trust_server_certificate": true,
+    "connection_timeout": 5
   }
 }

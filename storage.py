@@ -12,14 +12,23 @@ import logging
 from typing import Dict, Any, List, Optional
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from werkzeug.security import generate_password_hash, check_password_hash
 
 import time
 import threading
+
+try:
+    import db_mssql
+    MSSQL_AVAILABLE = True
+except Exception:
+    db_mssql = None
+    MSSQL_AVAILABLE = False
 
 logger = logging.getLogger("storage")
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 
+USERS_FILE = os.path.join(DATA_DIR, "users.json")
 ACTIVE_VISITORS_FILE = os.path.join(DATA_DIR, "active_visitors.json")
 VISITOR_HISTORY_FILE = os.path.join(DATA_DIR, "visitor_history.json")
 DOOR_ACTIONS_FILE = os.path.join(DATA_DIR, "door_actions.json")
@@ -152,14 +161,198 @@ class StorageManager:
         self.config = config
         self.sp_config = config.get("sharepoint", {})
         self.sp_enabled = self.sp_config.get("enabled", False)
+        self._scans_cache: Optional[List[Dict[str, Any]]] = None
+        self._scans_cache_mtime: float = 0.0
+        self._scans_cache_lock = threading.RLock()
+        self.seed_default_users()
+
+    def _load_scans_cache(self) -> List[Dict[str, Any]]:
+        """In-memory cache for daily scans to ensure fast concurrent reads across multiple machines."""
+        with self._scans_cache_lock:
+            if not os.path.exists(DAILY_SCANS_FILE):
+                self._scans_cache = []
+                self._scans_cache_mtime = 0.0
+                return self._scans_cache
+            try:
+                mtime = os.path.getmtime(DAILY_SCANS_FILE)
+            except OSError:
+                mtime = 0.0
+            if self._scans_cache is None or mtime > self._scans_cache_mtime:
+                self._scans_cache = _read_json(DAILY_SCANS_FILE, [])
+                self._scans_cache_mtime = mtime
+            return self._scans_cache
+
+    # ---------------- User & Authentication Management ----------------
+
+    def seed_default_users(self) -> None:
+        """Khởi tạo 2 tài khoản mặc định (admin & nhanvien) nếu users.json chưa có hoặc rỗng."""
+        users = _read_json(USERS_FILE, [])
+        if not users:
+            admin_user = {
+                "id": "usr-admin-01",
+                "username": "admin",
+                "email": "admin@seazen.vn",
+                "password_hash": generate_password_hash("Admin@123", method="scrypt"),
+                "full_name": "Quản Trị Viên Hệ Thống",
+                "role": "admin",
+                "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "is_active": True
+            }
+            staff_user = {
+                "id": "usr-staff-01",
+                "username": "nhanvien",
+                "email": "nhanvien@seazen.vn",
+                "password_hash": generate_password_hash("Nhanvien@123", method="scrypt"),
+                "full_name": "Nhân Viên Tiếp Đón",
+                "role": "staff",
+                "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "is_active": True
+            }
+            users = [admin_user, staff_user]
+            _write_json(USERS_FILE, users)
+            logger.info("Đã khởi tạo 2 tài khoản mặc định: admin và nhanvien vào users.json")
+
+    def get_users(self) -> List[Dict[str, Any]]:
+        return _read_json(USERS_FILE, [])
+
+    def get_user_by_id(self, user_id: str) -> Optional[Dict[str, Any]]:
+        users = self.get_users()
+        for u in users:
+            if u.get("id") == user_id:
+                return u
+        return None
+
+    def get_user_by_credential(self, cred: str) -> Optional[Dict[str, Any]]:
+        clean_cred = str(cred).strip().lower()
+        if not clean_cred:
+            return None
+        users = self.get_users()
+        for u in users:
+            u_name = str(u.get("username", "")).strip().lower()
+            u_email = str(u.get("email", "")).strip().lower()
+            if u_name == clean_cred or u_email == clean_cred:
+                return u
+        return None
+
+    def verify_user_credentials(self, username_or_email: str, password: str) -> Optional[Dict[str, Any]]:
+        user = self.get_user_by_credential(username_or_email)
+        if not user:
+            return None
+        if not user.get("is_active", True):
+            return None
+        pw_hash = user.get("password_hash", "")
+        if not pw_hash or not check_password_hash(pw_hash, password):
+            return None
+        return user
 
     # ---------------- Visitor Management ----------------
 
     def get_active_visitors(self) -> List[Dict[str, Any]]:
-        return _read_json(ACTIVE_VISITORS_FILE, [])
+        # 1. Start with local active visitors JSON
+        active_list = _read_json(ACTIVE_VISITORS_FILE, [])
+        active_map: Dict[str, Dict[str, Any]] = {}
+        for item in active_list:
+            card_k = str(item.get("card_number") or "").strip().lower()
+            clean_k = card_k.lstrip("0")
+            cccd_k = str(item.get("cccd_number") or "").strip().lower()
+            id_k = str(item.get("id") or "").strip().lower()
+            p_key = card_k or clean_k or cccd_k or id_k
+            if p_key:
+                active_map[p_key] = item
+
+        # 2. Merge from MSSQL tbl_Visitors WHERE Status = 'ACTIVE'
+        if MSSQL_AVAILABLE and db_mssql and db_mssql.is_mssql_active():
+            try:
+                db_visitors = db_mssql.get_active_visitors_db()
+                for dv in db_visitors:
+                    c_card = str(dv.get("card_number") or "").strip().lower()
+                    c_clean = c_card.lstrip("0")
+                    c_cccd = str(dv.get("cccd_number") or "").strip().lower()
+                    c_id = str(dv.get("id") or "").strip().lower()
+                    
+                    matched_k = None
+                    for k in [c_card, c_clean, c_cccd, c_id]:
+                        if k and k in active_map:
+                            matched_k = k
+                            break
+                    if matched_k:
+                        active_map[matched_k].update({k: v for k, v in dv.items() if v and not active_map[matched_k].get(k)})
+                    else:
+                        t_key = c_card or c_clean or c_cccd or c_id
+                        if t_key:
+                            active_map[t_key] = dv
+            except Exception as e:
+                logger.warning("Error fetching active visitors from MSSQL: %s", e)
+
+        # 3. Consolidate from today's door attendance logs:
+        # Any visitor who scanned IN and has not scanned OUT today is physically present
+        try:
+            now_dt = datetime.now()
+            today_str = now_dt.strftime("%Y-%m-%d")
+            present = self.get_present_details(target_date=today_str, category="VISITOR", include_active_visitors=False)
+            inside_visitors = present.get("inside", [])
+            for p in inside_visitors:
+                card_no = str(p.get("atid") or "").strip()
+                clean_c = card_no.lstrip("0")
+                p_name = p.get("fullname") or f"Khách thẻ {card_no}"
+                
+                # Check if already in active_map
+                matched = False
+                for k, v in active_map.items():
+                    v_card = str(v.get("card_number") or "").strip()
+                    v_clean = v_card.lstrip("0")
+                    if card_no and (v_card == card_no or (clean_c and v_clean == clean_c)):
+                        matched = True
+                        break
+                    v_name = (v.get("full_name") or "").strip().lower()
+                    if p_name and p_name.lower() == v_name:
+                        matched = True
+                        break
+
+                if not matched and card_no:
+                    cin_time = str(p.get("check_time") or "").replace("T", " ")
+                    if len(cin_time) == 10:
+                        cin_time += " " + p.get("time_only", "08:00:00")
+                    synth_id = f"vis_{card_no}"
+                    synth_item = {
+                        "id": synth_id,
+                        "full_name": p_name,
+                        "card_number": card_no,
+                        "cccd_number": "",
+                        "company": "Khách Đến Tòa Nhà",
+                        "department": p.get("department") if p.get("department") != "--" else "Khách Vãng Lai",
+                        "host_person": "--",
+                        "purpose": "Ra vào văn phòng",
+                        "checkin_time": cin_time,
+                        "expected_checkout_time": None,
+                        "checkout_time": None,
+                        "duration_str": None,
+                        "status": "ACTIVE",
+                        "operator": f"Cổng {p.get('device_name') or 'SenseFace'}",
+                        "source": "DOOR_SCAN"
+                    }
+                    active_map[card_no] = synth_item
+        except Exception as e:
+            logger.warning("Error fetching inside visitors from door scans: %s", e)
+
+        result = list(active_map.values())
+        result.sort(key=lambda x: str(x.get("checkin_time") or ""), reverse=True)
+        return result
 
     def get_visitor_history(self, limit: int = 500) -> List[Dict[str, Any]]:
         history = _read_json(VISITOR_HISTORY_FILE, [])
+        if MSSQL_AVAILABLE and db_mssql and db_mssql.is_mssql_active():
+            try:
+                db_hist = db_mssql.get_visitor_history_db(limit=limit)
+                seen_ids = {str(h.get("id") or "").strip(): True for h in history if h.get("id")}
+                for dh in db_hist:
+                    dh_id = str(dh.get("id") or "").strip()
+                    if dh_id and dh_id not in seen_ids:
+                        history.append(dh)
+                        seen_ids[dh_id] = True
+            except Exception as e:
+                logger.warning("Error fetching visitor history from MSSQL: %s", e)
+
         return sorted(history, key=lambda x: x.get("checkin_time", ""), reverse=True)[:limit]
 
     def add_visitor(self, visitor_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -169,12 +362,15 @@ class StorageManager:
         """
         active = self.get_active_visitors()
         card_num = str(visitor_data.get("card_number", "")).strip()
+        clean_c = card_num.lstrip("0")
         cccd_num = str(visitor_data.get("cccd_number", "")).strip() or str(visitor_data.get("id_number", "")).strip()
 
         # Check if card is already registered as active (if card provided)
         if card_num:
             for item in active:
-                if str(item.get("card_number", "")).strip() == card_num:
+                item_card = str(item.get("card_number", "")).strip()
+                item_clean = item_card.lstrip("0")
+                if item_card and (item_card == card_num or (clean_c and item_clean == clean_c)):
                     raise ValueError(f"Thẻ {card_num} đang được sử dụng bởi khách: {item.get('full_name')}!")
 
         # Check if CCCD is already registered as active (if CCCD provided)
@@ -219,7 +415,10 @@ class StorageManager:
             "phone": visitor_data.get("phone", "").strip(),
             "company": visitor_data.get("company", "").strip(),
             "host_person": visitor_data.get("host_person", "").strip(),
+            "host_phone": visitor_data.get("host_phone", "").strip(),
             "department": visitor_data.get("department", "").strip(),
+            "access_area": visitor_data.get("access_area", "").strip(),
+            "note": visitor_data.get("note", "").strip(),
             "purpose": visitor_data.get("purpose", "").strip() or visitor_data.get("reason", "").strip(),
             "vehicle_number": visitor_data.get("vehicle_number", "").strip(),
             "card_number": card_num,
@@ -231,8 +430,17 @@ class StorageManager:
             "operator": visitor_data.get("operator", "Bảo vệ")
         }
 
-        active.append(record)
-        _write_json(ACTIVE_VISITORS_FILE, active)
+        # Save to local JSON
+        active_saved = _read_json(ACTIVE_VISITORS_FILE, [])
+        active_saved.append(record)
+        _write_json(ACTIVE_VISITORS_FILE, active_saved)
+
+        # Hook for MSSQL
+        if MSSQL_AVAILABLE and db_mssql and db_mssql.is_mssql_active():
+            try:
+                db_mssql.insert_visitor_db(record)
+            except Exception as ex:
+                logger.warning("Failed to insert visitor to MSSQL: %s", ex)
 
         # Hook for SharePoint
         if self.sp_enabled:
@@ -304,6 +512,42 @@ class StorageManager:
         history.append(matched)
         _write_json(VISITOR_HISTORY_FILE, history)
 
+        # Update MSSQL
+        if MSSQL_AVAILABLE and db_mssql and db_mssql.is_mssql_active():
+            try:
+                db_mssql.checkout_visitor_db(query, now_str)
+                if matched.get("card_number"):
+                    db_mssql.checkout_visitor_db(matched["card_number"], now_str)
+                if matched.get("id"):
+                    db_mssql.checkout_visitor_db(matched["id"], now_str)
+            except Exception as e:
+                logger.warning("Failed to checkout visitor in MSSQL: %s", e)
+
+        # Record an OUT attendance log so door analytics immediately update
+        card_val = matched.get("card_number") or matched.get("id")
+        out_scan = {
+            "EmployeeATID": str(card_val),
+            "FullName": matched.get("full_name") or "Khách",
+            "DepartmentName": matched.get("department") or "Khách",
+            "Department": matched.get("department") or "Khách",
+            "DeviceName": "Làn RA trái",
+            "SerialNumber": "1313244800122",
+            "DoorName": "Cửa Làn RA",
+            "Direction": "OUT",
+            "CardNumber": matched.get("card_number") or "",
+            "VerifyMode": 1,
+            "Time": now_str,
+            "CheckTime": now_str.replace(" ", "T"),
+            "is_staff": False,
+            "direction": "OUT"
+        }
+        try:
+            self.save_scan(out_scan)
+            if MSSQL_AVAILABLE and db_mssql and db_mssql.is_mssql_active():
+                db_mssql.insert_attendance_log(out_scan)
+        except Exception as e:
+            logger.warning("Failed to record OUT attendance log on checkout: %s", e)
+
         # Hook for SharePoint
         if self.sp_enabled:
             self._sync_visitor_to_sharepoint(matched, is_checkout=True)
@@ -339,7 +583,23 @@ class StorageManager:
             _write_json(DEPARTMENTS_FILE, clean_depts)
 
     def get_departments(self) -> List[Dict[str, Any]]:
-        """Returns cached company departments list."""
+        """Returns cached company departments list, querying SQL Server if enabled."""
+        try:
+            import db_mssql
+            if db_mssql.is_mssql_active():
+                sql_depts = db_mssql.get_departments()
+                if sql_depts:
+                    return [
+                        {
+                            "id": d["DepartmentID"],
+                            "name": d["DepartmentName"],
+                            "code": d.get("DepartmentCode") or "",
+                            "level": d.get("Level", 1)
+                        }
+                        for d in sql_depts
+                    ]
+        except Exception as e:
+            logger.debug("MSSQL get_departments fallback: %s", e)
         return _read_json(DEPARTMENTS_FILE, [])
 
     def set_employees(self, employees: List[Dict[str, Any]]) -> None:
@@ -360,8 +620,36 @@ class StorageManager:
             _write_json(EMPLOYEES_FILE, cleaned)
 
     def get_employees(self, department: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Returns employees, optionally filtered by department name."""
+        """Returns employees, querying Microsoft SQL Server first with seamless local fallback."""
+        try:
+            import db_mssql
+            if db_mssql.is_mssql_active():
+                sql_res = db_mssql.get_employees(department=department or "", limit=2000)
+                if sql_res and sql_res.get("items"):
+                    return [
+                        {
+                            "atid": e["EmployeeATID"],
+                            "code": e["EmployeeCode"],
+                            "fullname": e["FullName"],
+                            "department": e["DepartmentName"],
+                            "department_index": e.get("DepartmentID"),
+                            "has_face": e.get("HasFace", False),
+                            "has_card": e.get("HasCard", False),
+                            "has_finger": e.get("HasFinger", False),
+                            "card_number": e.get("CardNumber", ""),
+                            "face_photo": e.get("FaceImageBase64")
+                        }
+                        for e in sql_res["items"]
+                    ]
+        except Exception as e:
+            logger.debug("MSSQL get_employees fallback: %s", e)
+
         all_emps = _read_json(EMPLOYEES_FILE, [])
+        all_emps = [
+            e for e in all_emps
+            if str(e.get("department") or "").strip() not in ["", "Khác", "--", "None"]
+            and not str(e.get("atid") or "").startswith("80000")
+        ]
         if department:
             dept_clean = department.strip().lower()
             dept_core = dept_clean.replace("phòng", "").strip()
@@ -383,7 +671,7 @@ class StorageManager:
         if not new_logs:
             return self.get_saved_scans(today_str)
 
-        saved_logs = _read_json(DAILY_SCANS_FILE, [])
+        saved_logs = self._load_scans_cache()
 
         seen_keys = set()
         merged = []
@@ -396,6 +684,19 @@ class StorageManager:
                 seen_keys.add(key)
                 merged.append(l)
 
+        # Build employee index for metadata enrichment
+        emp_map = {}
+        for emp in self.get_employees():
+            atid = str(emp.get("atid") or "").strip()
+            code = str(emp.get("code") or "").strip()
+            fn = str(emp.get("fullname") or "").strip().lower()
+            if atid:
+                emp_map[atid] = emp
+            if code:
+                emp_map[code] = emp
+            if fn:
+                emp_map[fn] = emp
+
         added_count = 0
         for l in new_logs:
             if "CheckTime" not in l and "Time" in l:
@@ -404,6 +705,16 @@ class StorageManager:
             who = str(l.get("EmployeeATID") or l.get("FullName") or "")
             dev = str(l.get("SerialNumber") or l.get("DeviceSerialNumber") or "")
             key = f"{chk}_{who}_{dev}"
+
+            atid = str(l.get("EmployeeATID") or "").strip()
+            name = str(l.get("FullName") or "").strip()
+            matched_emp = emp_map.get(atid) or emp_map.get(name.lower())
+            if matched_emp:
+                if not l.get("Department") or l.get("Department") == "--":
+                    l["Department"] = matched_emp.get("department")
+                if not l.get("FullName") or l.get("FullName") == "--" or str(l.get("FullName")).startswith("User "):
+                    l["FullName"] = matched_emp.get("fullname")
+
             if key not in seen_keys:
                 seen_keys.add(key)
                 merged.append(l)
@@ -413,9 +724,44 @@ class StorageManager:
             merged.sort(key=lambda x: str(x.get("CheckTime", "")), reverse=True)
             if len(merged) > 50000:
                 merged = merged[:50000]
+            with self._scans_cache_lock:
+                self._scans_cache = merged
+                self._scans_cache_mtime = time.time()
             _write_json(DAILY_SCANS_FILE, merged)
 
+            # Parallel write to Microsoft SQL Server tbl_AttendanceLogs
+            try:
+                import db_mssql
+                if db_mssql.is_mssql_active():
+                    inserted_db = db_mssql.insert_attendance_logs_bulk(new_logs)
+                    if inserted_db > 0:
+                        logger.info("[Storage] Đã lưu %d lượt quét mới vào CSDL Microsoft SQL Server", inserted_db)
+            except Exception as e:
+                logger.debug("[Storage] Lỗi lưu log vào MSSQL: %s", e)
+
         return [l for l in merged if str(l.get("CheckTime", "")).startswith(today_str)]
+
+    def get_latest_scan_time(self) -> Optional[datetime]:
+        """Returns the latest CheckTime across MSSQL or local cache for incremental harvesting."""
+        try:
+            import db_mssql
+            if db_mssql.is_mssql_active():
+                db_latest = db_mssql.get_latest_attendance_time()
+                if db_latest:
+                    return db_latest
+        except Exception:
+            pass
+
+        saved_logs = self._load_scans_cache()
+        if saved_logs:
+            for l in saved_logs:
+                chk = str(l.get("CheckTime") or l.get("Time") or "")
+                if chk:
+                    try:
+                        return datetime.strptime(chk, "%Y-%m-%d %H:%M:%S")
+                    except Exception:
+                        pass
+        return None
 
     def sync_epad_7day_logs(self, log_dict: Dict[str, List[Dict[str, Any]]]) -> int:
         """Merges historical 7-day logs from ePAD into daily_scans.json without duplicates."""
@@ -431,14 +777,14 @@ class StorageManager:
         return len(all_new)
 
     def get_saved_scans(self, target_date: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Returns all accumulated scans recorded for target_date (defaults to today)."""
+        """Returns all accumulated scans recorded for target_date (defaults to today) via in-memory cache."""
         date_str = target_date or datetime.now().strftime("%Y-%m-%d")
-        saved_logs = _read_json(DAILY_SCANS_FILE, [])
-        return [l for l in saved_logs if str(l.get("CheckTime", "")).startswith(date_str)]
+        all_logs = self._load_scans_cache()
+        return [l for l in all_logs if str(l.get("CheckTime", "")).startswith(date_str)]
 
     def get_available_dates(self) -> List[str]:
         """Returns all unique dates (YYYY-MM-DD) available in scan and visitor history."""
-        saved_logs = _read_json(DAILY_SCANS_FILE, [])
+        saved_logs = self._load_scans_cache()
         history = self.get_visitor_history(limit=5000)
         dates = set()
         for l in saved_logs:
@@ -493,6 +839,19 @@ class StorageManager:
         hourly_visitor_map = {f"{h:02d}": 0 for h in range(6, 23)}
         dept_counts: Dict[str, int] = {}
 
+        # Build employee index for department and name enrichment
+        emp_map = {}
+        for emp in self.get_employees():
+            atid = str(emp.get("atid") or "").strip()
+            code = str(emp.get("code") or "").strip()
+            fn = str(emp.get("fullname") or "").strip().lower()
+            if atid:
+                emp_map[atid] = emp
+            if code:
+                emp_map[code] = emp
+            if fn:
+                emp_map[fn] = emp
+
         for l in sorted_scans:
             direction = determine_scan_direction(l)
             ptype = determine_scan_person_type(l)
@@ -501,6 +860,17 @@ class StorageManager:
             atid = str(l.get("EmployeeATID") or "").strip()
             name = str(l.get("FullName") or "").strip()
             card = str(l.get("CardNumber") or "").strip()
+
+            matched_emp = emp_map.get(atid) or emp_map.get(name.lower())
+            d_name = l.get("Department")
+            if (not d_name or d_name == "--") and matched_emp:
+                d_name = matched_emp.get("department")
+                l["Department"] = d_name
+
+            if (not name or name == "--" or name.startswith("User ")) and matched_emp:
+                name = matched_emp.get("fullname")
+                l["FullName"] = name
+
             pkey = atid or name or card or "UNKNOWN"
 
             if is_staff:
@@ -521,7 +891,7 @@ class StorageManager:
                 "key": pkey,
                 "atid": atid,
                 "fullname": name or "Chưa rõ",
-                "department": l.get("Department") or "--",
+                "department": d_name or "--",
                 "check_time": chk_time,
                 "device_name": l.get("DeviceName") or "--",
                 "serial_number": l.get("SerialNumber") or "--",
@@ -543,13 +913,13 @@ class StorageManager:
                 pass
 
             # Department counts
-            d_name = l.get("Department")
             if d_name and d_name != "--":
                 dept_counts[d_name] = dept_counts.get(d_name, 0) + 1
 
-        # Who is currently inside the office?
+        # Who is currently inside the office vs who has left?
         # Latest scan was IN -> Inside office
         staff_present = [p for p in person_latest.values() if p["is_staff"] and p["direction"] == "IN"]
+        staff_checked_out = [p for p in person_latest.values() if p["is_staff"] and p["direction"] == "OUT"]
         visitor_present = [p for p in person_latest.values() if not p["is_staff"] and p["direction"] == "IN"]
         visitor_checked_out = [p for p in person_latest.values() if not p["is_staff"] and p["direction"] == "OUT"]
 
@@ -559,11 +929,68 @@ class StorageManager:
         hourly_staff_data = [hourly_staff_map[f"{h:02d}"] for h in range(6, 23)]
         hourly_visitor_data = [hourly_visitor_map[f"{h:02d}"] for h in range(6, 23)]
 
-        top_departments = sorted(
+        top_staff_departments = sorted(
             [{"name": k, "count": v} for k, v in dept_counts.items() if k and k != "--"],
             key=lambda x: x["count"],
             reverse=True
         )[:6]
+
+        # Calculate visitor departments from registration and checkins for the selected date
+        visitor_dept_counts: Dict[str, int] = {}
+        all_registered_visitors = self.get_active_visitors() + self.get_visitor_history(limit=5000)
+
+        # Build map for fast matching by card / atid / fullname
+        v_meta_by_key: Dict[str, str] = {}
+        for v in all_registered_visitors:
+            v_dept = (v.get("department") or "").strip()
+            if v_dept and v_dept != "--":
+                card = (v.get("card_number") or "").strip().lstrip("0")
+                fn = (v.get("full_name") or "").strip().lower()
+                if card:
+                    v_meta_by_key[card] = v_dept
+                if fn:
+                    v_meta_by_key[fn] = v_dept
+
+            t = str(v.get("checkin_time") or v.get("checkin_date") or "")
+            if t.startswith(selected_date):
+                if v_dept and v_dept != "--":
+                    visitor_dept_counts[v_dept] = visitor_dept_counts.get(v_dept, 0) + 1
+
+        # Also for any visitor in person_latest who hasn't been counted, if they have a mapped dept
+        for p in person_latest.values():
+            if not p["is_staff"]:
+                card_key = (p.get("atid") or "").lstrip("0")
+                name_key = (p.get("fullname") or "").strip().lower()
+                matched_dept = v_meta_by_key.get(card_key) or v_meta_by_key.get(name_key)
+                if matched_dept and matched_dept not in visitor_dept_counts:
+                    visitor_dept_counts[matched_dept] = visitor_dept_counts.get(matched_dept, 0) + 1
+
+        top_visitor_departments = sorted(
+            [{"name": k, "count": v} for k, v in visitor_dept_counts.items() if k and k != "--"],
+            key=lambda x: x["count"],
+            reverse=True
+        )[:6]
+
+        # If we have visitor departments, prioritize visitor reception; otherwise show active staff depts
+        if top_visitor_departments:
+            active_top_departments = top_visitor_departments
+            departments_type = "visitor"
+        else:
+            active_top_departments = top_staff_departments
+            departments_type = "staff"
+
+        staff_total_today = len(staff_unique)
+        visitor_total_today = len(visitor_unique)
+
+        distribution_data = {
+            "staff_total": staff_total_today,
+            "visitor_total": visitor_total_today,
+            "staff_present": len(staff_present),
+            "visitor_present": len(visitor_present),
+            "staff_checked_out": len(staff_checked_out),
+            "visitor_checked_out": len(visitor_checked_out),
+            "total": staff_total_today + visitor_total_today
+        }
 
         return {
             "date": selected_date,
@@ -572,13 +999,17 @@ class StorageManager:
             "kpi": {
                 "staff_count": len(staff_present),
                 "staff_present": len(staff_present),
+                "staff_checked_out": len(staff_checked_out),
                 "staff_unique_today": len(staff_unique),
+                "staff_total_today": len(staff_unique),
                 "staff_in_scans": staff_in_scans,
                 "staff_out_scans": staff_out_scans,
                 "staff_scans_total": staff_in_scans + staff_out_scans,
                 "visitor_count": len(visitor_present),
                 "visitors_today": len(visitor_unique),
                 "active_visitors_now": len(visitor_present),
+                "visitor_present": len(visitor_present),
+                "visitor_checked_out": len(visitor_checked_out),
                 "visitor_in_scans": visitor_in_scans,
                 "visitor_out_scans": visitor_out_scans,
                 "checked_out_today": len(visitor_checked_out),
@@ -590,16 +1021,20 @@ class StorageManager:
                 "staff": hourly_staff_data,
                 "visitors": hourly_visitor_data
             },
-            "distribution": {
-                "staff_total": len(staff_unique) or (staff_in_scans + staff_out_scans),
-                "visitor_total": len(visitor_unique) or (visitor_in_scans + visitor_out_scans)
-            },
-            "top_departments": top_departments
+            "departments": active_top_departments,
+            "top_departments": active_top_departments,
+            "top_visitor_departments": top_visitor_departments,
+            "top_staff_departments": top_staff_departments,
+            "departments_type": departments_type,
+            "distribution": distribution_data,
+            "donut": distribution_data
         }
 
-    def get_present_details(self, target_date: Optional[str] = None, category: str = "STAFF") -> List[Dict[str, Any]]:
+    def get_present_details(self, target_date: Optional[str] = None, category: str = "STAFF", include_active_visitors: bool = True) -> Dict[str, List[Dict[str, Any]]]:
         """
-        Returns the exact list of people currently inside the office on target_date.
+        Returns the exact list of people divided into 2 lists:
+        1. 'inside': Currently inside the office (latest scan was IN)
+        2. 'left': Left / checked out today (latest scan was OUT)
         category: 'STAFF' or 'VISITOR'.
         """
         now = datetime.now()
@@ -608,7 +1043,7 @@ class StorageManager:
         sorted_scans = sorted(scans, key=lambda x: str(x.get("CheckTime") or x.get("Time") or ""))
 
         # Also load active visitors for rich metadata matching
-        active_visitors = self.get_active_visitors()
+        active_visitors = self.get_active_visitors() if include_active_visitors else []
         visitor_map_by_card = {}
         visitor_map_by_name = {}
         for av in active_visitors:
@@ -656,13 +1091,15 @@ class StorageManager:
 
         target_staff = (category.upper() == "STAFF")
         inside_list = [p for p in person_latest.values() if p["is_staff"] == target_staff and p["direction"] == "IN"]
+        left_list = [p for p in person_latest.values() if p["is_staff"] == target_staff and p["direction"] == "OUT"]
 
         # Sort newest entry first
-        inside_list.sort(key=lambda x: x["check_time"], reverse=True)
+        inside_list.sort(key=lambda x: str(x.get("check_time", "")), reverse=True)
+        left_list.sort(key=lambda x: str(x.get("check_time", "")), reverse=True)
 
         # Enrich visitor metadata if applicable
         if not target_staff:
-            for p in inside_list:
+            for p in inside_list + left_list:
                 card = p.get("atid") or ""
                 name_clean = p.get("fullname", "").strip().lower()
                 matched_v = visitor_map_by_card.get(card) or visitor_map_by_name.get(name_clean)
@@ -674,16 +1111,26 @@ class StorageManager:
                     if matched_v.get("department"):
                         p["department"] = matched_v.get("department")
 
-        # Add 1-based STT
+        # Add 1-based STT and status labels
         for idx, item in enumerate(inside_list, 1):
             item["stt"] = idx
+            item["status_label"] = "Đang trong VP"
+            item["is_present"] = True
 
-        return inside_list
+        for idx, item in enumerate(left_list, 1):
+            item["stt"] = idx
+            item["status_label"] = "Đã về"
+            item["is_present"] = False
+
+        return {
+            "inside": inside_list,
+            "left": left_list
+        }
 
     # ---------------- Door Action Audit Logs ----------------
 
-    def log_door_action(self, door_id: int, door_name: str, duration_sec: int, operator: str = "Bảo vệ", success: bool = True) -> Dict[str, Any]:
-        """Logs manual unlock command triggered by UI."""
+    def log_door_action(self, door_id: int, door_name: str, duration_sec: int, operator: str = "Bảo vệ", success: bool = True, action: str = "UNLOCK") -> Dict[str, Any]:
+        """Logs manual unlock/lock command triggered by UI."""
         actions = _read_json(DOOR_ACTIONS_FILE, [])
         record = {
             "id": str(uuid.uuid4())[:8],
@@ -691,6 +1138,7 @@ class StorageManager:
             "door_id": door_id,
             "door_name": door_name,
             "duration_sec": duration_sec,
+            "action": action,
             "operator": operator,
             "success": success
         }

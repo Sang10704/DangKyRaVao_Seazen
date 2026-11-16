@@ -1,471 +1,745 @@
 <!DOCTYPE html>
 <html lang="vi">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SeaZen Smart Access Control - Quản Lý Khách & Giám Sát Ra Vào</title>
+  <title>SeaZen Smart Access Control</title>
   <link rel="stylesheet" href="css/style.css">
-  <link rel="icon" type="image/png" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏢</text></svg>">
-  <!-- Chart.js for High-performance Analytics Charts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap"
+    rel="stylesheet">
+  <link rel="icon" type="image/svg+xml"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23FFB800' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='18' height='18' rx='4'/><path d='M9 9h6v6H9z'/></svg>">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
+
 <body>
 
-  <div class="app-layout">
-    
-    <!-- Left Sidebar (Navbar Bên Cạnh) -->
-    <aside class="app-sidebar">
-      <div class="sidebar-brand">
-        <div class="brand-logo-badge">SZ</div>
-        <div class="brand-text">
-          <div class="brand-name">SeaZen Access</div>
-          <div class="brand-desc">Giám Sát & Quản Lý Khách</div>
+  <!-- ================= 1. LANDING PAGE ================= -->
+  <div id="landingPage" class="fullscreen-page">
+    <div class="landing-content">
+      <div class="brand-logo-badge large">SZ.</div>
+      <h1>SeaZen Security</h1>
+      <p>Hệ thống Quản lý Khách & Giám sát Truy cập Thông minh</p>
+      <button id="btnStart" class="btn-primary large">Bắt Đầu Truy Cập <span>→</span></button>
+    </div>
+    <div class="bg-effects">
+      <div class="glow yellow"></div>
+      <div class="glow black"></div>
+    </div>
+  </div>
+
+  <!-- ================= 2. LOGIN PAGE ================= -->
+  <div id="loginPage" class="fullscreen-page" style="display: none;">
+    <div class="login-split-card">
+      <!-- Left Panel: Security Shield & Branding -->
+      <div class="login-panel-left">
+        <div class="login-left-header">
+          <span class="security-tag">HỆ THỐNG BẢO MẬT</span>
+          <a href="javascript:void(0)" class="security-contact-link">Liên hệ</a>
+        </div>
+
+        <div class="login-left-center">
+          <div class="shield-graphic-container">
+            <svg class="shield-svg" viewBox="0 0 200 240" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="shieldBg" x1="100" y1="0" x2="100" y2="240" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%" stop-color="#192338" />
+                  <stop offset="100%" stop-color="#0b111e" />
+                </linearGradient>
+                <linearGradient id="goldBorder" x1="20" y1="10" x2="180" y2="230" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%" stop-color="#fde047" />
+                  <stop offset="40%" stop-color="#eab308" />
+                  <stop offset="100%" stop-color="#ca8a04" />
+                </linearGradient>
+                <radialGradient id="goldGlowRadial" cx="100" cy="115" r="70" gradientUnits="userSpaceOnUse">
+                  <stop offset="0%" stop-color="rgba(234, 179, 8, 0.25)" />
+                  <stop offset="100%" stop-color="rgba(234, 179, 8, 0)" />
+                </radialGradient>
+              </defs>
+
+              <!-- Radial glow background -->
+              <circle cx="100" cy="115" r="70" fill="url(#goldGlowRadial)" />
+
+              <!-- Outer Shield Frame -->
+              <path d="M100 12 L175 48 C175 140 100 215 100 215 C100 215 25 140 25 48 Z" fill="url(#shieldBg)"
+                stroke="#334155" stroke-width="3.5" stroke-linejoin="round" />
+              <!-- Inner Gold Shield Stroke -->
+              <path d="M100 26 L163 56 C163 133 100 198 100 198 C100 198 37 133 37 56 Z" fill="none"
+                stroke="url(#goldBorder)" stroke-width="2.5" stroke-linejoin="round" />
+
+              <!-- Realistic Golden Fingerprint SVG -->
+              <g transform="translate(68, 72) scale(0.65)" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"
+                fill="none">
+                <path d="M25 68 C 25 45 40 30 50 30 C 60 30 75 45 75 68" />
+                <path d="M17 73 C 17 40 33 22 50 22 C 67 22 83 40 83 73" />
+                <path d="M9 78 C 9 34 27 14 50 14 C 73 14 91 34 91 78" />
+                <path d="M33 70 C 33 52 41 40 50 40 C 59 40 67 52 67 70" />
+                <path d="M41 72 C 41 60 45 52 50 52 C 55 52 59 60 59 72" />
+                <path d="M50 63 L 50 78" />
+                <path d="M33 80 L 33 75" />
+                <path d="M41 82 L 41 76" />
+                <path d="M59 82 L 59 76" />
+                <path d="M67 80 L 67 75" />
+                <path d="M75 75 L 75 80" />
+                <path d="M25 75 L 25 80" />
+              </g>
+            </svg>
+          </div>
+          <div class="login-brand-title">SEAZEN</div>
+          <div class="login-brand-subtitle">SECURITY</div>
+        </div>
+
+        <div class="login-left-footer">
+          <div class="security-badge-card">
+            <div class="badge-avatar-au">AU</div>
+            <div class="badge-text-group">
+              <div class="badge-title">Hệ thống quản lý ra vào</div>
+              <div class="badge-subtitle">Bảo mật cấp độ cao</div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- Quick Action Button in Sidebar -->
-      <div class="sidebar-action">
-        <button type="button" class="btn-sidebar-register" id="btnSidebarRegister" title="Mở form đăng ký khách">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
-          <span>+ Đăng Ký Khách</span>
-        </button>
+      <!-- Right Panel: Login Form -->
+      <div class="login-panel-right">
+        <div class="login-right-header">
+          <div class="login-main-logo">SEAZEN<span class="gold-dot">.</span></div>
+          <div class="login-lang-badge">
+            <span class="flag-icon">🇻🇳</span>
+            <span>VN</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </div>
+        </div>
+
+        <div class="login-form-wrapper">
+          <h2 class="login-title">Chào mừng bạn quay lại!</h2>
+          <p class="login-subtitle">Đăng nhập vào bảng điều khiển cá nhân SEAZEN</p>
+
+          <form id="loginForm">
+            <!-- Email / Username Input Group -->
+            <div class="input-field-group">
+              <div class="input-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                  <polyline points="22,6 12,13 2,6"></polyline>
+                </svg>
+              </div>
+              <input type="text" id="username" class="login-input" placeholder="Email" required autocomplete="username">
+            </div>
+
+            <!-- Password Input Group -->
+            <div class="input-field-group">
+              <div class="input-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                </svg>
+              </div>
+              <input type="password" id="password" class="login-input" placeholder="Mật khẩu" required
+                autocomplete="current-password">
+              <button type="button" id="btnTogglePassword" class="password-toggle-btn" title="Hiện / ẩn mật khẩu"
+                aria-label="Hiện / ẩn mật khẩu">
+                <svg id="eyeIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                  <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+              </button>
+            </div>
+
+            <!-- Forgot password link -->
+            <div class="login-extra-row">
+              <a href="javascript:void(0)" id="btnForgotPassword" class="forgot-link">Quên mật khẩu?</a>
+            </div>
+
+            <!-- Error banner -->
+            <div id="loginError" class="login-error-banner" style="display: none;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+              </svg>
+              <span id="loginErrorText">Tài khoản hoặc mật khẩu không chính xác!</span>
+            </div>
+
+            <!-- Submit Button -->
+            <button type="submit" id="btnLoginSubmit" class="btn-login-action">
+              <span>Đăng Nhập</span>
+            </button>
+
+            <!-- Quick accounts guide -->
+            <div class="login-hints-footer">
+              <div class="hint-item"><strong>Admin:</strong> <code>admin</code> / <code>Admin@123</code></div>
+              <span class="hint-divider">•</span>
+              <div class="hint-item"><strong>Nhân viên:</strong> <code>nhanvien</code> / <code>Nhanvien@123</code></div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 3. MAIN APP LAYOUT ================= -->
+  <div class="app-layout" id="mainApp" style="display: none;">
+
+    <!-- Left Sidebar -->
+    <aside class="app-sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-logo-badge">SZ.</div>
+        <div class="brand-text">
+          <div class="brand-name">SeaZen</div>
+          <div class="brand-desc">Access Control</div>
+        </div>
       </div>
 
-      <!-- Navigation Menu -->
       <nav class="sidebar-nav">
         <a href="#dashboard" class="nav-item active" data-page="pageDashboard">
           <span class="nav-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="3" width="7" height="7"></rect>
               <rect x="14" y="3" width="7" height="7"></rect>
               <rect x="14" y="14" width="7" height="7"></rect>
               <rect x="3" y="14" width="7" height="7"></rect>
             </svg>
           </span>
-          <span class="nav-label">Tổng Quan & Giám Sát</span>
+          <span class="nav-label">Dashboard</span>
         </a>
-
         <a href="#active-visitors" class="nav-item" data-page="pageActiveVisitors">
           <span class="nav-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
               <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
               <circle cx="9" cy="7" r="4"></circle>
               <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
               <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
             </svg>
           </span>
-          <span class="nav-label">Khách Trong Tòa Nhà</span>
+          <span class="nav-label">Active Visitors</span>
           <span class="nav-badge" id="navActiveBadge">0</span>
         </a>
-
-        <a href="#realtime-scans" class="nav-item" data-page="pageRealtimeScans">
+        <a href="#realtime-scans" class="nav-item" data-page="pageRealtimeScans" data-role="admin">
           <span class="nav-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
             </svg>
           </span>
-          <span class="nav-label">Quét Cửa Live (4 Máy)</span>
+          <span class="nav-label">Live Scans</span>
         </a>
-
-        <a href="#history" class="nav-item" data-page="pageHistory">
+        <a href="#history" class="nav-item" data-page="pageHistory" data-role="admin">
           <span class="nav-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"></circle>
-              <polyline points="12 6 12 12 16 14"></polyline>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="16" y1="2" x2="16" y2="6"></line>
+              <line x1="8" y1="2" x2="8" y2="6"></line>
+              <line x1="3" y1="10" x2="21" y2="10"></line>
             </svg>
           </span>
-          <span class="nav-label">Lịch Sử Ra Vào</span>
+          <span class="nav-label">History</span>
         </a>
-
-        <a href="#audit" class="nav-item" data-page="pageAudit">
+        <a href="#employees" class="nav-item" data-page="pageEmployees" data-role="admin">
           <span class="nav-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-              <polyline points="14 2 14 8 20 8"></polyline>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+              <circle cx="9" cy="7" r="4"></circle>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
             </svg>
           </span>
-          <span class="nav-label">Nhật Ký Cửa</span>
+          <span class="nav-label">Nhân Sự & Sinh Trắc</span>
+        </a>
+        <a href="#audit" class="nav-item" data-page="pageAudit" data-role="admin">
+          <span class="nav-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+            </svg>
+          </span>
+          <span class="nav-label">Door Control & Audit</span>
         </a>
       </nav>
 
-      <!-- Sidebar Footer Status -->
       <div class="sidebar-footer">
-        <div class="status-indicator">
+        <div class="status-indicator flex-align gap-2" id="zkStatusBox" title="Nhấn để mở trang điều khiển và kiểm tra 4 máy ZKTeco" style="cursor: pointer;" onclick="navigateToPage('pageAudit')">
           <div class="pulse-dot" id="epadDot"></div>
-          <span id="epadStatusLabel">ePAD: Đang kết nối...</span>
+          <span id="epadStatusLabel">ZKTeco: Đang kết nối...</span>
         </div>
-        <div class="sidebar-subtext">SenseFace 4A • 2 Làn (4 Thiết Bị)</div>
       </div>
     </aside>
 
     <!-- Main Content Area -->
     <div class="app-main-content">
-      
+
       <!-- Top Header Bar -->
-      <header class="app-topbar">
+      <header class="app-topbar flex-between">
         <div class="topbar-left">
           <h2 class="current-page-title" id="pageTitle">Tổng Quan & Giám Sát Ra Vào</h2>
-          <div class="topbar-subtitle">Hệ thống nhận diện SenseFace 4A & Quản lý đăng ký khách SeaZen</div>
+          <div class="topbar-subtitle">Hệ thống nhận diện SenseFace 4A (4/4 Máy TCP Trực Tiếp)</div>
         </div>
-
-        <div class="topbar-right">
-          <button type="button" class="btn-topbar-register" id="btnTopbarRegister">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-            <span>+ Đăng Ký Khách</span>
+        <div class="topbar-right" style="display: flex; gap: 0.75rem; align-items: center;">
+          <button type="button" class="btn-primary" id="btnTopbarRegister">+ Đăng Ký Khách</button>
+          <button type="button" class="btn-secondary" id="btnTopbarDoorControl" data-role="admin" title="Điều khiển mở cửa từ xa" style="display: inline-flex; align-items: center; gap: 6px;" onclick="navigateToPage('pageAudit')">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            Mở Cửa
           </button>
           <div class="realtime-clock" id="realtimeClock">--:--:--</div>
+
+          <!-- User Profile Info Badge -->
+          <div class="topbar-user-badge" id="topbarUserInfo">
+            <div class="user-avatar" id="userAvatar">A</div>
+            <div class="user-meta">
+              <div class="user-name" id="userFullName">Admin</div>
+              <div class="user-role-badge" id="userRoleBadge">Quản trị viên</div>
+            </div>
+          </div>
+
+          <button type="button" id="btnLogout" class="btn-logout-header" title="Đăng xuất khỏi hệ thống">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+              <polyline points="16 17 21 12 16 7"></polyline>
+              <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+            <span>Đăng xuất</span>
+          </button>
         </div>
       </header>
 
       <!-- Dynamic Page Views Container -->
       <div class="views-wrapper">
 
-        <!-- ================= PAGE 1: DASHBOARD (TỔNG QUAN & GIÁM SÁT) ================= -->
+        <!-- ================= PAGE 1: DASHBOARD ================= -->
         <section class="page-view active" id="pageDashboard">
-          
-          <!-- Date Filter Toolbar for Historical Views -->
-          <div class="dashboard-date-filter-bar" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.2rem; background: #ffffff; padding: 0.75rem 1.2rem; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; flex-wrap: wrap; gap: 10px;">
-            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-              <div style="display: flex; align-items: center; gap: 6px;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-                <span style="font-weight: 600; color: #1e293b; font-size: 0.9rem;">Xem Dữ Liệu Ngày:</span>
-              </div>
-              <select id="selectAnalyticsDate" class="form-input" style="width: auto; padding: 0.35rem 0.8rem; font-size: 0.88rem; font-weight: 600; border-radius: 8px; border: 1.5px solid #cbd5e1; cursor: pointer; color: #1e293b;">
-                <option value="">Đang tải danh sách ngày...</option>
+          <!-- Date Filter Toolbar -->
+          <div class="dashboard-toolbar flex-between mb-4">
+            <div class="flex-align gap-3">
+              <span class="fw-600">Dữ liệu ngày:</span>
+              <select id="selectAnalyticsDate" class="form-input" style="width: auto; padding: 0.5rem;">
+                <option value="">Đang tải...</option>
               </select>
-              <input type="date" id="inputCustomDate" class="form-input" style="width: auto; padding: 0.35rem 0.6rem; font-size: 0.88rem; border-radius: 8px; border: 1.5px solid #cbd5e1;" title="Chọn ngày bất kỳ trong lịch sử">
+              <input type="date" id="inputCustomDate" class="form-input" style="width: auto; padding: 0.5rem;">
             </div>
-            <div style="display: flex; align-items: center; gap: 10px;">
-              <span id="selectedDateBadge" style="background: #eff6ff; color: #1d4ed8; font-weight: 600; font-size: 0.82rem; padding: 0.35rem 0.8rem; border-radius: 20px; border: 1px solid #bfdbfe;">Hôm nay: 18/09/2026</span>
-              <button type="button" class="btn btn-sm btn-outline" id="btnSyncEpadHistory" style="font-size: 0.82rem; padding: 0.35rem 0.75rem; display: inline-flex; align-items: center; gap: 5px;" title="Đồng bộ lại toàn bộ dữ liệu từ máy chủ ePAD">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-                <span>Đồng bộ ePAD</span>
+            <div class="flex-align gap-3">
+              <span id="selectedDateBadge" class="badge-tag">Hôm nay</span>
+              <button id="btnSyncEpadHistory" class="btn-secondary" data-role="admin" title="Quét và đồng bộ dữ liệu trực tiếp từ 4 máy cửa ZKTeco SenseFace">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px; vertical-align: -2px;"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                Đồng Bộ 4 Máy Cửa
               </button>
             </div>
           </div>
 
-          <!-- 1. KPI Metric Summary Cards (100% Thực Tế) -->
-          <div class="kpi-grid">
-            <!-- KPI 1: Staff Present -->
-            <div class="kpi-card staff-card clickable" id="cardKpiStaff" title="Bấm để xem danh sách chi tiết nhân viên đang có mặt">
-              <div class="kpi-icon-wrap">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                  <circle cx="12" cy="7" r="4"></circle>
-                </svg>
+          <!-- Top Row: 4 KPIs + Donut Chart -->
+          <div class="dashboard-top-row">
+            <div class="dash-top-left">
+              <div class="kpi-grid">
+                <div class="kpi-card card-black" id="cardKpiStaff">
+                  <div class="flex-between mb-2">
+                    <span class="tc-title">Nhân Viên Ra Vào</span>
+                    <div class="flex-align gap-2">
+                      <span class="kpi-badge-total" style="font-size: 20px;" title="Tổng số nhân viên có mặt trong ngày"
+                        style="cursor: pointer; font-weight: bold; font-size: 24px;"
+                        onclick="openPresentDetailsModal('staff')">Tổng: <span id="kpiStaffTotalToday">0</span></span>
+                      <span class="text-gray" style="display: flex; align-items: center;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                          <circle cx="9" cy="7" r="4"></circle>
+                        </svg>
+                      </span>
+                    </div>
+                  </div>
+                  <div class="kpi-dual-metrics">
+                    <div class="kpi-sub-block clickable" id="subKpiStaffInside"
+                      title="Bấm xem chi tiết nhân viên CÒN TRONG VĂN PHÒNG">
+                      <div class="kpi-sub-label"><span class="status-dot dot-green"></span> Trong VP</div>
+                      <div class="kpi-sub-num" id="kpiStaffPresent">0</div>
+                    </div>
+                    <div class="kpi-sub-block clickable" id="subKpiStaffLeft"
+                      title="Bấm xem chi tiết nhân viên ĐÃ VỀ / RA NGOÀI">
+                      <div class="kpi-sub-label"><span class="status-dot dot-gray"></span> Đã về</div>
+                      <div class="kpi-sub-num" id="kpiStaffCheckedOut">0</div>
+                    </div>
+                  </div>
+                  <div class="tc-desc mt-2">Tổng quét mặt: <span id="kpiStaffScans">0</span></div>
+                </div>
+
+                <div class="kpi-card card-yellow" id="cardKpiVisitor">
+                  <div class="flex-between mb-2">
+                    <span class="tc-title">Khách Ra Vào</span>
+                    <div class="flex-align gap-2">
+                      <span class="kpi-badge-total" style="font-size: 20px;" title="Tổng khách thực tế trong ngày">Tổng:
+                        <span id="kpiVisitorsToday">0</span></span>
+                      <span class="text-black" style="display: flex; align-items: center;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                          stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                          <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                      </span>
+                    </div>
+                  </div>
+                  <div class="kpi-dual-metrics">
+                    <div class="kpi-sub-block clickable" id="subKpiVisitorInside"
+                      title="Bấm xem chi tiết khách CÒN TRONG VĂN PHÒNG">
+                      <div class="kpi-sub-label"><span class="status-dot dot-green"></span> Trong VP</div>
+                      <div class="kpi-sub-num" id="kpiActiveVisitors">0</div>
+                    </div>
+                    <div class="kpi-sub-block clickable" id="subKpiVisitorLeft"
+                      title="Bấm xem chi tiết khách ĐÃ VỀ / RA NGOÀI">
+                      <div class="kpi-sub-label"><span class="status-dot dot-gray"></span> Đã về</div>
+                      <div class="kpi-sub-num" id="kpiCheckedOutToday">0</div>
+                    </div>
+                  </div>
+                  <div class="tc-desc mt-2">Lượt quẹt thẻ: <span id="kpiVisitorScans">0</span></div>
+                </div>
+
+                <div class="kpi-card card-white clickable" id="cardKpiTotalIn">
+                  <div class="flex-between mb-2">
+                    <span class="tc-title">Tổng Lượt VÀO</span>
+                    <span class="status-dot dot-green" title="Làn vào"></span>
+                  </div>
+                  <div class="tc-value text-black" id="kpiTotalIn">0</div>
+                  <div class="tc-desc mt-2 text-gray" id="kpiTotalInHint">NV Vào: 0 | Khách Vào: 0</div>
+                </div>
+
+                <div class="kpi-card card-white clickable" id="cardKpiTotalOut">
+                  <div class="flex-between mb-2">
+                    <span class="tc-title">Tổng Lượt RA</span>
+                    <span class="status-dot dot-gray" title="Làn ra"></span>
+                  </div>
+                  <div class="tc-value text-black" id="kpiTotalOut">0</div>
+                  <div class="tc-desc mt-2 text-gray" id="kpiTotalOutHint">NV Ra: 0 | Khách Ra: 0</div>
+                </div>
               </div>
-              <div class="kpi-info">
-                <div class="kpi-label">Số Nhân Viên Có Mặt</div>
-                <div class="kpi-value" id="kpiStaffPresent">0</div>
-                <div class="kpi-hint">Tổng lượt quét mặt: <strong id="kpiStaffScans">0</strong></div>
-                <div class="kpi-click-hint"><span>Xem danh sách chi tiết</span> <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg></div>
-              </div>
-              <div class="kpi-badge staff">Nhân Viên</div>
             </div>
 
-            <!-- KPI 2: Total Visitors -->
-            <div class="kpi-card visitor-card clickable" id="cardKpiVisitor" title="Bấm để xem danh sách chi tiết khách đang có mặt">
-              <div class="kpi-icon-wrap">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="2" y="5" width="20" height="14" rx="2"></rect>
-                  <line x1="2" y1="10" x2="22" y2="10"></line>
-                </svg>
-              </div>
-              <div class="kpi-info">
-                <div class="kpi-label">Số Khách Thực Tế</div>
-                <div class="kpi-value" id="kpiVisitorsToday">0</div>
-                <div class="kpi-hint">Đang ở trong: <strong id="kpiActiveVisitors">0</strong> | Đã về: <strong id="kpiCheckedOutToday">0</strong></div>
-                <div class="kpi-click-hint"><span>Xem danh sách chi tiết</span> <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg></div>
-              </div>
-              <div class="kpi-badge visitor">Khách Đến</div>
-            </div>
-
-            <!-- KPI 3: Total IN Scans -->
-            <div class="kpi-card active-card clickable" id="cardKpiTotalIn" title="Bấm để xem nhật ký các lượt quét VÀO">
-              <div class="kpi-icon-wrap">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="15 3 21 3 21 9"></polyline>
-                  <polyline points="9 21 3 21 3 15"></polyline>
-                  <line x1="21" y1="3" x2="14" y2="10"></line>
-                  <line x1="3" y1="21" x2="10" y2="14"></line>
-                </svg>
-              </div>
-              <div class="kpi-info">
-                <div class="kpi-label">Tổng Lượt Vào (Cửa Vào)</div>
-                <div class="kpi-value highlight-green" id="kpiTotalIn">0</div>
-                <div class="kpi-hint" id="kpiTotalInHint">NV Vào: 0 | Khách Vào: 0</div>
-                <div class="kpi-click-hint"><span>Xem nhật ký Lượt Vào</span> <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg></div>
-              </div>
-              <div class="kpi-badge live">Lượt VÀO</div>
-            </div>
-
-            <!-- KPI 4: Total OUT Scans -->
-            <div class="kpi-card checkout-card clickable" id="cardKpiTotalOut" title="Bấm để xem nhật ký các lượt quét RA">
-              <div class="kpi-icon-wrap">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="20 6 9 17 4 12"></polyline>
-                </svg>
-              </div>
-              <div class="kpi-info">
-                <div class="kpi-label">Tổng Lượt Ra (Cửa Ra)</div>
-                <div class="kpi-value" id="kpiTotalOut">0</div>
-                <div class="kpi-hint" id="kpiTotalOutHint">NV Ra: 0 | Khách Ra: 0</div>
-                <div class="kpi-click-hint"><span>Xem nhật ký Lượt Ra</span> <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg></div>
-              </div>
-              <div class="kpi-badge complete">Lượt RA</div>
-            </div>
-          </div>
-
-          <!-- 2. Charts Section -->
-          <div class="charts-section">
-            <!-- Hourly Traffic Chart -->
-            <div class="chart-card flex-2">
-              <div class="chart-header">
+            <!-- Cột Phải: Cơ Cấu Đối Tượng & Phòng Ban -->
+            <div class="dash-top-right">
+              <div class="chart-card"
+                style="height: 100%; display: flex; flex-direction: column; justify-content: space-between;">
                 <div>
-                  <div class="chart-title">Lưu Lượng Ra Vào Văn Phòng Theo Khung Giờ</div>
-                  <div class="chart-sub">Khung giờ hoạt động từ 07:00 đến 19:00 (Nhân viên quét mặt vs Khách đến)</div>
+                  <h3 class="tc-title mb-3">Cơ Cấu Đối Tượng & Phòng Ban</h3>
+                  <div class="donut-chart-container" style="height: 170px;"><canvas
+                      id="distributionDonutChart"></canvas></div>
                 </div>
-                <div class="chart-legend-pills">
-                  <span class="legend-pill staff">Nhân Viên</span>
-                  <span class="legend-pill visitor">Khách Đến</span>
-                </div>
-              </div>
-              <div class="chart-canvas-container">
-                <canvas id="hourlyTrafficChart"></canvas>
-              </div>
-            </div>
-
-            <!-- Ratio Donut Chart & Top Departments -->
-            <div class="chart-card flex-1">
-              <div class="chart-header">
-                <div>
-                  <div class="chart-title">Cơ Cấu Đối Tượng & Phòng Ban</div>
-                  <div class="chart-sub">Tỷ lệ ra vào & các bộ phận tiếp khách</div>
-                </div>
-              </div>
-              <div class="donut-chart-container">
-                <canvas id="distributionDonutChart"></canvas>
-              </div>
-              <div class="top-dept-container">
-                <div class="top-dept-title">Phòng ban tiếp khách nhiều nhất:</div>
-                <div class="top-dept-tags" id="topDepartmentsList">
-                  <span class="dept-tag">Đang nạp dữ liệu...</span>
+                <div class="mt-3">
+                  <h4 class="font-size-sm text-gray mb-2" id="topDepartmentsTitle" style="font-size: 0.82rem; font-weight: 600;">Phòng ban tiếp khách nhiều nhất:</h4>
+                  <div id="topDepartmentsList" class="flex-wrap gap-2"></div>
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- 3. Recent Scans Snapshot -->
-          <div class="section-card" style="margin-top: 1.5rem;">
-            <div class="section-header">
-              <h2>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-                </svg>
-                Hoạt Động Quét Cửa Gần Nhất
-              </h2>
-              <button type="button" class="btn-link-action" onclick="navigateToPage('pageRealtimeScans')">Xem tất cả quét cửa &rarr;</button>
+          <!-- Middle Row: Lưu Lượng Ra Vào Văn Phòng Theo Khung Giờ (Full width 100%) -->
+          <div class="chart-card mt-4">
+            <div class="chart-header flex-between mb-3">
+              <h3 class="tc-title">Lưu Lượng Ra Vào Văn Phòng Theo Khung Giờ</h3>
+              <div class="chart-legend-pills flex-align gap-2">
+                <span class="badge-tag card-black text-white">Nhân Viên</span>
+                <span class="badge-tag card-yellow text-black">Khách Đến</span>
+              </div>
             </div>
-            <div class="table-wrapper" style="max-height: 280px; overflow-y: auto;">
-              <table>
-                <thead>
+            <div class="chart-container" style="height: 260px;"><canvas id="hourlyTrafficChart"></canvas></div>
+          </div>
+
+          <!-- Bảng nằm ngang phía dưới giới hạn height -->
+          <div class="chart-card mt-4">
+            <div class="flex-between mb-3">
+              <h3 class="tc-title">Hoạt Động Quét Cửa Gần Nhất</h3>
+              <a href="#" class="text-yellow text-sm fw-600" onclick="navigateToPage('pageRealtimeScans')">Xem tất cả
+                &rarr;</a>
+            </div>
+            <div class="table-wrapper p-0" style="box-shadow: none; max-height: 240px; overflow-y: auto;">
+              <table style="width: 100%;">
+                <thead
+                  style="position: sticky; top: 0; background: white; z-index: 1; border-bottom: 2px solid var(--gray-border);">
                   <tr>
-                    <th style="width: 145px;">Thời Gian</th>
-                    <th>Họ Và Tên</th>
+                    <th>Thời Gian</th>
+                    <th>Họ Tên</th>
                     <th>Mã ID / Thẻ</th>
                     <th>Phòng Ban</th>
-                    <th>Thiết Bị Quét</th>
+                    <th>Thiết Bị</th>
                     <th>Phân Loại</th>
                   </tr>
                 </thead>
                 <tbody id="dashboardQuickLogsBody">
-                  <tr><td colspan="6" class="empty-state">Đang nạp nhật ký quét...</td></tr>
+                  <tr>
+                    <td colspan="6" class="empty-state text-gray">Đang nạp nhật ký quét...</td>
+                  </tr>
                 </tbody>
               </table>
             </div>
           </div>
-
         </section>
 
-        <!-- ================= PAGE 2: ACTIVE VISITORS (KHÁCH TRONG TÒA NHÀ) ================= -->
+        <!-- ================= PAGE 2: ACTIVE VISITORS ================= -->
         <section class="page-view" id="pageActiveVisitors">
-          <div class="section-card">
-            <div class="section-header">
-              <h2>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                  <circle cx="9" cy="7" r="4"></circle>
-                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                  <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+          <div class="card-white p-4" style="border-radius: var(--radius-xl); box-shadow: var(--shadow-soft);">
+            <div class="flex-between mb-4">
+              <h2 class="tc-title" style="font-size: 1.5rem;">Danh Sách Khách Đang Có Mặt <span id="activeCountBadge"
+                  class="badge-tag card-yellow ml-2">0</span></h2>
+            </div>
+            <div class="fast-checkout-box mb-4">
+              <span style="display: flex; align-items: center;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFB800" stroke-width="2.5"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
                 </svg>
-                Danh Sách Khách Đang Có Mặt Trong Văn Phòng
-              </h2>
-              <div style="display: flex; gap: 0.75rem; align-items: center;">
-                <span class="badge-count" id="activeCountBadge">0</span>
-                <button type="button" class="btn-primary" onclick="openRegisterModal()" style="padding: 0.5rem 1rem; font-size: 0.85rem;">
-                  + Đăng Ký Khách Mới
+              </span>
+              <input type="text" id="inputQuickCheckout" class="form-input"
+                placeholder="Quét mã QR CCCD hoặc Quẹt thẻ để Check-out siêu tốc..." autocomplete="off">
+              <button id="btnQuickCheckoutAction" class="btn-primary">Check-Out</button>
+            </div>
+            <input type="text" id="searchActiveVisitors" class="search-input full-width mb-4"
+              placeholder="Tìm kiếm theo tên khách, CCCD, thẻ...">
+            <!-- Batch Action Bar: Xuất hiện khi chọn 1 hoặc nhiều khách -->
+            <div id="activeBatchActionBar" class="flex-between p-3 mb-3" style="display: none; background: #FEF3C7; border: 1px solid #FCD34D; border-radius: var(--radius-md);">
+              <div class="flex-align gap-2">
+                <span style="font-size: 0.95rem; font-weight: 700; color: #92400E;">
+                  Đã chọn: <span id="selectedVisitorCount" class="badge-tag card-black text-white">0</span> khách
+                </span>
+              </div>
+              <div class="flex-align gap-2">
+                <button type="button" id="btnBatchCheckout" class="btn-primary" style="background: #D97706; border-color: #B45309; padding: 0.45rem 1.1rem; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                  Check-Out Hàng Loạt
                 </button>
+                <button type="button" id="btnDeselectAllActive" class="btn-secondary" style="padding: 0.45rem 0.8rem;">Bỏ chọn</button>
               </div>
             </div>
 
-            <!-- Fast Check-out Bar -->
-            <div class="fast-checkout-box">
-              <div class="checkout-icon">⚡</div>
-              <div class="checkout-input-wrap">
-                <input type="text" id="inputQuickCheckout" class="form-input checkout-highlight" 
-                       placeholder="Quét mã QR CCCD hoặc Quẹt thẻ để Check-out siêu tốc..." autocomplete="off">
-              </div>
-              <button type="button" class="btn-checkout-action" id="btnQuickCheckoutAction">Check-Out</button>
-            </div>
-
-            <!-- Filter Search Bar -->
-            <div class="filter-bar">
-              <input type="text" id="searchActiveVisitors" class="search-input" placeholder="Tìm theo tên khách, số CCCD, thẻ, công ty...">
-              <span style="font-size: 0.8rem; color: #64748b;">(Tự động cảnh báo đỏ ⚠️ khi khách lưu lại quá 4 giờ)</span>
-            </div>
-
-            <!-- Active Visitors Table -->
-            <div class="table-wrapper" style="max-height: calc(100vh - 350px); overflow-y: auto;">
+            <div class="table-wrapper p-0" style="box-shadow: none;">
               <table>
                 <thead>
                   <tr>
-                    <th style="width: 35px;">STT</th>
+                    <th style="width: 38px; text-align: center;">
+                      <input type="checkbox" id="checkAllActiveVisitors" title="Chọn tất cả">
+                    </th>
+                    <th style="width: 45px; text-align: center;">STT</th>
                     <th>Khách Đến</th>
                     <th>Số CCCD / Thẻ</th>
                     <th>Đơn Vị / Phòng Ban</th>
                     <th>Người Gặp</th>
                     <th>Giờ Vào</th>
                     <th>Thời Lượng</th>
-                    <th style="width: 140px; text-align: center;">Thao Tác</th>
+                    <th class="text-center" style="min-width: 190px;">Thao Tác</th>
                   </tr>
                 </thead>
-                <tbody id="activeVisitorsBody">
-                  <tr><td colspan="8" class="empty-state">Đang tải danh sách khách...</td></tr>
-                </tbody>
+                <tbody id="activeVisitorsBody"></tbody>
               </table>
             </div>
           </div>
         </section>
 
-        <!-- ================= PAGE 3: REALTIME SCANS (QUÉT CỬA LIVE 4 MÁY) ================= -->
+        <!-- ================= PAGE 3: REALTIME SCANS ================= -->
         <section class="page-view" id="pageRealtimeScans">
-          <div class="section-card">
-            <div class="section-header">
-              <h2>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-                </svg>
-                Nhật Ký Quét Cửa Trực Tiếp (4 Máy SenseFace 4A)
-              </h2>
-              <span style="font-size: 0.85rem; color: #64748b;">Tự động cập nhật mỗi 4 giây từ ePAD</span>
+          <div class="card-white p-4" style="border-radius: var(--radius-xl); box-shadow: var(--shadow-soft);">
+            <div class="flex-between mb-4">
+              <h2 class="tc-title" style="font-size: 1.5rem;">Nhật Ký Quét Cửa Trực Tiếp (4 Máy SenseFace)</h2>
             </div>
-
-            <div class="filter-bar" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: space-between;">
-              <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
-                <div class="category-filters" id="realtimeCategoryFilters">
-                  <button class="cat-filter-btn active" data-filter="ALL">Tất cả đối tượng</button>
-                  <button class="cat-filter-btn" data-filter="STAFF">🏢 Chỉ Nhân Viên</button>
-                  <button class="cat-filter-btn" data-filter="VISITOR">🎫 Chỉ Khách Đến</button>
-                </div>
-                <div class="category-filters" id="realtimeDirectionFilters">
-                  <button class="cat-filter-btn active" data-dir="ALL">Tất cả hướng</button>
-                  <button class="cat-filter-btn" data-dir="IN">🟢 Lượt VÀO</button>
-                  <button class="cat-filter-btn" data-dir="OUT">🔴 Lượt RA</button>
-                </div>
+            <div class="filter-bar flex-between flex-wrap gap-3 mb-4">
+              <div class="flex-align gap-3" id="realtimeCategoryFilters">
+                <button type="button" class="btn-filter active" data-filter="ALL">Tất cả đối tượng</button>
+                <button type="button" class="btn-filter" data-filter="STAFF">Chỉ Nhân Viên</button>
+                <button type="button" class="btn-filter" data-filter="VISITOR">Chỉ Khách Đến</button>
               </div>
-              <input type="text" id="searchRealtimeLogs" class="search-input" placeholder="🔍 Tìm theo tên, mã số, thiết bị, phòng ban..." style="max-width: 320px;">
+              <div class="flex-align gap-3" id="realtimeDirectionFilters">
+                <button type="button" class="btn-filter active" data-dir="ALL">Tất cả hướng</button>
+                <button type="button" class="btn-filter" data-dir="IN"><span class="status-dot dot-green"
+                    style="margin-right: 4px;"></span> Lượt VÀO</button>
+                <button type="button" class="btn-filter" data-dir="OUT"><span class="status-dot dot-gray"
+                    style="margin-right: 4px;"></span> Lượt RA</button>
+              </div>
+              <input type="text" id="searchRealtimeLogs" class="search-input" placeholder="Tìm kiếm log quét..."
+                style="max-width: 320px;">
             </div>
-
-            <div class="table-wrapper" style="max-height: calc(100vh - 320px); overflow-y: auto;">
+            <div class="table-wrapper p-0" style="box-shadow: none;">
               <table>
                 <thead>
                   <tr>
-                    <th style="width: 140px;">Thời Gian</th>
+                    <th>Thời Gian</th>
                     <th>Họ Và Tên</th>
-                    <th style="width: 105px;">Mã ID / Thẻ</th>
+                    <th>Mã ID / Thẻ</th>
                     <th>Phòng Ban</th>
-                    <th style="width: 110px; text-align: center;">Hướng Quét</th>
-                    <th>Thiết Bị Quét</th>
-                    <th style="width: 155px;">Phân Loại Đối Tượng</th>
-                    <th style="width: 130px;">Phương Thức</th>
+                    <th class="text-center">Hướng Quét</th>
+                    <th>Thiết Bị</th>
+                    <th>Phân Loại</th>
+                    <th>Phương Thức</th>
                   </tr>
                 </thead>
-                <tbody id="realtimeLogsBody">
-                  <tr><td colspan="8" class="empty-state">Đang nạp nhật ký quét từ thiết bị SenseFace...</td></tr>
-                </tbody>
+                <tbody id="realtimeLogsBody"></tbody>
               </table>
             </div>
           </div>
         </section>
 
-        <!-- ================= PAGE 4: VISITOR HISTORY (LỊCH SỬ RA VÀO) ================= -->
+        <!-- ================= PAGE 4: HISTORY ================= -->
         <section class="page-view" id="pageHistory">
-          <div class="section-card">
-            <div class="section-header">
-              <h2>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="10"></circle>
-                  <polyline points="12 6 12 12 16 14"></polyline>
-                </svg>
-                Lịch Sử Khách Ra Vào (Đã Check-Out)
-              </h2>
-              <a href="/api/export/visitors" class="btn-export">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                  <polyline points="7 10 12 15 17 10"></polyline>
-                  <line x1="12" y1="15" x2="12" y2="3"></line>
-                </svg>
-                Xuất Báo Cáo Excel Đầy Đủ (.xlsx)
-              </a>
+          <div class="card-white p-4" style="border-radius: var(--radius-xl); box-shadow: var(--shadow-soft);">
+            <div class="flex-between mb-4">
+              <h2 class="tc-title" style="font-size: 1.5rem;">Lịch Sử Khách Ra Vào (Đã Check-Out)</h2>
+              <a href="/api/export/visitors" class="btn-secondary" id="btnExportHistory"
+                style="text-decoration: none;">Xuất Báo Cáo Excel</a>
             </div>
-
-            <div class="filter-bar">
-              <input type="text" id="searchVisitorHistory" class="search-input" placeholder="Tìm khách theo tên, CCCD, đơn vị...">
-            </div>
-
-            <div class="table-wrapper" style="max-height: calc(100vh - 320px); overflow-y: auto;">
+            <input type="text" id="searchVisitorHistory" class="search-input full-width mb-4"
+              placeholder="Tìm khách theo tên, CCCD, đơn vị...">
+            <div class="table-wrapper p-0" style="box-shadow: none;">
               <table>
                 <thead>
                   <tr>
-                    <th style="width: 35px;">STT</th>
+                    <th>STT</th>
                     <th>Họ Tên Khách</th>
                     <th>Số CCCD</th>
-                    <th>Năm Sinh / Giới Tính</th>
-                    <th>Đơn Vị / Công Ty</th>
+                    <th>Sinh / Giới Tính</th>
+                    <th>Đơn Vị</th>
                     <th>Người Tiếp Đón</th>
                     <th>Giờ Vào</th>
                     <th>Giờ Ra</th>
-                    <th>Thời Lượng Lưu Lại</th>
+                    <th>Thời Lượng</th>
                   </tr>
                 </thead>
-                <tbody id="visitorHistoryBody">
-                  <tr><td colspan="9" class="empty-state">Đang tải lịch sử...</td></tr>
-                </tbody>
+                <tbody id="visitorHistoryBody"></tbody>
               </table>
             </div>
           </div>
         </section>
 
-        <!-- ================= PAGE 5: DOOR AUDIT (NHẬT KÝ CỬA) ================= -->
+        <!-- ================= PAGE 5: DOOR CONTROL & AUDIT LOGS ================= -->
         <section class="page-view" id="pageAudit">
-          <div class="section-card">
-            <div class="section-header">
-              <h2>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                  <polyline points="14 2 14 8 20 8"></polyline>
-                </svg>
-                Nhật Ký Lệnh Cửa & Hệ Thống
-              </h2>
+          <!-- 1. Bảng Điều Khiển Cửa Trực Tiếp -->
+          <div class="card-white p-4 mb-4" style="border-radius: var(--radius-xl); box-shadow: var(--shadow-soft);">
+            <div class="flex-between mb-3" style="flex-wrap: wrap; gap: 10px;">
+              <div>
+                <h2 class="tc-title" style="font-size: 1.4rem; margin-bottom: 4px;">Bảng Điều Khiển Cửa Trực Tiếp & Khẩn Cấp</h2>
+                <span class="text-gray text-sm">Gửi tín hiệu rơ-le tức thì qua giao thức ZKTeco TCP 4370 (Độ trễ &lt; 50ms)</span>
+              </div>
+              <div class="flex-align gap-2 flex-wrap">
+                <button type="button" class="btn-secondary" id="btnRefreshDeviceStatus" style="display: inline-flex; align-items: center; gap: 6px;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                  Kiểm Tra 4 Máy
+                </button>
+                <button type="button" id="btnEmergencyLockAll" class="btn-secondary" style="background: #1e293b; color: #ffffff; border-color: #0f172a; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                  🛑 ĐÓNG / KHÓA TOÀN BỘ CỬA
+                </button>
+                <button type="button" id="btnEmergencyUnlockAll" class="btn-primary" style="background: #dc2626; border-color: #b91c1c; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                  MỞ TOÀN BỘ CỬA (1s)
+                </button>
+              </div>
             </div>
-            <div class="table-wrapper" style="max-height: calc(100vh - 280px); overflow-y: auto;">
+
+            <!-- Door Group Unlock / Lock Controls -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+              <!-- Cửa Làn VÀO -->
+              <div style="background: #f0fdf4; border: 1.5px solid #86efac; border-radius: var(--radius-lg); padding: 1.2rem;">
+                <div class="flex-between mb-2">
+                  <div class="flex-align gap-2">
+                    <span class="status-dot dot-green"></span>
+                    <strong style="font-size: 1.05rem; color: #166534;">CỬA LÀN VÀO</strong>
+                  </div>
+                  <span class="badge-tag card-black text-white" style="font-size: 0.75rem;">Door ID: 1</span>
+                </div>
+                <p class="text-sm text-gray mb-3">Bao gồm 2 máy: <strong>Làn Vào Phải</strong> (.139) & <strong>Làn Vào Trái</strong> (.138)</p>
+                
+                <!-- Master Door 1 Controls -->
+                <div class="flex-align gap-2 mb-3">
+                  <button type="button" class="btn-primary" style="flex: 1; background: #16a34a; border-color: #15803d; font-weight: 700; padding: 0.5rem;" onclick="triggerUnlockDoor(1, null, 'Cửa Làn VÀO (Cả 2 máy)', 1)">
+                    ⚡ Mở Cả Làn Vào (1s)
+                  </button>
+                  <button type="button" class="btn-secondary" style="background: #fee2e2; color: #991b1b; border-color: #fca5a5; font-weight: 700; padding: 0.5rem;" onclick="triggerLockDoor(1, null, 'Cửa Làn VÀO (Cả 2 máy)')">
+                    🛑 Đóng Ngay
+                  </button>
+                </div>
+
+                <!-- Per-machine controls -->
+                <div style="border-top: 1px dashed #bbf7d0; padding-top: 0.6rem; display: flex; flex-direction: column; gap: 6px;">
+                  <div class="flex-between flex-align">
+                    <span style="font-size: 0.84rem; font-weight: 600; color: #166534;">Vào Phải (.139):</span>
+                    <div class="flex-align gap-1">
+                      <button type="button" class="btn-secondary" style="font-size: 0.78rem; padding: 3px 8px;" onclick="triggerUnlockDoor(1, '1313244800040', 'Làn VÀO phải', 1)">Mở 1s</button>
+                      <button type="button" class="btn-secondary" style="font-size: 0.78rem; padding: 3px 8px; color: #991b1b; background: #fff1f2; border-color: #fecdd3;" onclick="triggerLockDoor(1, '1313244800040', 'Làn VÀO phải')">Đóng</button>
+                    </div>
+                  </div>
+                  <div class="flex-between flex-align">
+                    <span style="font-size: 0.84rem; font-weight: 600; color: #166534;">Vào Trái (.138):</span>
+                    <div class="flex-align gap-1">
+                      <button type="button" class="btn-secondary" style="font-size: 0.78rem; padding: 3px 8px;" onclick="triggerUnlockDoor(1, '1313244800129', 'Làn VÀO trái', 1)">Mở 1s</button>
+                      <button type="button" class="btn-secondary" style="font-size: 0.78rem; padding: 3px 8px; color: #991b1b; background: #fff1f2; border-color: #fecdd3;" onclick="triggerLockDoor(1, '1313244800129', 'Làn VÀO trái')">Đóng</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Cửa Làn RA -->
+              <div style="background: #f8fafc; border: 1.5px solid #cbd5e1; border-radius: var(--radius-lg); padding: 1.2rem;">
+                <div class="flex-between mb-2">
+                  <div class="flex-align gap-2">
+                    <span class="status-dot dot-gray"></span>
+                    <strong style="font-size: 1.05rem; color: #334155;">CỬA LÀN RA</strong>
+                  </div>
+                  <span class="badge-tag card-black text-white" style="font-size: 0.75rem;">Door ID: 2</span>
+                </div>
+                <p class="text-sm text-gray mb-3">Bao gồm 2 máy: <strong>Làn Ra Trái</strong> (.137) & <strong>Làn Ra Phải</strong> (.136)</p>
+
+                <!-- Master Door 2 Controls -->
+                <div class="flex-align gap-2 mb-3">
+                  <button type="button" class="btn-primary" style="flex: 1; background: #475569; border-color: #334155; font-weight: 700; padding: 0.5rem;" onclick="triggerUnlockDoor(2, null, 'Cửa Làn RA (Cả 2 máy)', 1)">
+                    ⚡ Mở Cả Làn Ra (1s)
+                  </button>
+                  <button type="button" class="btn-secondary" style="background: #fee2e2; color: #991b1b; border-color: #fca5a5; font-weight: 700; padding: 0.5rem;" onclick="triggerLockDoor(2, null, 'Cửa Làn RA (Cả 2 máy)')">
+                    🛑 Đóng Ngay
+                  </button>
+                </div>
+
+                <!-- Per-machine controls -->
+                <div style="border-top: 1px dashed #cbd5e1; padding-top: 0.6rem; display: flex; flex-direction: column; gap: 6px;">
+                  <div class="flex-between flex-align">
+                    <span style="font-size: 0.84rem; font-weight: 600; color: #334155;">Ra Trái (.137):</span>
+                    <div class="flex-align gap-1">
+                      <button type="button" class="btn-secondary" style="font-size: 0.78rem; padding: 3px 8px;" onclick="triggerUnlockDoor(2, '1313244800122', 'Làn RA trái', 1)">Mở 1s</button>
+                      <button type="button" class="btn-secondary" style="font-size: 0.78rem; padding: 3px 8px; color: #991b1b; background: #fff1f2; border-color: #fecdd3;" onclick="triggerLockDoor(2, '1313244800122', 'Làn RA trái')">Đóng</button>
+                    </div>
+                  </div>
+                  <div class="flex-between flex-align">
+                    <span style="font-size: 0.84rem; font-weight: 600; color: #334155;">Ra Phải (.136):</span>
+                    <div class="flex-align gap-1">
+                      <button type="button" class="btn-secondary" style="font-size: 0.78rem; padding: 3px 8px;" onclick="triggerUnlockDoor(2, '1313244800130', 'Làn RA phải', 1)">Mở 1s</button>
+                      <button type="button" class="btn-secondary" style="font-size: 0.78rem; padding: 3px 8px; color: #991b1b; background: #fff1f2; border-color: #fecdd3;" onclick="triggerLockDoor(2, '1313244800130', 'Làn RA phải')">Đóng</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 2. Trạng Thái 4 Thiết Bị Trực Tiếp -->
+            <h3 class="tc-title mb-3" style="font-size: 1.1rem;">Trạng Thái 4 Thiết Bị ZKTeco Trực Tiếp (TCP 4370)</h3>
+            <div id="deviceStatusGrid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem;">
+              <div class="text-gray text-sm p-3">Đang kiểm tra kết nối 4 máy...</div>
+            </div>
+          </div>
+
+          <!-- 3. Nhật Ký Lệnh Cửa & Hệ Thống -->
+          <div class="card-white p-4" style="border-radius: var(--radius-xl); box-shadow: var(--shadow-soft);">
+            <div class="flex-between mb-3">
+              <h2 class="tc-title" style="font-size: 1.3rem;">Nhật Ký Lệnh Cửa & Hệ Thống</h2>
+              <button type="button" class="btn-secondary btn-sm" onclick="fetchAuditLogs()">Làm mới nhật ký</button>
+            </div>
+            <div class="table-wrapper p-0" style="box-shadow: none;">
               <table>
                 <thead>
                   <tr>
-                    <th style="width: 160px;">Thời Gian</th>
+                    <th>Thời Gian</th>
                     <th>Cửa / Lệnh</th>
                     <th>Thời Lượng</th>
                     <th>Người Thao Tác</th>
@@ -473,9 +747,104 @@
                   </tr>
                 </thead>
                 <tbody id="auditLogsBody">
-                  <tr><td colspan="5" class="empty-state">Chưa có bản ghi mở cửa nào</td></tr>
+                  <tr><td colspan="5" class="empty-state">Đang nạp nhật ký...</td></tr>
                 </tbody>
               </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= PAGE 6: EMPLOYEES & BIOMETRICS ================= -->
+        <section class="page-view" id="pageEmployees">
+          <!-- Toolbar & Filter -->
+          <div class="dashboard-toolbar flex-between mb-4">
+            <div class="flex-align gap-3" style="flex-wrap: wrap;">
+              <input type="text" id="inputEmployeeSearch" class="form-input" placeholder="🔍 Tìm theo Họ tên, ATID, Mã NV, Thẻ..." style="min-width: 280px; padding: 0.5rem 1rem;">
+              <select id="selectEmployeeDeptFilter" class="form-input" style="width: auto; padding: 0.5rem 1rem;">
+                <option value="">-- Tất cả phòng ban --</option>
+              </select>
+            </div>
+            <div class="flex-align gap-3">
+              <button id="btnRefreshEmployees" class="btn-secondary" title="Tải lại danh bạ">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px; vertical-align: -2px;"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                Làm Mới
+              </button>
+            </div>
+          </div>
+
+          <!-- KPI Cards for Employee Directory -->
+          <!-- KPI Cards for Employee Directory -->
+          <div class="kpi-grid mb-4" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+            <div class="kpi-card card-black">
+              <div class="flex-between mb-2">
+                <span class="tc-title">Tổng Nhân Sự</span>
+                <span class="badge-tag card-yellow text-black" style="font-size: 0.72rem;">SeaZen</span>
+              </div>
+              <div class="tc-value gold text-yellow" id="empTotalStat" style="color: var(--yellow);">0</div>
+              <div class="tc-desc mt-2">Hồ sơ trong hệ thống</div>
+            </div>
+            <div class="kpi-card card-white">
+              <div class="flex-between mb-2">
+                <span class="tc-title text-black">Cơ Cấu Tổ Chức</span>
+                <span class="status-dot dot-green"></span>
+              </div>
+              <div class="tc-value text-black" id="empDeptsStat">0</div>
+              <div class="tc-desc mt-2 text-gray">Phòng ban / Đơn vị</div>
+            </div>
+            <div class="kpi-card card-white">
+              <div class="flex-between mb-2">
+                <span class="tc-title text-black">Nhận Diện Khuôn Mặt</span>
+                <span class="status-dot dot-green"></span>
+              </div>
+              <div class="tc-value text-success" id="empFaceStat" style="font-size: 1.8rem; line-height: 1.4;">Đang nạp</div>
+              <div class="tc-desc mt-2 text-gray">SenseFace 4A Face v4/v7</div>
+            </div>
+            <div class="kpi-card card-white">
+              <div class="flex-between mb-2">
+                <span class="tc-title text-black">Thẻ Từ RFID</span>
+                <span class="badge-tag card-black text-white" style="font-size: 0.7rem;">13.56MHz</span>
+              </div>
+              <div class="tc-value text-black" id="empCardStat" style="font-size: 1.8rem; line-height: 1.4;">Đã cấp</div>
+              <div class="tc-desc mt-2 text-gray">Tần số 13.56MHz / UHF</div>
+            </div>
+          </div>
+
+          <!-- Employee Table Card -->
+          <div class="table-wrapper">
+            <div class="flex-between mb-3">
+              <h3 class="tc-title text-black">Danh Bạ Nhân Sự Công Ty SeaZen</h3>
+              <span class="text-gray fw-600" id="empTableCountLabel" style="font-size: 0.88rem;">Hiển thị 0 / 0 nhân sự</span>
+            </div>
+
+            <div class="table-responsive" style="overflow-x: auto;">
+              <table class="data-table" id="employeesTable">
+                <thead>
+                  <tr>
+                    <th style="width: 50px;">Avatar</th>
+                    <th style="width: 110px;">Mã ATID</th>
+                    <th style="width: 100px;">Mã NV</th>
+                    <th>Họ và Tên</th>
+                    <th>Phòng Ban</th>
+                    <th>Mã Thẻ RFID</th>
+                    <th>Nhận Diện Mặt</th>
+                    <th style="text-align: right;">Trạng Thái</th>
+                  </tr>
+                </thead>
+                <tbody id="employeesTableBody">
+                  <tr>
+                    <td colspan="8" class="text-center py-4 text-gray">Đang tải danh bạ nhân sự...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Pagination Bar -->
+            <div class="flex-between mt-3" style="padding-top: 1rem; border-top: 1px solid var(--gray-border, #e2e8f0);">
+              <span id="empPaginationInfo" class="text-gray fw-600" style="font-size: 0.85rem;">Trang 1 / 1</span>
+              <div class="flex-align gap-2">
+                <button id="btnEmpPrevPage" class="btn-secondary" style="padding: 0.4rem 0.9rem; font-size: 0.85rem;">&larr; Trang trước</button>
+                <button id="btnEmpNextPage" class="btn-secondary" style="padding: 0.4rem 0.9rem; font-size: 0.85rem;">Trang sau &rarr;</button>
+              </div>
             </div>
           </div>
         </section>
@@ -484,382 +853,455 @@
     </div>
   </div>
 
-  <!-- ================= POPUP MODAL: ĐĂNG KÝ KHÁCH NHANH (QR CCCD) ================= -->
+  <!-- ================= MODALS ================= -->
+
+  <!-- 1. Form Đăng Ký Khách (Đồng bộ chuẩn 3 cột từ ePAD) -->
   <div class="modal-backdrop" id="registerModalBackdrop" style="display: none;">
-    <div class="register-modal">
+    <div class="register-modal modal-box large-modal">
+      <div class="modal-close" id="btnCloseRegisterModal" title="Đóng cửa sổ">&times;</div>
       <div class="modal-header">
-        <div class="modal-title-wrap">
-          <div class="modal-badge-icon">📷</div>
-          <div>
-            <h3>Đăng Ký Khách Nhanh (Quét QR CCCD)</h3>
-            <p class="modal-subtitle">Tự động nhận diện và bóc tách thông tin thẻ căn cước gắn chip trong 0.05 giây</p>
-          </div>
-        </div>
-        <div class="modal-close" id="btnCloseRegisterModal" title="Đóng cửa sổ">&times;</div>
+        <h3>Đăng Ký Khách Ra Vào Tòa Nhà</h3>
+        <p class="text-gray mb-3">Tự động nhận diện và bóc tách thông tin căn cước công dân gắn chip qua mã QR</p>
       </div>
 
       <div class="modal-scroll-content">
-        <!-- Registration Form -->
         <form id="visitorForm">
-          <!-- Row 1: Số CCCD & Họ và Tên Khách -->
-          <div class="form-row">
-            <div class="form-group flex-1">
-              <div class="form-label-row">
-                <label for="inputCccdNumber">Số Căn Cước (CCCD) <span class="required">*</span></label>
-                <button type="button" class="btn-scan-cccd-trigger" id="btnOpenScanCccdModal" title="Nhấn để mở popup quét CCCD">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
-                    <circle cx="12" cy="13" r="4"></circle>
-                  </svg>
-                  <span>Quét CCCD</span>
-                </button>
+          <div class="form-grid-3">
+            <!-- CỘT 1: Thông tin cá nhân & thời gian -->
+            <div class="form-col">
+              <div class="form-group">
+                <label>Họ tên khách <span class="required">(*)</span></label>
+                <input type="text" id="inputFullName" class="form-input fw-800" placeholder="Nhập họ tên khách..."
+                  required>
               </div>
-              <input type="text" id="inputCccdNumber" class="form-input" placeholder="12 chữ số CCCD..." required>
+
+              <div class="form-group">
+                <label>Ngày tháng năm sinh</label>
+                <input type="text" id="inputBirthDate" class="form-input" placeholder="dd/mm/yyyy (hoặc năm sinh)">
+                <input type="hidden" id="inputBirthYear">
+              </div>
+
+              <div class="form-group">
+                <label>Từ thời gian <span class="required">(*)</span></label>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                  <input type="date" id="inputCheckinDate" class="form-input" required>
+                  <input type="time" id="inputCheckinTime" class="form-input" required>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Đến thời gian <span class="required">(*)</span></label>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                  <input type="date" id="inputCheckoutDate" class="form-input" required>
+                  <input type="time" id="inputCheckoutTime" class="form-input" value="16:45" required>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Nội dung làm việc</label>
+                <textarea id="inputPurpose" class="form-input" rows="3"
+                  placeholder="Nội dung / mục đích làm việc..."></textarea>
+              </div>
             </div>
-            <div class="form-group flex-1">
-              <label for="inputFullName">Họ và Tên Khách <span class="required">*</span></label>
-              <input type="text" id="inputFullName" class="form-input font-bold" placeholder="Ví dụ: NGUYỄN VĂN AN" required>
+
+            <!-- CỘT 2: Giấy tờ, liên hệ & quyền truy cập -->
+            <div class="form-col">
+              <div class="form-group">
+                <label>CMND / CCCD / Passport <span class="required">(*)</span></label>
+                <div style="display: flex; gap: 0.5rem;">
+                  <input type="text" id="inputCccdNumber" class="form-input fw-800" placeholder="Số CCCD / CMND..."
+                    required>
+                  <button type="button" id="btnOpenScanCccdModal" class="btn-primary"
+                    style="padding: 0 1rem; border-radius: var(--radius-sm); white-space: nowrap; display: inline-flex; align-items: center; gap: 4px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="3" y="3" width="7" height="7" />
+                      <rect x="14" y="3" width="7" height="7" />
+                      <rect x="14" y="14" width="7" height="7" />
+                      <rect x="3" y="14" width="7" height="7" />
+                    </svg>
+                    Quét
+                  </button>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Số điện thoại khách</label>
+                <input type="tel" id="inputPhone" class="form-input" placeholder="Số điện thoại liên hệ...">
+              </div>
+
+              <div class="form-group">
+                <label>Tên công ty / Đơn vị</label>
+                <input type="text" id="inputCompany" class="form-input" placeholder="Tên công ty / đơn vị...">
+              </div>
+
+              <div class="form-group">
+                <label>Ghi chú</label>
+                <textarea id="inputNote" class="form-input" rows="4" placeholder="Ghi chú thêm (nếu có)..."></textarea>
+              </div>
+            </div>
+
+            <!-- CỘT 3: Phòng ban, người tiếp đón, thẻ & xe -->
+            <div class="form-col">
+              <div class="form-group">
+                <label>Phòng ban liên hệ <span class="required">(*)</span></label>
+                <select id="inputDepartment" class="form-input" required></select>
+              </div>
+
+              <div class="form-group">
+                <label>Người liên hệ</label>
+                <input type="text" id="inputHostPerson" list="hostSuggestions" class="form-input"
+                  placeholder="Chọn hoặc nhập tên...">
+                <datalist id="hostSuggestions"></datalist>
+              </div>
+
+              <div class="form-group">
+                <label>Số điện thoại người liên hệ</label>
+                <input type="tel" id="inputHostPhone" class="form-input" placeholder="Số điện thoại người đón...">
+              </div>
+
+              <div class="form-group" style="position: relative;">
+                <label>Mã thẻ (RFID)</label>
+                <input type="text" id="inputCardNumber" class="form-input" placeholder="Quẹt thẻ hoặc nhập mã...">
+                <!-- Cảnh báo và nút Check-Out nhanh nếu thẻ đang dính khách cũ -->
+                <div id="cardConflictBox" style="display: none; margin-top: 6px; padding: 8px 10px; background: #FEF2F2; border: 1.5px solid #F87171; border-radius: var(--radius-sm); box-shadow: 0 2px 6px rgba(220,38,38,0.08);">
+                  <div style="font-size: 0.82rem; color: #991B1B; font-weight: 700; margin-bottom: 3px; display: flex; align-items: center; gap: 4px;">
+                    <span>⚠️ Thẻ đang cấp cho:</span>
+                    <span id="conflictVisitorName" style="color: #11142D; font-weight: 800;"></span>
+                  </div>
+                  <div style="font-size: 0.75rem; color: #64748B; margin-bottom: 6px;" id="conflictVisitorMeta"></div>
+                  <button type="button" id="btnConflictCheckout" class="btn-primary" style="width: 100%; background: #DC2626; border-color: #B91C1C; padding: 0.35rem 0.6rem; font-size: 0.8rem; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                    ⚡ Check-Out Khách Này & Thu Hồi Thẻ
+                  </button>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Biển số xe</label>
+                <input type="text" id="inputVehicle" class="form-input" placeholder="Ví dụ: 29A-123.45">
+              </div>
             </div>
           </div>
 
-          <!-- Row 2: Ngày sinh & Năm sinh & SĐT -->
-          <div class="form-row">
-            <div class="form-group">
-              <label for="inputBirthDate">Ngày Sinh (DD/MM/YYYY)</label>
-              <input type="text" id="inputBirthDate" class="form-input" placeholder="15/08/1995">
-            </div>
-            <div class="form-group">
-              <label for="inputBirthYear">Năm Sinh</label>
-              <input type="text" id="inputBirthYear" class="form-input" placeholder="1995">
-            </div>
-            <div class="form-group">
-              <label for="inputPhone">Số Điện Thoại</label>
-              <input type="tel" id="inputPhone" class="form-input" placeholder="0901...">
-            </div>
-          </div>
-
-          <!-- Row 3: Ngày Vào & Giờ Vào (Mặc định: Hôm nay - Bây giờ, có thể sửa) -->
-          <div class="form-row">
-            <div class="form-group">
-              <label for="inputCheckinDate">Ngày Vào <span class="required">*</span></label>
-              <input type="date" id="inputCheckinDate" class="form-input" required>
-            </div>
-            <div class="form-group">
-              <label for="inputCheckinTime">Giờ Vào <span class="required">*</span></label>
-              <input type="time" id="inputCheckinTime" class="form-input" required>
-            </div>
-          </div>
-
-          <!-- Row 4: Ngày Ra & Giờ Ra (Mặc định: Hôm nay - 16h45 chiều, có thể sửa) -->
-          <div class="form-row">
-            <div class="form-group">
-              <label for="inputCheckoutDate">Ngày Ra (Dự kiến)</label>
-              <input type="date" id="inputCheckoutDate" class="form-input">
-            </div>
-            <div class="form-group">
-              <label for="inputCheckoutTime">Giờ Ra (Dự kiến)</label>
-              <input type="time" id="inputCheckoutTime" class="form-input" value="16:45">
-            </div>
-          </div>
-
-          <!-- Row 4: Phòng Ban Đến & Người Tiếp Đón -->
-          <div class="form-row">
-            <div class="form-group">
-              <label for="inputDepartment">Phòng Ban Đến <span class="required" style="color:#ef4444;">*</span></label>
-              <select id="inputDepartment" class="form-input" style="font-weight: 500;" required>
-                <option value="">-- Đang tải phòng ban ePAD... --</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label for="inputHostPerson">Người Tiếp Đón / Gặp Ai <span style="font-size:0.75rem; color:#64748b; font-weight:400;">(Lọc theo phòng ban)</span></label>
-              <input type="text" id="inputHostPerson" list="hostSuggestions" class="form-input" placeholder="Chọn hoặc gõ tên nhân viên...">
-              <datalist id="hostSuggestions">
-                <!-- Dynamically updated based on Department from ePAD -->
-              </datalist>
-            </div>
-          </div>
-
-          <!-- Row 5: Đơn Vị Đến & Mục Đích Đến -->
-          <div class="form-row">
-            <div class="form-group">
-              <label for="inputCompany">Đơn Vị / Công Ty Đến</label>
-              <input type="text" id="inputCompany" list="companySuggestions" class="form-input" placeholder="Tên đơn vị, công ty...">
-              <datalist id="companySuggestions">
-                <option value="Công ty TNHH SeaZen">
-                <option value="Viettel Post">
-                <option value="VNPT">
-                <option value="FPT Telecom">
-                <option value="Shopee">
-                <option value="Grab">
-                <option value="Ahamove">
-                <option value="EVN">
-                <option value="Khách Giao Dịch Cá Nhân">
-              </datalist>
-            </div>
-            <div class="form-group">
-              <label for="inputPurpose">Mục Đích Đến</label>
-              <input type="text" id="inputPurpose" list="purposeSuggestions" class="form-input" placeholder="Giao dịch, họp, phỏng vấn...">
-              <datalist id="purposeSuggestions">
-                <option value="Giao dịch / Làm việc">
-                <option value="Họp đối tác">
-                <option value="Phỏng vấn ứng viên">
-                <option value="Bảo trì / Thi công kỹ thuật">
-                <option value="Giao nhận hàng hóa / Bưu kiện">
-                <option value="Tham quan văn phòng">
-              </datalist>
-            </div>
-          </div>
-
-          <!-- Row 8: Biển Số Xe & Mã Thẻ RFID -->
-          <div class="form-row">
-            <div class="form-group">
-              <label for="inputVehicle">Biển Số Xe (Nếu có)</label>
-              <input type="text" id="inputVehicle" class="form-input" placeholder="Ví dụ: 59A-123.45">
-            </div>
-            <div class="form-group">
-              <label for="inputCardNumber">Mã Thẻ RFID (Phát cho khách)</label>
-              <input type="text" id="inputCardNumber" class="form-input" placeholder="Quẹt thẻ nếu cấp thẻ vật lý...">
-            </div>
-          </div>
-
-          <label class="checkbox-group" style="margin-top: 0.5rem; margin-bottom: 0.5rem;">
+          <!-- Hidden legacy fields for background compatibility -->
+          <div style="display:none;">
+            <input type="text" id="inputCmndOld">
+            <input type="text" id="inputAddress">
+            <select id="inputGender">
+              <option>Nam</option>
+              <option>Nữ</option>
+            </select>
             <input type="checkbox" id="checkAutoUnlock">
-            <span style="font-size: 0.84rem; color: #64748b;">Mở Cửa Làn Vào khi đăng ký (Tùy chọn)</span>
-          </label>
+          </div>
         </form>
       </div>
 
-      <!-- Modal Footer Actions -->
-      <div class="modal-footer">
-        <button type="submit" form="visitorForm" class="btn-primary" id="btnSubmitVisitor">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-            <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-            <circle cx="8.5" cy="7" r="4"></circle>
-            <line x1="20" y1="8" x2="20" y2="14"></line>
-            <line x1="23" y1="11" x2="17" y2="11"></line>
-          </svg>
-          <span>Đăng Ký & Cho Vào</span>
-        </button>
-        <button type="button" class="btn-print" id="btnPrintCurrentForm" tabindex="-1" title="In phiếu khách tạm thời">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
-          In Phiếu
-        </button>
-        <button type="button" class="btn-secondary" id="btnResetForm">Làm Mới</button>
-        <button type="button" class="btn-secondary" id="btnCancelRegisterModal">Đóng</button>
+      <div class="modal-footer flex-between mt-4">
+        <div class="flex-align gap-2">
+          <button type="button" class="btn-secondary" id="btnResetForm">Làm Mới</button>
+          <button type="button" class="btn-secondary" id="btnPrintCurrentForm">In Phiếu Đăng Ký</button>
+        </div>
+        <div class="flex-align gap-2">
+          <button type="button" class="btn-secondary" id="btnCancelRegisterModal">Đóng</button>
+          <button type="submit" form="visitorForm" class="btn-primary" id="btnSubmitVisitor">Đăng Ký & Cho Vào</button>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- ================= POPUP MODAL: CHUYÊN BIỆT QUÉT THẺ CCCD GẮN CHIP (F2) ================= -->
+  <!-- 2. Quét CCCD Modal -->
   <div class="modal-backdrop" id="scanCccdModalBackdrop" style="display: none; z-index: 1200;">
-    <div class="scan-modal-dialog">
-      <div class="scan-modal-header">
-        <div class="scan-title-wrap">
-          <div class="scan-icon-pulse">📷</div>
-          <div>
-            <h3>Quét Mã QR Căn Cước Công Dân (CCCD)</h3>
-            <p class="scan-subtitle">Hướng máy quét vào mã QR trên thẻ CCCD để tự động điền: Số CCCD, Họ tên, Ngày sinh</p>
-          </div>
-        </div>
-        <div class="modal-close" id="btnCloseScanCccdModal" title="Đóng cửa sổ quét">&times;</div>
+    <div class="scan-modal-dialog modal-box" style="max-width: 580px; text-align: center;">
+      <div class="modal-close" id="btnCloseScanCccdModal">&times;</div>
+      <h3>Quét Mã QR Căn Cước Công Dân (CCCD)</h3>
+      <p class="text-gray mb-4">Sử dụng máy quét 2D quét mã QR trên CCCD gắn chip</p>
+
+      <div class="scanner-graphic mb-4">
+        <div class="laser-beam"></div>
+        <span>ĐẶT MÃ QR VÀO ĐÂY</span>
       </div>
 
-      <div class="scan-modal-body">
-        <!-- Visual CCCD Card Mockup with Animated Laser Scanner -->
-        <div class="cccd-scanner-display">
-          <div class="cccd-card-graphic">
-            <div class="chip-graphic"></div>
-            <div class="qr-target-window">
-              <div class="laser-beam"></div>
-              <div class="corner-mark top-left"></div>
-              <div class="corner-mark top-right"></div>
-              <div class="corner-mark bottom-left"></div>
-              <div class="corner-mark bottom-right"></div>
-              <span class="qr-center-text">ĐẶT MÃ QR VÀO ĐÂY</span>
-            </div>
-            <div class="card-lines-mock">
-              <div class="line l1"></div>
-              <div class="line l2"></div>
-              <div class="line l3"></div>
-            </div>
-          </div>
-        </div>
+      <input type="text" id="popupScanCccdInput" class="form-input text-center fw-800"
+        placeholder="Đang chờ máy quét đọc mã QR CCCD..." autocomplete="off">
+      <div id="popupScanStatusAlert" class="mt-2 text-success fw-600 flex-center gap-2"><span
+          class="scanner-live-dot"></span><span id="popupScanStatusText">Sẵn sàng nhận tín hiệu...</span></div>
 
-        <!-- Dedicated Scan Input Field -->
-        <div class="scan-input-container">
-          <label for="popupScanCccdInput" class="scan-input-label">
-            <span>Dùng máy quét laser 2D quét mã QR trên thẻ CCCD:</span>
-          </label>
-          <div class="scan-input-wrapper">
-            <input type="text" id="popupScanCccdInput" class="popup-scan-input"
-                   placeholder="Đang chờ máy quét đọc mã QR CCCD..."
-                   autocomplete="off">
-          </div>
-          <div class="scan-status-alert" id="popupScanStatusAlert">
-            <span class="scanner-live-dot"></span>
-            <span id="popupScanStatusText">Sẵn sàng nhận tín hiệu từ máy quét...</span>
-          </div>
-        </div>
-
-        <!-- Live Parsed Information Preview (Appears when scanned) -->
-        <div class="scan-parsed-preview" id="scanParsedPreview" style="display: none;">
-          <div class="preview-header">✓ Đã Bóc Tách Thành Công Thông Tin Khách:</div>
-          <div class="preview-grid">
-            <div class="prev-field">
-              <span class="prev-lbl">Số CCCD:</span>
-              <strong class="prev-val" id="prevCccd">--</strong>
-            </div>
-            <div class="prev-field">
-              <span class="prev-lbl">Họ và Tên:</span>
-              <strong class="prev-val highlight" id="prevName">--</strong>
-            </div>
-            <div class="prev-field" style="grid-column: span 2;">
-              <span class="prev-lbl">Ngày / Năm sinh:</span>
-              <strong class="prev-val" id="prevDob">--</strong>
-            </div>
-          </div>
-        </div>
-
-        <!-- Test Sample Button -->
-        <div class="scan-test-bar">
-          <button type="button" class="btn-sample-action" id="btnTestUserSample">
-            ⚡ Thử Mẫu CCCD (Nguyễn Huỳnh Văn Sang)
-          </button>
-        </div>
+      <div id="scanParsedPreview" class="mt-4 p-3 card-white text-left"
+        style="display: none; border: 1px solid #e2e8f0; border-radius: 8px;">
+        <p class="mb-2 text-success fw-800">Đã Bóc Tách Thành Công:</p>
+        <p>Họ và Tên: <strong id="prevName" class="text-black">--</strong></p>
+        <p>Số CCCD: <strong id="prevCccd">--</strong></p>
+        <p style="display: none;">DOB: <strong id="prevDob">--</strong> Gender: <strong id="prevGender">--</strong></p>
       </div>
 
-      <div class="scan-modal-footer">
-        <button type="button" class="btn-primary" id="btnApplyScanToForm" style="display: none;">
-          ✓ Áp Dụng Vào Form Đăng Ký
-        </button>
-        <button type="button" class="btn-secondary" id="btnCancelScanCccdModal">Đóng Cửa Sổ</button>
+      <div class="mt-4 flex-center gap-2">
+        <button type="button" id="btnApplyScanToForm" class="btn-primary" style="display:none;">Áp Dụng Vào
+          Form</button>
+        <button type="button" id="btnCancelScanCccdModal" class="btn-secondary">Đóng</button>
       </div>
     </div>
   </div>
 
-  <!-- ================= PRINTABLE VISITOR PASS MODAL (TEM NHIỆT 80MM) ================= -->
+  <!-- 3. In Phiếu Tem Nhiệt -->
   <div class="modal-backdrop" id="passModalBackdrop" style="display: none;">
-    <div class="pass-modal">
+    <div class="pass-modal modal-box" style="max-width: 440px;">
       <div class="modal-close" id="btnClosePassModal">&times;</div>
-      <div id="printablePassArea" class="printable-pass">
-        <div class="pass-header">
-          <div class="pass-company">SEAZEN ACCESS CONTROL</div>
-          <div class="pass-title">PHIẾU KHÁCH RA VÀO VĂN PHÒNG</div>
+      <div id="printablePassArea" class="printable-pass p-4 card-white"
+        style="border: 2px dashed var(--black-pure); border-radius: 8px;">
+        <div class="text-center mb-3" style="border-bottom: 2px solid #000; padding-bottom: 10px;">
+          <h4 class="fw-800">SEAZEN ACCESS CONTROL</h4>
+          <p class="fw-600 text-sm">PHIẾU KHÁCH RA VÀO VĂN PHÒNG</p>
         </div>
-        <div class="pass-body">
-          <div class="pass-row">
-            <span class="pass-label">Họ và tên:</span>
-            <span class="pass-val bold uppercase" id="passName">--</span>
-          </div>
-          <div class="pass-row">
-            <span class="pass-label">Số CCCD:</span>
-            <span class="pass-val" id="passCccd">--</span>
-          </div>
-          <div class="pass-row">
-            <span class="pass-label">Năm sinh / Giới tính:</span>
-            <span class="pass-val" id="passDobGender">--</span>
-          </div>
-          <div class="pass-row">
-            <span class="pass-label">Đơn vị:</span>
-            <span class="pass-val" id="passCompany">--</span>
-          </div>
-          <div class="pass-row">
-            <span class="pass-label">Gặp ai / Phòng:</span>
-            <span class="pass-val" id="passHost">--</span>
-          </div>
-          <div class="pass-row">
-            <span class="pass-label">Thời gian vào:</span>
-            <span class="pass-val bold" id="passTime">--</span>
-          </div>
-          <div class="pass-row">
-            <span class="pass-label">Dự kiến ra về:</span>
-            <span class="pass-val bold" id="passOutTime">16:45</span>
-          </div>
-        </div>
-        <div class="pass-barcode-area">
-          <div class="pass-qr-code" id="passQrCodeBox">
-            <div class="qr-mock-box">SZ-VISITOR</div>
-          </div>
-          <div class="pass-code-text" id="passBarcodeText">SZ-00000</div>
-        </div>
-        <div class="pass-footer">
-          * Vui lòng giữ phiếu và gửi lại bàn bảo vệ khi ra về. Cảm ơn Quý Khách!
+        <p class="flex-between mb-2"><strong>Họ và tên:</strong> <span id="passName" class="fw-800 text-right">--</span>
+        </p>
+        <p class="flex-between mb-2"><strong>Số CCCD:</strong> <span id="passCccd" class="text-right">--</span></p>
+        <p class="flex-between mb-2"><strong>Năm sinh:</strong> <span id="passDobGender" class="text-right">--</span>
+        </p>
+        <p class="flex-between mb-2"><strong>Đơn vị:</strong> <span id="passCompany" class="text-right">--</span></p>
+        <p class="flex-between mb-2"><strong>Người gặp:</strong> <span id="passHost" class="text-right">--</span></p>
+        <p class="flex-between mb-2"><strong>Giờ vào:</strong> <span id="passTime" class="fw-800 text-right">--</span>
+        </p>
+        <p class="flex-between mb-2"><strong>Dự kiến ra:</strong> <span id="passOutTime"
+            class="fw-800 text-right">16:45</span></p>
+        <div class="text-center mt-3 p-2" style="background:#f1f5f9; border-radius: 6px;">
+          <div id="passQrCodeBox" class="fw-800 bg-black text-white p-2"
+            style="display:inline-block; border-radius: 4px;">SZ-VISITOR</div>
+          <div class="mt-2 fw-800" id="passBarcodeText">SZ-00000</div>
         </div>
       </div>
-
-      <div class="modal-actions">
-        <button type="button" class="btn-print-action" id="btnExecutePrint">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+      <div class="modal-actions mt-4 flex-align" style="justify-content: flex-end; gap: 0.5rem;">
+        <button type="button" class="btn-secondary" id="btnCancelPassModal">Đóng</button>
+        <button type="button" class="btn-primary" id="btnExecutePrint"
+          style="display: inline-flex; align-items: center; gap: 6px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 6 2 18 2 18 9"></polyline>
+            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+            <rect x="6" y="14" width="12" height="8"></rect>
+          </svg>
           In Phiếu Ngay
         </button>
-        <button type="button" class="btn-secondary" id="btnCancelPassModal">Đóng</button>
       </div>
     </div>
   </div>
 
-  <!-- ================= POPUP MODAL: CHI TIẾT NGƯỜI ĐANG CÓ MẶT TRONG VĂN PHÒNG ================= -->
+  <!-- 4. Present Details Modal (2 Bản: Còn Trong Văn Phòng & Đã Về) -->
   <div class="modal-backdrop" id="presentDetailsModalBackdrop" style="display: none;">
-    <div class="modal-box" style="max-width: 950px; width: 95%; max-height: 88vh; display: flex; flex-direction: column; background: #fff; border-radius: 14px; box-shadow: 0 20px 45px rgba(0,0,0,0.25); overflow: hidden;">
-      <div class="modal-header" style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding: 1.1rem 1.4rem; background: #ffffff;">
-        <div style="display: flex; align-items: center; gap: 12px;">
-          <div id="presentModalIcon" style="width: 42px; height: 42px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: #ecfdf5; color: #059669; flex-shrink: 0;">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+    <div class="modal-box large-modal"
+      style="max-width: 1180px; width: 95vw; padding: 0; display: flex; flex-direction: column;">
+      <div class="modal-header p-4 flex-between" style="border-bottom: 1px solid #e2e8f0;">
+        <div class="flex-align gap-3">
+          <div id="presentModalIcon" class="icon-box card-yellow p-2"
+            style="border-radius: 10px; display: flex; align-items: center; justify-content: center;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+              <circle cx="9" cy="7" r="4"></circle>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+            </svg>
           </div>
           <div>
-            <div style="display: flex; align-items: center; gap: 10px;">
-              <h3 id="presentModalTitle" style="margin: 0; font-size: 1.18rem; color: #0f172a; font-weight: 700;">Danh Sách Nhân Viên Đang Có Mặt</h3>
-              <span id="presentModalBadgeCount" style="background: #10b981; color: #fff; font-size: 0.82rem; font-weight: 700; padding: 3px 10px; border-radius: 14px;">0 người</span>
-            </div>
-            <div id="presentModalSubtitle" style="font-size: 0.83rem; color: #64748b; margin-top: 3px;">Trạng thái thời gian thực: Lần quét gần nhất là Làn VÀO (đang ở trong tòa nhà)</div>
+            <h3 id="presentModalTitle" class="mb-0">Chi Tiết Nhân Sự Ra Vào</h3>
+            <span id="presentModalSubtitle" class="text-gray text-sm">Đang tải...</span>
           </div>
         </div>
-        <button type="button" class="modal-close" id="btnClosePresentDetailsModal" style="background: transparent; border: none; font-size: 1.8rem; cursor: pointer; color: #94a3b8; line-height: 1; padding: 4px 8px;" title="Đóng cửa sổ">&times;</button>
+        <div class="flex-align gap-3">
+          <button id="btnClosePresentDetailsModal" class="modal-close" style="position: static;">&times;</button>
+        </div>
       </div>
 
-      <div style="padding: 0.85rem 1.4rem; background: #f8fafc; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
-        <div style="flex: 1; min-width: 260px;">
-          <input type="text" id="inputSearchPresentDetails" class="search-input" placeholder="🔍 Tìm nhanh theo họ tên, mã nhân viên/thẻ, phòng ban..." style="width: 100%; padding: 0.55rem 0.9rem; font-size: 0.9rem; border: 1.5px solid #cbd5e1; border-radius: 8px; background: #fff;">
-        </div>
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <span id="presentFilterInfo" style="font-size: 0.85rem; color: #475569; font-weight: 600;">Tổng số: 0</span>
-          <button type="button" class="btn btn-sm btn-outline" id="btnRefreshPresentDetails" style="font-size: 0.82rem; padding: 0.35rem 0.75rem; display: inline-flex; align-items: center; gap: 5px;">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-            <span>Làm mới</span>
+      <!-- Tab Switcher Bar: 2 bản riêng biệt (Còn trong VP / Đã về) -->
+      <div class="present-modal-tabs-bar p-3 px-4 flex-between"
+        style="background: #f8fafc; border-bottom: 1px solid #e2e8f0; flex-wrap: wrap; gap: 10px;">
+        <div class="flex-align gap-2">
+          <button type="button" class="present-tab-btn active" id="tabBtnPresentInside" data-tab="inside">
+            <span class="status-dot dot-green"></span>
+            <span>Còn trong văn phòng</span>
+            <span class="tab-badge" id="modalTabInsideCount">0</span>
+          </button>
+          <button type="button" class="present-tab-btn" id="tabBtnPresentLeft" data-tab="left">
+            <span class="status-dot dot-gray"></span>
+            <span>Đã về / Ra ngoài</span>
+            <span class="tab-badge" id="modalTabLeftCount">0</span>
           </button>
         </div>
+        <div class="flex-align gap-2">
+          <input type="text" id="inputSearchPresentDetails" class="search-input"
+            placeholder="Tìm nhanh theo họ tên, mã, phòng ban..."
+            style="width: 280px; padding: 0.45rem 0.8rem; font-size: 0.85rem;">
+          <button type="button" id="btnRefreshPresentDetails" class="btn-secondary btn-sm"
+            style="padding: 0.45rem 0.85rem;">Làm mới</button>
+        </div>
+      </div>
+      <div id="presentDetailsHeader" style="display: none;">
+        <div class="px-4 py-2 flex-between" style="background: #ffffff; border-bottom: 1px solid #f1f5f9;">
+          <span id="presentFilterInfo" class="text-sm fw-600 text-gray">Hiển thị: 0 người</span>
+          <span class="text-xs text-gray">* Dữ liệu đối soát 100% từ nhật ký quẹt cửa</span>
+        </div>
       </div>
 
-      <div class="table-wrapper" style="flex: 1; overflow-y: auto; max-height: calc(88vh - 210px); padding: 0;">
-        <table style="width: 100%; border-collapse: collapse;">
-          <thead style="position: sticky; top: 0; background: #f1f5f9; z-index: 2;">
+      <div class="table-wrapper p-0" style="max-height: 55vh; overflow-y: auto; overflow-x: auto; box-shadow: none;">
+        <table style="width: 100%;">
+          <thead style="position: sticky; top: 0; background: #f1f5f9; z-index: 1;">
             <tr>
-              <th style="width: 48px; text-align: center;">STT</th>
-              <th>Họ Và Tên</th>
-              <th style="width: 115px;">Mã Số / Thẻ</th>
-              <th>Phòng Ban / Đơn Vị</th>
-              <th style="width: 120px;">Giờ Vào Gần Nhất</th>
-              <th>Cổng / Làn Quét Vào</th>
-              <th style="width: 130px;">Phương Thức</th>
-              <th style="width: 120px; text-align: center;">Trạng Thái</th>
+              <th style="width: 45px; text-align: center;" class="nowrap">STT</th>
+              <th class="nowrap">Họ Và Tên</th>
+              <th class="nowrap">Mã Số / Thẻ</th>
+              <th class="nowrap">Phòng Ban / Đơn Vị</th>
+              <th class="nowrap" id="thPresentTime">Giờ Vào</th>
+              <th class="nowrap" id="thPresentGate">Làn Quét</th>
+              <th class="nowrap">Phương Thức</th>
+              <th class="nowrap" style="text-align: center;">Trạng Thái</th>
             </tr>
           </thead>
           <tbody id="presentDetailsBody">
-            <tr><td colspan="8" class="empty-state">Đang tải danh sách...</td></tr>
+            <tr>
+              <td colspan="8" class="empty-state">Đang tải danh sách...</td>
+            </tr>
           </tbody>
         </table>
       </div>
-
-      <div class="modal-footer" style="padding: 0.85rem 1.4rem; border-top: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; background: #fff;">
-        <span style="font-size: 0.82rem; color: #64748b;">* Dữ liệu đối soát 100% từ nhật ký quẹt cửa máy chấm công SenseFace 4A</span>
-        <button type="button" class="btn btn-secondary" id="btnCancelPresentDetailsModal" style="padding: 0.45rem 1.2rem; font-size: 0.88rem;">Đóng</button>
+      <div class="p-3 flex-between" style="border-top: 1px solid #e2e8f0; background: #f8fafc;">
+        <span class="text-sm text-gray">* Sắp xếp tự động theo lần quét gần nhất</span>
+        <button type="button" id="btnCancelPresentDetailsModal" class="btn-secondary">Đóng</button>
       </div>
     </div>
   </div>
 
-  <!-- Toast Notification Container -->
-  <div class="toast-container" id="toastContainer"></div>
+  <!-- 5. Visitor Details Modal (Xem đầy đủ chi tiết hồ sơ khách) -->
+  <div class="modal-backdrop" id="visitorDetailsModalBackdrop" style="display: none;">
+    <div class="modal-box" style="max-width: 680px; width: 92vw; padding: 0; display: flex; flex-direction: column;">
+      <div class="modal-header p-4 flex-between" style="border-bottom: 1px solid #e2e8f0;">
+        <div class="flex-align gap-3">
+          <div class="icon-box card-yellow p-2" style="border-radius: 10px; display: flex; align-items: center; justify-content: center;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+          </div>
+          <div>
+            <h3 class="mb-0" id="vDetailName">Họ Và Tên Khách</h3>
+            <span class="text-gray text-sm" id="vDetailSubtitle">Chi tiết hồ sơ lưu trú</span>
+          </div>
+        </div>
+        <div class="flex-align gap-2">
+          <span id="vDetailStatusBadge" class="badge-status-present">Đang trong VP</span>
+          <button id="btnCloseVisitorDetailsModal" class="modal-close" style="position: static;">&times;</button>
+        </div>
+      </div>
 
-  <!-- Scripts -->
+      <div class="p-4" style="max-height: 68vh; overflow-y: auto;">
+        <!-- 1. Thông tin cá nhân -->
+        <div class="vdetail-section mb-4" style="background: #f8fafc; padding: 1rem; border-radius: var(--radius-md); border: 1px solid #e2e8f0;">
+          <h4 class="text-xs uppercase fw-800 text-gray mb-3" style="letter-spacing: 0.5px; border-bottom: 1px dashed #cbd5e1; padding-bottom: 4px;">
+            1. THÔNG TIN CÁ NHÂN
+          </h4>
+          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
+            <div>
+              <span class="text-xs text-gray">Số CCCD / Định danh:</span>
+              <div class="fw-700 font-mono" id="vDetailCccd">--</div>
+            </div>
+            <div>
+              <span class="text-xs text-gray">Số điện thoại:</span>
+              <div class="fw-700" id="vDetailPhone">--</div>
+            </div>
+            <div>
+              <span class="text-xs text-gray">Ngày / Năm sinh:</span>
+              <div class="fw-700" id="vDetailDob">--</div>
+            </div>
+            <div>
+              <span class="text-xs text-gray">Giới tính:</span>
+              <div class="fw-700" id="vDetailGender">--</div>
+            </div>
+            <div style="grid-column: span 2;">
+              <span class="text-xs text-gray">Địa chỉ thường trú:</span>
+              <div class="fw-600 text-sm" id="vDetailAddress">--</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. Thông tin công tác & Tiếp đón -->
+        <div class="vdetail-section mb-4" style="background: #f8fafc; padding: 1rem; border-radius: var(--radius-md); border: 1px solid #e2e8f0;">
+          <h4 class="text-xs uppercase fw-800 text-gray mb-3" style="letter-spacing: 0.5px; border-bottom: 1px dashed #cbd5e1; padding-bottom: 4px;">
+            2. THÔNG TIN CÔNG TÁC & TIẾP ĐÓN
+          </h4>
+          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
+            <div>
+              <span class="text-xs text-gray">Cơ quan / Doanh nghiệp:</span>
+              <div class="fw-700 text-sm" id="vDetailCompany">--</div>
+            </div>
+            <div>
+              <span class="text-xs text-gray">Phòng ban liên hệ:</span>
+              <div class="fw-700 text-sm text-yellow" id="vDetailDepartment">--</div>
+            </div>
+            <div>
+              <span class="text-xs text-gray">Người tiếp đón:</span>
+              <div class="fw-700 text-sm" id="vDetailHost">--</div>
+            </div>
+            <div>
+              <span class="text-xs text-gray">SĐT người tiếp đón:</span>
+              <div class="fw-700 text-sm" id="vDetailHostPhone">--</div>
+            </div>
+            <div>
+              <span class="text-xs text-gray">Mục đích liên hệ:</span>
+              <div class="fw-600 text-sm" id="vDetailPurpose">--</div>
+            </div>
+            <div>
+              <span class="text-xs text-gray">Biển số phương tiện:</span>
+              <div class="fw-700 font-mono" id="vDetailVehicle">--</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Thời gian & Thẻ ra vào -->
+        <div class="vdetail-section" style="background: #f8fafc; padding: 1rem; border-radius: var(--radius-md); border: 1px solid #e2e8f0;">
+          <h4 class="text-xs uppercase fw-800 text-gray mb-3" style="letter-spacing: 0.5px; border-bottom: 1px dashed #cbd5e1; padding-bottom: 4px;">
+            3. THỜI GIAN & THẺ RA VÀO
+          </h4>
+          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
+            <div>
+              <span class="text-xs text-gray">Mã thẻ RFID cấp:</span>
+              <div class="fw-700" id="vDetailCard">--</div>
+            </div>
+            <div>
+              <span class="text-xs text-gray">Thời gian lưu trú:</span>
+              <div class="fw-700 text-success" id="vDetailDuration">--</div>
+            </div>
+            <div>
+              <span class="text-xs text-gray">Thời điểm vào:</span>
+              <div class="fw-600 text-sm" id="vDetailCheckin">--</div>
+            </div>
+            <div>
+              <span class="text-xs text-gray">Dự kiến ra về:</span>
+              <div class="fw-600 text-sm" id="vDetailExpectedCheckout">--</div>
+            </div>
+            <div style="grid-column: span 2;">
+              <span class="text-xs text-gray">Ghi chú bổ sung:</span>
+              <div class="text-sm fst-italic text-gray" id="vDetailNote">--</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="p-3 flex-between" style="border-top: 1px solid #e2e8f0; background: #f8fafc;">
+        <div class="flex-align gap-2">
+          <button type="button" id="btnDetailPrintPass" class="btn-secondary" style="display: inline-flex; align-items: center; gap: 6px;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+            In Phiếu
+          </button>
+          <button type="button" id="btnDetailCheckout" class="btn-primary" style="background: #ef4444; border-color: #dc2626;">
+            Check-Out Khách Này
+          </button>
+        </div>
+        <button type="button" id="btnCancelVisitorDetailsModal" class="btn-secondary">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- Gọi file JS -->
   <script src="js/app.js"></script>
 </body>
+
 </html>

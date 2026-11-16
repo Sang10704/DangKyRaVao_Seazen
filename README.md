@@ -13,12 +13,17 @@ Hệ thống ứng dụng Web độc lập, tinh gọn, hiệu năng cao giúp b
 
 ## 1. TỔNG QUAN HỆ THỐNG
 
-- **Mô hình**: Hybrid Client - ePAD Backend (`http://172.16.56.2:4001/api`).
-- **Cổng Web ứng dụng**: `http://localhost:6868` (Chạy mượt mà, không xung đột cổng).
-- **Phần cứng tích hợp**:
-  - 4 máy chấm công nhận diện khuôn mặt **ZKTeco SenseFace 4A** (2 Làn Vào, 2 Làn Ra).
-  - Máy quét mã vạch 2D cầm tay cổng USB (dùng quét mã QR trên thẻ CCCD).
-  - Đầu đọc thẻ từ RFID cổng USB (tùy chọn cấp thẻ cho khách).
+- **Mô hình kết nối**: **ZKTeco Direct Hardware Controller (TCP Port 4370)**.
+- **Hoàn toàn độc lập**: Đã loại bỏ 100% sự phụ thuộc vào ePAD middleware, tài khoản hay máy chủ ePAD.
+- **Cổng Web ứng dụng**: `http://localhost:6868` (Hỗ trợ đa máy tính LAN qua Waitress đa luồng).
+- **Phần cứng tích hợp trực tiếp**:
+  - **4 máy ZKTeco SenseFace 4A** điều khiển trực tiếp qua mạng nội bộ:
+    - *Làn VÀO phải*: IP `172.16.56.139` (Port 4370)
+    - *Làn VÀO trái*: IP `172.16.56.138` (Port 4370)
+    - *Làn RA trái*: IP `172.16.56.137` (Port 4370)
+    - *Làn RA phải*: IP `172.16.56.136` (Port 4370)
+  - Máy quét mã vạch 2D cầm tay cổng USB (quét mã QR CCCD gắn chip).
+  - Đầu đọc thẻ từ RFID cấp phát thẻ khách trực tiếp vào bộ nhớ flash máy chấm công (< 50ms).
 
 ---
 

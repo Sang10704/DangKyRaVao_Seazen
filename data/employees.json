@@ -5535,5 +5535,40 @@
     "fullname": "aaaaa",
     "department": "",
     "department_index": 0
+  },
+  {
+    "atid": "80000681",
+    "code": "",
+    "fullname": "Võ Thị Hương",
+    "department": "",
+    "department_index": 0
+  },
+  {
+    "atid": "80000683",
+    "code": "",
+    "fullname": "trần thị bích",
+    "department": "",
+    "department_index": 0
+  },
+  {
+    "atid": "80000684",
+    "code": "",
+    "fullname": "Phan Minh Hồng Tấn",
+    "department": "",
+    "department_index": 0
+  },
+  {
+    "atid": "80000685",
+    "code": "",
+    "fullname": "Hồ Vũ Khanh",
+    "department": "",
+    "department_index": 0
+  },
+  {
+    "atid": "80000686",
+    "code": "",
+    "fullname": "Lê Hoàng Chỉnh",
+    "department": "",
+    "department_index": 0
   }
 ]
