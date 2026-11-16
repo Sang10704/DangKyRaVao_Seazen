@@ -180,5 +180,15 @@
     "action": "UNLOCK",
     "operator": "Quản Trị Viên Hệ Thống",
     "success": true
+  },
+  {
+    "id": "587c97f1",
+    "timestamp": "2026-11-16 09:57:37",
+    "door_id": 1,
+    "door_name": "Làn VÀO phải",
+    "duration_sec": 1,
+    "action": "UNLOCK",
+    "operator": "Quản Trị Viên Hệ Thống",
+    "success": true
   }
 ]
