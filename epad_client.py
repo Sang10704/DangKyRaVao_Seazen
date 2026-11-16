@@ -53,10 +53,13 @@ class EpadClient:
                 return True
 
             login_url = f"{self.api_base}/login"
+            # Use ServiceId=1 (Stateless Service Token) so background sync NEVER kicks out
+            # any human user logged into the ePAD web browser
             payload = {
                 "grant_type": "password",
                 "UserName": self.username,
-                "Password": self.password
+                "Password": self.password,
+                "ServiceId": 1
             }
 
             # Crucial: Must remove any old/expired Authorization header before logging in
