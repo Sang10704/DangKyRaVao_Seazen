@@ -344,13 +344,13 @@ def insert_attendance_logs_bulk(scans: List[Dict[str, Any]]) -> int:
                     )
                     BEGIN
                         INSERT INTO tbl_AttendanceLogs (
-                            EmployeeATID, FullName, Department, DeviceSerialNumber, DeviceName, Direction,
+                            EmployeeATID, FullName, Department, DeviceSerialNumber, DeviceName,
                             CheckTime, VerifyMode, VerifyModeValue, InOutMode, IsStaff, SyncSource
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     END
                 """, (
                     atid, dt_obj, device_sn,
-                    atid, full_name, dept, device_sn, device_name, direction,
+                    atid, full_name, dept, device_sn, device_name,
                     dt_obj, verify_mode, verify_val, in_out, is_staff, sync_source
                 ))
                 if cursor.rowcount > 0:
@@ -376,19 +376,16 @@ def insert_door_action(action: Dict[str, Any]) -> bool:
 
             cursor.execute("""
                 INSERT INTO tbl_DoorAuditLogs (
-                    DoorID, DoorCode, DoorName, ActionType,
-                    TriggerSource, RequestedBy, Reason, ExecutionStatus, Message, CreatedAt
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    DoorID, DoorName, Action, DurationSec, Operator, Success, ErrorMessage, CreatedAt
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, (
-                action.get("door_id"),
-                action.get("door_code") or "",
+                int(action.get("door_id") or 1),
                 action.get("door_name") or "",
-                action.get("action") or "MANUAL_OPEN",
-                action.get("source") or "WEB_PORTAL",
-                action.get("user") or action.get("requested_by") or "Lễ tân",
-                action.get("reason") or "",
-                action.get("status") or "SUCCESS",
-                action.get("message") or "",
+                action.get("action") or "UNLOCK",
+                int(action.get("duration_sec") or 1),
+                action.get("operator") or action.get("user") or "Lễ tân",
+                1 if action.get("success", True) else 0,
+                action.get("error_message") or action.get("message") or "",
                 dt_obj
             ))
             conn.commit()
@@ -570,3 +567,466 @@ def get_visitor_history_db(limit: int = 200) -> List[Dict[str, Any]]:
         logger.error("MSSQL get_visitor_history_db error: %s", e)
         return []
 
+
+
+# ==============================================================================
+# ENTERPRISE 18-TABLE CRUD & ANALYTICS LAYER (SeaZen_AccessControl)
+# ==============================================================================
+
+ALLOWED_TABLES = {
+    "tbl_Departments": "Phòng Ban",
+    "tbl_Employees": "Danh Bạ Nhân Sự",
+    "tbl_EmployeeBiometrics": "Sinh Trắc Học",
+    "tbl_Doors": "Danh Mục Cửa",
+    "tbl_Devices": "Thiết Bị Quét Mặt",
+    "tbl_AccessTimezones": "Khung Giờ Mở Cửa",
+    "tbl_AccessGroups": "Nhóm Phân Quyền Cửa",
+    "tbl_DepartmentAccessGroups": "Phân Quyền Phòng Ban",
+    "tbl_CustomerCards": "Kho Thẻ Khách",
+    "tbl_Visitors": "Khách Ra Vào",
+    "tbl_PreRegisteredGuests": "Đăng Ký Hẹn Khách",
+    "tbl_Contractors": "Nhà Thầu Thi Công",
+    "tbl_AttendanceLogs": "Nhật Ký Quẹt Thẻ",
+    "tbl_Shifts": "Ca Làm Việc",
+    "tbl_DailyTimekeeping": "Tổng Hợp Chấm Công",
+    "tbl_DeviceCommands": "Lệnh Thiết Bị",
+    "tbl_DoorAuditLogs": "Nhật Ký Đóng Mở Cửa",
+    "tbl_ClockSyncAuditLogs": "Nhật Ký Đối Soát Giờ NTP"
+}
+
+
+def _serialize_row(cols: List[str], row: Any) -> Dict[str, Any]:
+    out = {}
+    for c, v in zip(cols, row):
+        if isinstance(v, datetime):
+            out[c] = v.strftime("%Y-%m-%d %H:%M:%S")
+        elif hasattr(v, "isoformat"):
+            out[c] = v.isoformat()
+        else:
+            out[c] = v
+    return out
+
+
+def get_all_tables_overview() -> List[Dict[str, Any]]:
+    if not is_mssql_active():
+        return []
+    try:
+        conn_str = get_connection_string()
+        with pyodbc.connect(conn_str, timeout=5) as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT t.name, SUM(p.rows) AS row_count
+                FROM sys.tables t
+                INNER JOIN sys.partitions p ON t.object_id = p.object_id
+                WHERE p.index_id IN (0,1)
+                GROUP BY t.name
+                ORDER BY t.name
+            """)
+            counts = {r[0]: int(r[1]) for r in cur.fetchall()}
+            result = []
+            for tbl, vn_name in ALLOWED_TABLES.items():
+                result.append({
+                    "table_name": tbl,
+                    "vn_name": vn_name,
+                    "sharepoint_list_name": f"VMS SEAZEN - {vn_name.upper()}",
+                    "row_count": counts.get(tbl, 0),
+                    "exists": tbl in counts
+                })
+            return result
+    except Exception as e:
+        logger.error("get_all_tables_overview error: %s", e)
+        return []
+
+
+def get_table_rows(table_name: str, limit: int = 200) -> List[Dict[str, Any]]:
+    if not is_mssql_active() or table_name not in ALLOWED_TABLES:
+        return []
+    try:
+        conn_str = get_connection_string()
+        with pyodbc.connect(conn_str, timeout=6) as conn:
+            cur = conn.cursor()
+            cur.execute(f"SELECT TOP ({int(limit)}) * FROM [{table_name}] ORDER BY 1 DESC")
+            cols = [c[0] for c in cur.description]
+            return [_serialize_row(cols, r) for r in cur.fetchall()]
+    except Exception as e:
+        logger.error("get_table_rows(%s) error: %s", table_name, e)
+        return []
+
+
+def upsert_department_db(data: Dict[str, Any]) -> Dict[str, Any]:
+    dept_name = str(data.get("DepartmentName") or data.get("name") or "").strip()
+    dept_code = str(data.get("DepartmentCode") or data.get("code") or "").strip()
+    parent_id = data.get("ParentID") or None
+    level = int(data.get("Level") or 1)
+    location = str(data.get("Location") or "").strip()
+    desc = str(data.get("Description") or "").strip()
+    dept_id = data.get("DepartmentID")
+
+    if not dept_name:
+        return {"success": False, "error": "Tên phòng ban không được để trống"}
+
+    try:
+        with pyodbc.connect(get_connection_string(), timeout=5) as conn:
+            cur = conn.cursor()
+            if dept_id:
+                cur.execute("""
+                    UPDATE tbl_Departments
+                    SET DepartmentCode = ?, DepartmentName = ?, ParentID = ?, Level = ?, Location = ?, Description = ?, UpdatedAt = GETDATE()
+                    WHERE DepartmentID = ?
+                """, (dept_code, dept_name, parent_id, level, location, desc, int(dept_id)))
+            else:
+                cur.execute("SELECT DepartmentID FROM tbl_Departments WHERE DepartmentName = ?", (dept_name,))
+                existing = cur.fetchone()
+                if existing:
+                    cur.execute("""
+                        UPDATE tbl_Departments
+                        SET DepartmentCode = COALESCE(NULLIF(?, ''), DepartmentCode), Location = ?, Description = ?, UpdatedAt = GETDATE()
+                        WHERE DepartmentID = ?
+                    """, (dept_code, location, desc, existing[0]))
+                else:
+                    cur.execute("""
+                        INSERT INTO tbl_Departments (DepartmentCode, DepartmentName, ParentID, Level, Location, Description, IsActive)
+                        VALUES (?, ?, ?, ?, ?, ?, 1)
+                    """, (dept_code, dept_name, parent_id, level, location, desc))
+            conn.commit()
+            return {"success": True, "message": f"Đã lưu phòng ban '{dept_name}' thành công."}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def upsert_employee_and_biometrics_db(data: Dict[str, Any]) -> Dict[str, Any]:
+    atid = str(data.get("EmployeeATID") or data.get("atid") or "").strip()
+    full_name = str(data.get("FullName") or data.get("fullname") or "").strip()
+    if not atid or not full_name:
+        return {"success": False, "error": "Vui lòng nhập Mã chấm công ATID và Họ tên nhân sự."}
+
+    emp_code = str(data.get("EmployeeCode") or data.get("code") or atid).strip()
+    dept_name = str(data.get("DepartmentName") or data.get("department") or "HC QTNS").strip()
+    position = str(data.get("Position") or data.get("position") or "").strip()
+    card_num = str(data.get("CardNumber") or data.get("card_number") or "").strip() or None
+    privilege = int(data.get("Privilege") or 0)
+    email = str(data.get("Email") or data.get("email") or "").strip()
+    phone = str(data.get("Phone") or data.get("phone") or "").strip()
+    face_b64 = data.get("FacePhotoBase64") or data.get("face_photo_base64") or None
+    face_biodata = data.get("FaceTemplateBIODATA") or None
+    has_face = 1 if (data.get("HasFace") or face_b64 or face_biodata) else 0
+    has_finger = 1 if data.get("HasFinger") else 0
+    has_card = 1 if card_num else 0
+
+    try:
+        with pyodbc.connect(get_connection_string(), timeout=5) as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT DepartmentID FROM tbl_Departments WHERE DepartmentName = ?", (dept_name,))
+            d_row = cur.fetchone()
+            dept_id = d_row[0] if d_row else None
+
+            cur.execute("SELECT EmployeeID FROM tbl_Employees WHERE EmployeeATID = ?", (atid,))
+            if cur.fetchone():
+                cur.execute("""
+                    UPDATE tbl_Employees
+                    SET EmployeeCode = ?, FullName = ?, DepartmentID = ?, DepartmentName = ?,
+                        Position = ?, CardNumber = ?, Privilege = ?, Email = ?, Phone = ?, IsStaff = 1, IsActive = 1, UpdatedAt = GETDATE()
+                    WHERE EmployeeATID = ?
+                """, (emp_code, full_name, dept_id, dept_name, position, card_num, privilege, email, phone, atid))
+            else:
+                cur.execute("""
+                    INSERT INTO tbl_Employees (
+                        EmployeeID, EmployeeATID, EmployeeCode, FullName, DepartmentID, DepartmentName,
+                        Position, CardNumber, Privilege, Email, Phone, IsStaff, IsActive
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1)
+                """, (f"SZ-{atid}", atid, emp_code, full_name, dept_id, dept_name, position, card_num, privilege, email, phone))
+
+            cur.execute("SELECT BiometricID FROM tbl_EmployeeBiometrics WHERE EmployeeATID = ?", (atid,))
+            if cur.fetchone():
+                cur.execute("""
+                    UPDATE tbl_EmployeeBiometrics
+                    SET FacePhotoBase64 = COALESCE(?, FacePhotoBase64),
+                        FaceTemplateBIODATA = COALESCE(?, FaceTemplateBIODATA),
+                        HasFace = CASE WHEN ? = 1 THEN 1 ELSE HasFace END,
+                        HasCard = ?,
+                        HasFinger = CASE WHEN ? = 1 THEN 1 ELSE HasFinger END,
+                        UpdatedAt = GETDATE()
+                    WHERE EmployeeATID = ?
+                """, (face_b64, face_biodata, has_face, has_card, has_finger, atid))
+            else:
+                cur.execute("""
+                    INSERT INTO tbl_EmployeeBiometrics (
+                        EmployeeATID, FacePhotoBase64, FaceTemplateBIODATA, HasFace, HasCard, HasFinger
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                """, (atid, face_b64, face_biodata, has_face, has_card, has_finger))
+
+            conn.commit()
+            return {"success": True, "message": f"Đã cập nhật hồ sơ nhân sự & sinh trắc học cho {full_name} (ATID: {atid})."}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def upsert_customer_card_db(data: Dict[str, Any]) -> Dict[str, Any]:
+    card_num = str(data.get("CardNumber") or "").strip()
+    card_code = str(data.get("CardCode") or f"CARD-{card_num}").strip()
+    card_type = str(data.get("CardType") or "VISITOR").strip()
+    status = str(data.get("Status") or "AVAILABLE").strip()
+    notes = str(data.get("Notes") or "").strip()
+
+    if not card_num:
+        return {"success": False, "error": "Số thẻ từ RFID không được để trống."}
+
+    try:
+        with pyodbc.connect(get_connection_string(), timeout=5) as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT CardID FROM tbl_CustomerCards WHERE CardNumber = ?", (card_num,))
+            if cur.fetchone():
+                cur.execute("""
+                    UPDATE tbl_CustomerCards
+                    SET CardCode = ?, CardType = ?, Status = ?, Notes = ?, UpdatedAt = GETDATE()
+                    WHERE CardNumber = ?
+                """, (card_code, card_type, status, notes, card_num))
+            else:
+                cur.execute("""
+                    INSERT INTO tbl_CustomerCards (CardCode, CardNumber, CardType, Status, IsSyncedToDevices, Notes)
+                    VALUES (?, ?, ?, ?, 1, ?)
+                """, (card_code, card_num, card_type, status, notes))
+            conn.commit()
+            return {"success": True, "message": f"Đã lưu thẻ {card_num} vào kho thẻ."}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def upsert_pre_registered_guest_db(data: Dict[str, Any]) -> Dict[str, Any]:
+    guest_name = str(data.get("GuestFullName") or "").strip()
+    host_name = str(data.get("HostEmployeeName") or "").strip()
+    if not guest_name or not host_name:
+        return {"success": False, "error": "Vui lòng nhập Họ tên khách hẹn và Người bảo lãnh."}
+
+    booking_code = str(data.get("BookingCode") or f"BK-{datetime.now().strftime('%Y%m%d%H%M%S')}").strip()
+    cccd = str(data.get("GuestCCCD") or "").strip()
+    phone = str(data.get("GuestPhone") or "").strip()
+    company = str(data.get("GuestCompany") or "").strip()
+    dept = str(data.get("HostDepartment") or "").strip()
+    visit_date = str(data.get("VisitDate") or datetime.now().strftime("%Y-%m-%d")).strip()
+    start_time = str(data.get("StartTime") or "08:30").strip()
+    end_time = str(data.get("EndTime") or "17:30").strip()
+    purpose = str(data.get("Purpose") or "").strip()
+    card = str(data.get("ReservedCardNumber") or "").strip()
+    status = str(data.get("Status") or "PENDING").strip()
+
+    try:
+        with pyodbc.connect(get_connection_string(), timeout=5) as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT BookingID FROM tbl_PreRegisteredGuests WHERE BookingCode = ?", (booking_code,))
+            if cur.fetchone():
+                cur.execute("""
+                    UPDATE tbl_PreRegisteredGuests
+                    SET GuestFullName = ?, GuestCCCD = ?, GuestPhone = ?, GuestCompany = ?,
+                        HostEmployeeName = ?, HostDepartment = ?, VisitDate = ?, StartTime = ?, EndTime = ?,
+                        Purpose = ?, ReservedCardNumber = ?, Status = ?, UpdatedAt = GETDATE()
+                    WHERE BookingCode = ?
+                """, (guest_name, cccd, phone, company, host_name, dept, visit_date, start_time, end_time, purpose, card, status, booking_code))
+            else:
+                cur.execute("""
+                    INSERT INTO tbl_PreRegisteredGuests (
+                        BookingCode, GuestFullName, GuestCCCD, GuestPhone, GuestCompany,
+                        HostEmployeeName, HostDepartment, VisitDate, StartTime, EndTime,
+                        Purpose, ReservedCardNumber, Status, CreatedBy
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, N'Lễ tân / Quản trị')
+                """, (booking_code, guest_name, cccd, phone, company, host_name, dept, visit_date, start_time, end_time, purpose, card, status))
+            conn.commit()
+            return {"success": True, "message": f"Đã lưu lịch hẹn trước cho khách {guest_name} ({booking_code})."}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def upsert_contractor_db(data: Dict[str, Any]) -> Dict[str, Any]:
+    company = str(data.get("ContractorCompany") or "").strip()
+    worker = str(data.get("WorkerFullName") or "").strip()
+    if not company or not worker:
+        return {"success": False, "error": "Vui lòng nhập Tên đơn vị nhà thầu và Họ tên nhân sự thi công."}
+
+    code = str(data.get("ContractorCode") or f"CON-{datetime.now().strftime('%m%d%H%M%S')}").strip()
+    cccd = str(data.get("CCCDNumber") or "").strip()
+    phone = str(data.get("Phone") or "").strip()
+    card = str(data.get("CardNumber") or "").strip()
+    area = str(data.get("WorkArea") or "Sảnh & Khu Kỹ Thuật").strip()
+    sup = str(data.get("SupervisorName") or "HC QTNS").strip()
+    v_from = str(data.get("ValidFrom") or datetime.now().strftime("%Y-%m-%d")).strip()
+    v_to = str(data.get("ValidTo") or datetime.now().strftime("%Y-%m-%d")).strip()
+    status = str(data.get("Status") or "ACTIVE").strip()
+
+    try:
+        with pyodbc.connect(get_connection_string(), timeout=5) as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT ContractorID FROM tbl_Contractors WHERE ContractorCode = ?", (code,))
+            if cur.fetchone():
+                cur.execute("""
+                    UPDATE tbl_Contractors
+                    SET ContractorCompany = ?, WorkerFullName = ?, CCCDNumber = ?, Phone = ?,
+                        CardNumber = ?, WorkArea = ?, SupervisorName = ?, ValidFrom = ?, ValidTo = ?, Status = ?, UpdatedAt = GETDATE()
+                    WHERE ContractorCode = ?
+                """, (company, worker, cccd, phone, card, area, sup, v_from, v_to, status, code))
+            else:
+                cur.execute("""
+                    INSERT INTO tbl_Contractors (
+                        ContractorCode, ContractorCompany, WorkerFullName, CCCDNumber, Phone,
+                        CardNumber, WorkArea, SupervisorName, ValidFrom, ValidTo, Status
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (code, company, worker, cccd, phone, card, area, sup, v_from, v_to, status))
+            conn.commit()
+            return {"success": True, "message": f"Đã lưu hồ sơ nhà thầu {worker} ({company})."}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def upsert_access_timezone_db(data: Dict[str, Any]) -> Dict[str, Any]:
+    code = str(data.get("TimezoneCode") or "").strip()
+    name = str(data.get("TimezoneName") or "").strip()
+    if not code or not name:
+        return {"success": False, "error": "Vui lòng nhập Mã khung giờ và Tên khung giờ."}
+
+    mon = str(data.get("MonTime") or "00:00-23:59").strip()
+    tue = str(data.get("TueTime") or mon).strip()
+    wed = str(data.get("WedTime") or mon).strip()
+    thu = str(data.get("ThuTime") or mon).strip()
+    fri = str(data.get("FriTime") or mon).strip()
+    sat = str(data.get("SatTime") or "06:00-18:00").strip()
+    sun = str(data.get("SunTime") or "00:00-00:00").strip()
+    hol = str(data.get("HolidayTime") or "00:00-00:00").strip()
+    desc = str(data.get("Description") or "").strip()
+
+    try:
+        with pyodbc.connect(get_connection_string(), timeout=5) as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT TimezoneID FROM tbl_AccessTimezones WHERE TimezoneCode = ?", (code,))
+            if cur.fetchone():
+                cur.execute("""
+                    UPDATE tbl_AccessTimezones
+                    SET TimezoneName = ?, MonTime = ?, TueTime = ?, WedTime = ?, ThuTime = ?, FriTime = ?,
+                        SatTime = ?, SunTime = ?, HolidayTime = ?, Description = ?, UpdatedAt = GETDATE()
+                    WHERE TimezoneCode = ?
+                """, (name, mon, tue, wed, thu, fri, sat, sun, hol, desc, code))
+            else:
+                cur.execute("""
+                    INSERT INTO tbl_AccessTimezones (
+                        TimezoneCode, TimezoneName, MonTime, TueTime, WedTime, ThuTime, FriTime,
+                        SatTime, SunTime, HolidayTime, Description
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (code, name, mon, tue, wed, thu, fri, sat, sun, hol, desc))
+            conn.commit()
+            return {"success": True, "message": f"Đã lưu khung giờ '{name}' ({code})."}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def upsert_access_group_db(data: Dict[str, Any]) -> Dict[str, Any]:
+    code = str(data.get("GroupCode") or "").strip()
+    name = str(data.get("GroupName") or "").strip()
+    if not code or not name:
+        return {"success": False, "error": "Vui lòng nhập Mã nhóm quyền và Tên nhóm quyền."}
+
+    tz_id = int(data.get("TimezoneID") or 1)
+    doors = str(data.get("AllowedDoors") or "1,2").strip()
+    v_mode = str(data.get("VerifyMode") or "Face / Card / Finger").strip()
+    desc = str(data.get("Description") or "").strip()
+
+    try:
+        with pyodbc.connect(get_connection_string(), timeout=5) as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT GroupID FROM tbl_AccessGroups WHERE GroupCode = ?", (code,))
+            if cur.fetchone():
+                cur.execute("""
+                    UPDATE tbl_AccessGroups
+                    SET GroupName = ?, TimezoneID = ?, AllowedDoors = ?, VerifyMode = ?, Description = ?, UpdatedAt = GETDATE()
+                    WHERE GroupCode = ?
+                """, (name, tz_id, doors, v_mode, desc, code))
+            else:
+                cur.execute("""
+                    INSERT INTO tbl_AccessGroups (GroupCode, GroupName, TimezoneID, AllowedDoors, VerifyMode, Description)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (code, name, tz_id, doors, v_mode, desc))
+            conn.commit()
+            return {"success": True, "message": f"Đã lưu nhóm phân quyền cửa '{name}'."}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def upsert_shift_db(data: Dict[str, Any]) -> Dict[str, Any]:
+    code = str(data.get("ShiftCode") or "").strip()
+    name = str(data.get("ShiftName") or "").strip()
+    if not code or not name:
+        return {"success": False, "error": "Vui lòng nhập Mã ca và Tên ca làm việc."}
+
+    cin = str(data.get("CheckInTime") or "08:00").strip()
+    cout = str(data.get("CheckOutTime") or "17:30").strip()
+    b_start = str(data.get("BreakStartTime") or "12:00").strip()
+    b_end = str(data.get("BreakEndTime") or "13:30").strip()
+    late = int(data.get("GraceLateMinutes") or 5)
+    early = int(data.get("GraceEarlyMinutes") or 5)
+    hours = float(data.get("WorkingHours") or 8.0)
+
+    try:
+        with pyodbc.connect(get_connection_string(), timeout=5) as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT ShiftID FROM tbl_Shifts WHERE ShiftCode = ?", (code,))
+            if cur.fetchone():
+                cur.execute("""
+                    UPDATE tbl_Shifts
+                    SET ShiftName = ?, CheckInTime = ?, CheckOutTime = ?, BreakStartTime = ?, BreakEndTime = ?,
+                        GraceLateMinutes = ?, GraceEarlyMinutes = ?, WorkingHours = ?, UpdatedAt = GETDATE()
+                    WHERE ShiftCode = ?
+                """, (name, cin, cout, b_start, b_end, late, early, hours, code))
+            else:
+                cur.execute("""
+                    INSERT INTO tbl_Shifts (
+                        ShiftCode, ShiftName, CheckInTime, CheckOutTime, BreakStartTime, BreakEndTime,
+                        GraceLateMinutes, GraceEarlyMinutes, WorkingHours
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (code, name, cin, cout, b_start, b_end, late, early, hours))
+            conn.commit()
+            return {"success": True, "message": f"Đã lưu cấu hình ca làm việc '{name}' ({code})."}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def log_device_command_db(cmd_code: str, target_serial: str, target_name: str, payload: Any, status: str, result_msg: str, operator: str) -> None:
+    if not is_mssql_active():
+        return
+    try:
+        with pyodbc.connect(get_connection_string(), timeout=4) as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO tbl_DeviceCommands (
+                    CommandCode, TargetSerial, TargetDeviceName, PayloadJson, Protocol, Status, ResultMessage, RequestedBy
+                ) VALUES (?, ?, ?, ?, 'DIRECT_TCP_4370', ?, ?, ?)
+            """, (
+                cmd_code, target_serial, target_name,
+                json.dumps(payload, ensure_ascii=False) if not isinstance(payload, str) else payload,
+                status, result_msg, operator
+            ))
+            conn.commit()
+    except Exception as e:
+        logger.debug("log_device_command_db warning: %s", e)
+
+
+def log_clock_sync_audit_db(audit_type: str, audit_data: Dict[str, Any], confirm_code: str, operator: str, status: str) -> None:
+    if not is_mssql_active():
+        return
+    try:
+        vn_str = audit_data.get("vietnam_ntp_time") or audit_data.get("local_pc_time") or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        pc_str = audit_data.get("local_pc_time") or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        vn_dt = datetime.strptime(vn_str, "%Y-%m-%d %H:%M:%S")
+        pc_dt = datetime.strptime(pc_str, "%Y-%m-%d %H:%M:%S")
+        drift = float(audit_data.get("pc_drift_sec") or 0.0)
+        with pyodbc.connect(get_connection_string(), timeout=4) as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO tbl_ClockSyncAuditLogs (
+                    AuditType, VietnamNtpTime, NtpServerUsed, LocalPcTime, LocalPcDriftSeconds,
+                    DevicesSummaryJson, ConfirmationCode, Operator, Status
+                ) VALUES (?, ?, 'time.google.com / vn.pool.ntp.org', ?, ?, ?, ?, ?, ?)
+            """, (
+                audit_type, vn_dt, pc_dt, drift,
+                json.dumps(audit_data.get("devices", {}), ensure_ascii=False),
+                confirm_code, operator, status
+            ))
+            conn.commit()
+    except Exception as e:
+        logger.debug("log_clock_sync_audit_db warning: %s", e)

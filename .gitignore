@@ -1,0 +1,23 @@
+# Python bytecode & virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
+# Node.js dependencies (Frontend build artifacts in ui/frontend/dist are tracked for instant execution)
+ui/frontend/node_modules/
+node_modules/
+
+# Runtime browser profile & sensitive token caches
+data/.webview_profile/
+data/.cache/
+token_cache.bin
+sp_cookies.json
+
+# Temporary exported Excel reports & scratch files
+data/*.xlsx
+scratch/
+*.log
+*.tmp

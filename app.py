@@ -39,7 +39,8 @@ logger = logging.getLogger("server")
 logging.getLogger("werkzeug").setLevel(logging.ERROR)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-STATIC_DIR = os.path.join(BASE_DIR, "static")
+REACT_DIST_DIR = os.path.join(BASE_DIR, "ui", "frontend", "dist")
+STATIC_DIR = REACT_DIST_DIR
 CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
 
 # Load configuration
@@ -220,16 +221,19 @@ def _background_scan_collector():
 threading.Thread(target=_background_scan_collector, daemon=True, name="ZkHardwareHarvester").start()
 
 
-# ---------------- Frontend Route ----------------
+# ---------------- Frontend Route (React 18 + Vite SPA) ----------------
+
 
 @app.route("/")
 def index():
-    return send_from_directory(STATIC_DIR, "index.html")
+    return send_from_directory(REACT_DIST_DIR, "index.html")
 
 
 @app.route("/<path:path>")
 def static_files(path):
-    return send_from_directory(STATIC_DIR, path)
+    if os.path.isfile(os.path.join(REACT_DIST_DIR, path)):
+        return send_from_directory(REACT_DIST_DIR, path)
+    return send_from_directory(REACT_DIST_DIR, "index.html")
 
 
 # ---------------- System Status API ----------------
@@ -1103,6 +1107,226 @@ def export_visitors():
     )
 
 
+# ---------------- Enterprise 18-Table SQL, Clock Guard, Input CRUD & SharePoint VMS APIs ----------------
+
+@app.route("/api/clock/audit", methods=["GET"])
+def api_clock_audit():
+    """
+    3-Way Clock Audit: Vietnam Standard Time (NTP UTC+7) vs Local PC Clock vs 4 ZKTeco Terminals.
+    Never modifies any clock.
+    """
+    audit = zk_client.audit_all_clocks()
+    return jsonify({"success": True, "audit": audit})
+
+
+@app.route("/api/clock/sync_ntp", methods=["POST"])
+@require_role(["admin"])
+def api_clock_sync_ntp():
+    """
+    2-Layer Confirmed Clock Sync to Vietnam Standard Time (NTP UTC+7).
+    Requires payload: {"confirm_layer1": true, "confirm_code": "CONFIRM_VN_NTP_SYNC"}
+    """
+    import db_mssql
+    data = request.get_json(silent=True) or {}
+    layer1 = bool(data.get("confirm_layer1"))
+    code = str(data.get("confirm_code") or "").strip()
+    u = get_current_user()
+    operator = u["full_name"] if u else "Quản trị viên"
+
+    if not layer1 or code != "CONFIRM_VN_NTP_SYNC":
+        return jsonify({
+            "success": False,
+            "error": "Bắt buộc hoàn tất Xác nhận 2 lớp (nhập mã CONFIRM_VN_NTP_SYNC) trước khi đồng bộ giờ chuẩn Việt Nam xuống 4 máy ZKTeco."
+        }), 400
+
+    res = zk_client.sync_all_device_clocks(confirm_layer2_code="CONFIRM_VN_NTP_SYNC")
+    audit = zk_client.audit_all_clocks()
+    db_mssql.log_clock_sync_audit_db(
+        audit_type="CONFIRMED_2LAYER_SYNC",
+        audit_data=audit,
+        confirm_code=code,
+        operator=operator,
+        status="SYNCED_TO_VN_NTP"
+    )
+    db_mssql.log_device_command_db(
+        cmd_code="SYNC_CLOCK_VN_NTP_2LAYER",
+        target_serial="ALL",
+        target_name="Toàn bộ 4 máy ZKTeco SenseFace 4A",
+        payload=res,
+        status="COMPLETED",
+        result_msg="Đã đồng bộ giờ chuẩn NTP Việt Nam (UTC+7) qua xác nhận 2 lớp.",
+        operator=operator
+    )
+    return jsonify({"success": True, "sync_result": res, "audit": audit})
+
+
+@app.route("/api/sql/overview", methods=["GET"])
+def api_sql_overview():
+    """Returns overview and row counts for all 18 SQL Server tables in SeaZen_AccessControl."""
+    import db_mssql
+    conn_status = db_mssql.test_connection()
+    tables = db_mssql.get_all_tables_overview()
+    return jsonify({
+        "success": True,
+        "connection": conn_status,
+        "tables": tables,
+        "total_tables": len(tables),
+        "total_rows": sum(t.get("row_count", 0) for t in tables)
+    })
+
+
+@app.route("/api/sql/table/<table_name>", methods=["GET"])
+def api_sql_table_rows(table_name: str):
+    """Returns rows for any of the 18 SQL Server tables."""
+    import db_mssql
+    limit = min(1000, max(10, int(request.args.get("limit", 200))))
+    rows = db_mssql.get_table_rows(table_name, limit=limit)
+    vn_label = db_mssql.ALLOWED_TABLES.get(table_name, table_name)
+    return jsonify({
+        "success": True,
+        "table_name": table_name,
+        "vn_name": vn_label,
+        "sharepoint_list_name": f"VMS SEAZEN - {vn_label.upper()}",
+        "count": len(rows),
+        "rows": rows
+    })
+
+
+@app.route("/api/sync/safe_test", methods=["POST"])
+@require_role(["admin", "staff"])
+def api_sync_safe_test():
+    """
+    Runs non-destructive background sync test:
+    1. Stateless ServiceId=1 read from ePAD (0% impact on reception or ePAD DB)
+    2. Read-only TCP 4370 check & user/card read from 4 ZKTeco SenseFace 4A terminals
+    3. Updates SeaZen_AccessControl SQL tables safely
+    """
+    import sync_safe_database
+    try:
+        res = sync_safe_database.run_all_safe_sync()
+        return jsonify(res)
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/hrm/department", methods=["POST"])
+@require_role(["admin", "staff"])
+def api_upsert_department():
+    import db_mssql
+    data = request.get_json(silent=True) or {}
+    res = db_mssql.upsert_department_db(data)
+    return jsonify(res), (200 if res.get("success") else 400)
+
+
+@app.route("/api/hrm/employee", methods=["POST"])
+@require_role(["admin", "staff"])
+def api_upsert_employee():
+    import db_mssql
+    data = request.get_json(silent=True) or {}
+    res = db_mssql.upsert_employee_and_biometrics_db(data)
+    if res.get("success") and data.get("sync_to_hardware"):
+        u = get_current_user()
+        operator = u["full_name"] if u else "Quản trị viên"
+        atid = str(data.get("EmployeeATID") or "").strip()
+        full_name = str(data.get("FullName") or "").strip()
+        card_num = str(data.get("CardNumber") or "").strip()
+        hw_res = zk_client.enroll_visitor_card({
+            "epad_atid": atid,
+            "full_name": full_name,
+            "card_number": card_num or "0"
+        })
+        db_mssql.log_device_command_db(
+            cmd_code="UPLOAD_USER_TCP4370",
+            target_serial="ALL",
+            target_name="4 máy ZKTeco SenseFace 4A",
+            payload={"EmployeeATID": atid, "FullName": full_name, "CardNumber": card_num},
+            status="COMPLETED" if hw_res.get("success") else "FAILED",
+            result_msg=str(hw_res),
+            operator=operator
+        )
+        res["hardware_sync"] = hw_res
+    return jsonify(res), (200 if res.get("success") else 400)
+
+
+@app.route("/api/visitor/card", methods=["POST"])
+@require_role(["admin", "staff"])
+def api_upsert_customer_card():
+    import db_mssql
+    data = request.get_json(silent=True) or {}
+    res = db_mssql.upsert_customer_card_db(data)
+    return jsonify(res), (200 if res.get("success") else 400)
+
+
+@app.route("/api/visitor/pre_register", methods=["POST"])
+@require_role(["admin", "staff"])
+def api_upsert_pre_register():
+    import db_mssql
+    data = request.get_json(silent=True) or {}
+    res = db_mssql.upsert_pre_registered_guest_db(data)
+    return jsonify(res), (200 if res.get("success") else 400)
+
+
+@app.route("/api/visitor/contractor", methods=["POST"])
+@require_role(["admin", "staff"])
+def api_upsert_contractor():
+    import db_mssql
+    data = request.get_json(silent=True) or {}
+    res = db_mssql.upsert_contractor_db(data)
+    return jsonify(res), (200 if res.get("success") else 400)
+
+
+@app.route("/api/access/timezone", methods=["POST"])
+@require_role(["admin", "staff"])
+def api_upsert_timezone():
+    import db_mssql
+    data = request.get_json(silent=True) or {}
+    res = db_mssql.upsert_access_timezone_db(data)
+    return jsonify(res), (200 if res.get("success") else 400)
+
+
+@app.route("/api/access/group", methods=["POST"])
+@require_role(["admin", "staff"])
+def api_upsert_access_group():
+    import db_mssql
+    data = request.get_json(silent=True) or {}
+    res = db_mssql.upsert_access_group_db(data)
+    return jsonify(res), (200 if res.get("success") else 400)
+
+
+@app.route("/api/attendance/shift", methods=["POST"])
+@require_role(["admin", "staff"])
+def api_upsert_shift():
+    import db_mssql
+    data = request.get_json(silent=True) or {}
+    res = db_mssql.upsert_shift_db(data)
+    return jsonify(res), (200 if res.get("success") else 400)
+
+
+@app.route("/api/sharepoint/vms_status", methods=["GET"])
+def api_sharepoint_vms_status():
+    import sharepoint_vms_sync
+    return jsonify(sharepoint_vms_sync.get_vms_sharepoint_status())
+
+
+@app.route("/api/sharepoint/provision_lists", methods=["POST"])
+@require_role(["admin"])
+def api_sharepoint_provision_lists():
+    import sharepoint_vms_sync
+    data = request.get_json(silent=True) or {}
+    tables = data.get("tables")
+    return jsonify(sharepoint_vms_sync.provision_vms_sharepoint_lists(selected_tables=tables))
+
+
+@app.route("/api/sharepoint/sync_table", methods=["POST"])
+@require_role(["admin"])
+def api_sharepoint_sync_table():
+    import sharepoint_vms_sync
+    data = request.get_json(silent=True) or {}
+    sql_table = str(data.get("sql_table") or "tbl_Departments").strip()
+    max_rows = int(data.get("max_rows") or 200)
+    return jsonify(sharepoint_vms_sync.sync_table_to_sharepoint(sql_table, max_rows=max_rows))
+
+
 # ---------------- Application Entry Point ----------------
 
 def get_local_ip() -> str:
@@ -1117,8 +1341,6 @@ def get_local_ip() -> str:
     except Exception:
         return "127.0.0.1"
 
-
-# ---------------- Application Entry Point ----------------
 
 if __name__ == "__main__":
     server_cfg = config.get("server", {})
