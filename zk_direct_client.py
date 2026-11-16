@@ -565,20 +565,12 @@ class ZkDirectClient:
         except Exception:
             card_int = 0
 
-        # Dedicated 80000000+ range for SeaZen VMS / SharePoint Visitors (never collides with ePAD 90000000+ or Staff 1..99999)
+        # Use the 20 Pre-Authorized Hardware Guest Slots (user_id 56235..56254 = Khach 1..Khach 20)
+        # which already have permanent 24/7 Access Control userauthorize (Timezone=1, Doors=2,1) in all 4 SenseFace 4A terminals!
+        # Creating a brand-new 80xxxxxx user via TCP 4370 lacks a 'userauthorize' row on DeviceType=acc firmware and triggers "Chu kỳ thời gian không hợp lệ".
         sp_item_id = visitor_data.get("sp_item_id")
-        explicit_atid = str(visitor_data.get("epad_atid") or "").strip()
-        if explicit_atid:
-            guest_user_id = explicit_atid
-            tail_num = int("".join(filter(str.isdigit, explicit_atid))[-4:] or "1")
-            guest_uid = 15000 + (tail_num % 10000)
-        elif sp_item_id and str(sp_item_id).isdigit():
-            guest_user_id = str(80000000 + int(sp_item_id))
-            guest_uid = 15000 + (int(sp_item_id) % 10000)
-        else:
-            seq_num = (int(clean_digits[-6:]) if clean_digits else (abs(hash(card_num_str)) % 999999)) % 999999
-            guest_user_id = str(80000000 + seq_num)
-            guest_uid = 15000 + (seq_num % 10000)
+        slot_index = (card_int % 20) if card_int else 0
+        guest_user_id = str(56235 + slot_index)
 
         # Immediately update in-memory person cache so live_capture resolves the visitor in <10ms
         dept_label = str(visitor_data.get("department") or visitor_data.get("company") or "Khách").strip()
@@ -610,27 +602,41 @@ class ZkDirectClient:
             try:
                 zk = self._get_device_connection(ip, dev.get("port", 4370))
                 conn = zk.connect()
-                # 1. Remove any stale/expired user holding the same card number on the terminal
-                # so an expired guest record (e.g. from morning) never triggers "Chu kỳ thời gian không hợp lệ"
-                try:
-                    existing_users = conn.get_users()
-                    for eu in existing_users:
-                        if card_int and eu.card == card_int and int(eu.uid) != int(guest_uid):
-                            conn.delete_user(uid=eu.uid, user_id=eu.user_id)
-                            logger.info("[ZK DIRECT] Đã xóa bản ghi thẻ cũ (uid=%s, user_id=%s) trùng thẻ %s trên %s",
-                                        eu.uid, eu.user_id, card_num_str, name)
-                except Exception as clean_err:
-                    logger.debug("[ZK DIRECT] Clean old card warning on %s: %s", name, clean_err)
+                existing_users = conn.get_users()
 
-                # 2. Provision user with group_id="" (empty string) — on SenseFace 4A, group_id="1" ('\x01')
-                # maps to an unconfigured timezone and causes "Chu kỳ thời gian không hợp lệ"!
+                # 1. Find if this card is already bound to a 562xx pre-authorized slot, or find the target 562xx slot
+                target_slot = None
+                fallback_slot = None
+                for eu in existing_users:
+                    eu_id_str = str(eu.user_id).strip()
+                    if eu_id_str.startswith("562"):
+                        if card_int and eu.card == card_int:
+                            target_slot = eu
+                        elif eu_id_str == guest_user_id:
+                            fallback_slot = eu
+                    elif card_int and (eu.card == card_int or eu_id_str.startswith("803")):
+                        # Delete any 80xxxxxx record holding the same card (expired/missing userauthorize causes "Chu kỳ thời gian không hợp lệ")
+                        conn.delete_user(uid=eu.uid, user_id=eu.user_id)
+                        logger.info("[ZK DIRECT] Đã xóa bản ghi 80xxxxxx cũ (uid=%s, user_id=%s) trùng thẻ %s trên %s",
+                                    eu.uid, eu.user_id, card_num_str, name)
+
+                chosen_slot = target_slot or fallback_slot
+                if chosen_slot:
+                    slot_uid = int(chosen_slot.uid)
+                    slot_user_id = str(chosen_slot.user_id).strip()
+                    guest_user_id = slot_user_id
+                else:
+                    slot_uid = 1720 + slot_index
+                    slot_user_id = guest_user_id
+
+                # 2. Bind card_int to the pre-authorized 562xx slot (preserving its permanent 24/7 userauthorize!)
                 conn.set_user(
-                    uid=guest_uid,
+                    uid=slot_uid,
                     name=f"Khach {full_name}"[:24],
                     privilege=0,
                     password="",
                     group_id="",
-                    user_id=guest_user_id,
+                    user_id=slot_user_id,
                     card=card_int
                 )
                 conn.disconnect()
@@ -644,12 +650,13 @@ class ZkDirectClient:
                         self.name = u_name
                         self.card = u_card
 
-                dyn_u = _DynamicGuestObj(guest_user_id, guest_uid, f"Khach {full_name}"[:24], card_int)
-                self._live_uid_to_user.setdefault(ip, {})[guest_uid] = dyn_u
-                self._live_userid_to_user.setdefault(ip, {})[guest_user_id] = dyn_u
+                dyn_u = _DynamicGuestObj(slot_user_id, slot_uid, f"Khach {full_name}"[:24], card_int)
+                self._live_uid_to_user.setdefault(ip, {})[slot_uid] = dyn_u
+                self._live_userid_to_user.setdefault(ip, {})[slot_user_id] = dyn_u
+                self._index_person_entry(self._person_cache, [slot_user_id, card_num_str, str(card_int)], vis_cache_entry)
 
-                logger.info("[ZK DIRECT] Đã nạp thẻ %s (Mã cầu nối: %s - %s) vào máy %s thành công",
-                            card_num_str, guest_user_id, full_name, name)
+                logger.info("[ZK DIRECT] Đã nạp thẻ %s vào khe phân quyền sẵn %s (uid=%s - %s) trên máy %s thành công",
+                            card_num_str, slot_user_id, slot_uid, full_name, name)
             except Exception as e:
                 logger.error("[ZK DIRECT] Lỗi nạp thẻ vào máy %s: %s", name, e)
                 terminal_errors.append(f"{name}: {e}")
@@ -703,17 +710,27 @@ class ZkDirectClient:
                 zk = self._get_device_connection(ip, dev.get("port", 4370))
                 conn = zk.connect()
                 users = conn.get_users()
-                # Find user with matching card number or user_id
-                target_user = None
                 for u in users:
                     if u.card == card_int or (card_int and str(u.card) == str(card_int)) or u.user_id == clean_digits[-8:]:
-                        target_user = u
-                        break
-
-                if target_user:
-                    conn.delete_user(uid=target_user.uid, user_id=target_user.user_id)
-                    deleted_count += 1
-                    logger.info("[ZK DIRECT] Đã xóa/thu hồi thẻ %s khỏi máy %s", clean_card, name)
+                        u_id_str = str(u.user_id).strip()
+                        if u_id_str.startswith("562"):
+                            # Pre-authorized 562xx slot: NEVER delete the user (preserves permanent userauthorize),
+                            # just unbind card=0 so the returned card cannot open the gate until re-issued!
+                            conn.set_user(
+                                uid=int(u.uid),
+                                name=f"Khach {u_id_str[-2:]}",
+                                privilege=0,
+                                password="",
+                                group_id="",
+                                user_id=u_id_str,
+                                card=0
+                            )
+                            deleted_count += 1
+                            logger.info("[ZK DIRECT] Đã giải phóng thẻ %s khỏi khe phân quyền %s trên %s", clean_card, u_id_str, name)
+                        else:
+                            conn.delete_user(uid=u.uid, user_id=u.user_id)
+                            deleted_count += 1
+                            logger.info("[ZK DIRECT] Đã xóa/thu hồi thẻ %s (user_id=%s) khỏi máy %s", clean_card, u_id_str, name)
                 conn.disconnect()
             except Exception as e:
                 logger.warning("[ZK DIRECT] Thu hồi thẻ tại %s: %s", name, e)
