@@ -70,10 +70,21 @@ DOOR_NAME_MAP = {d["id"]: d["name"] for d in DOORS_CONFIG}
 # ---------------- Authentication & RBAC Decorators ----------------
 
 def get_current_user() -> Optional[Dict[str, Any]]:
-    user_id = session.get("user_id")
-    if not user_id:
+    if session.get("logged_out"):
         return None
-    return storage.get_user_by_id(user_id)
+    user_id = session.get("user_id")
+    if user_id:
+        u = storage.get_user_by_id(user_id)
+        if u:
+            return u
+    # Auto-login default admin user so launching the app enters the system immediately without prompting
+    default_admin = storage.get_user_by_credential("admin")
+    if default_admin:
+        session["user_id"] = default_admin["id"]
+        session["role"] = default_admin["role"]
+        session["full_name"] = default_admin["full_name"]
+        return default_admin
+    return None
 
 
 def require_auth(f):
@@ -117,6 +128,7 @@ def auth_login():
         logger.warning("[AUTH FAILED] Đăng nhập thất bại với tài khoản: '%s'", cred)
         return jsonify({"success": False, "error": "Tài khoản hoặc mật khẩu không chính xác!"}), 401
 
+    session.pop("logged_out", None)
     session["user_id"] = user["id"]
     session["role"] = user["role"]
     session["full_name"] = user["full_name"]
@@ -138,11 +150,12 @@ def auth_login():
 
 @app.route("/api/auth/logout", methods=["POST"])
 def auth_logout():
-    """Destroys current session."""
+    """Destroys current session and marks explicit logout."""
     u = get_current_user()
     if u:
         logger.info("[AUTH LOGOUT] Người dùng '%s' đã đăng xuất", u.get("full_name"))
     session.clear()
+    session["logged_out"] = True
     return jsonify({"success": True, "message": "Đã đăng xuất thành công!"})
 
 
