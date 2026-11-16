@@ -330,10 +330,17 @@ def insert_attendance_logs_bulk(scans: List[Dict[str, Any]]) -> int:
                 full_name = str(scan.get("FullName") or scan.get("fullname") or "").strip()
                 dept = str(scan.get("Department") or "").strip()
                 verify_mode = str(scan.get("VerifyMode") or "FaceTemplate")
-                verify_val = scan.get("VerifyModeValue")
-                in_out = scan.get("InOutMode", 0)
-                is_staff = 1 if scan.get("is_staff", True) else 0
-                sync_source = str(scan.get("SyncSource") or "DIRECT_TCP")
+                raw_vval = scan.get("VerifyModeValue")
+                verify_val = int(raw_vval) if str(raw_vval or "").isdigit() else (2 if "card" in verify_mode.lower() else 15)
+                raw_io = scan.get("InOutMode", 0)
+                if isinstance(raw_io, int):
+                    in_out = raw_io
+                elif str(raw_io).isdigit():
+                    in_out = int(raw_io)
+                else:
+                    in_out = 0 if str(raw_io).strip().lower() in ("in", "vào", "0", "") else 1
+                is_staff = 1 if (scan.get("is_staff", True) and not str(atid).startswith("8000")) else 0
+                sync_source = str(scan.get("SyncSource") or "ADMS_PUSH_BRIDGE")
 
                 direction = str(scan.get("Direction") or ("IN" if "vào" in device_name.lower() else "OUT"))
 

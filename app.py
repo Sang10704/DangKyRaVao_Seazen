@@ -206,13 +206,23 @@ def _background_scan_collector():
         startup_logs = zk_client.harvest_new_attendance_records(per_device_limit=200)
         if startup_logs:
             storage.merge_and_save_scans(startup_logs)
-            logger.info("[Harvester Daemon] Đồng bộ ban đầu: Đã nạp %d lượt quét từ 4 máy vào hệ thống", len(startup_logs))
+            logger.info("[Harvester Daemon] Đồng bộ ban đầu TCP 4370: Đã nạp %d lượt quét từ 4 máy vào hệ thống", len(startup_logs))
     except Exception as ex:
-        logger.warning("[Harvester Daemon] Lỗi quét bù ban đầu: %s", ex)
+        logger.warning("[Harvester Daemon] Lỗi quét bù ban đầu TCP 4370: %s", ex)
+
+    # 2b. Initial 7-day & Today ADMS Push Mirror Backfill (captures rtlog pushed to WebServerIP=172.16.56.2:4004)
+    try:
+        logs_7d = epad_client.get_log_last_7_days()
+        if logs_7d:
+            added_7d = storage.sync_epad_7day_logs(logs_7d)
+            logger.info("[Harvester Daemon] Đồng bộ ADMS Push 7 ngày gần nhất: +%d bản ghi mới", added_7d)
+    except Exception as ex:
+        logger.debug("[Harvester Daemon] ADMS 7-day backfill skipped: %s", ex)
 
     last_clock_sync = time.time()
+    last_7d_sync = time.time()
 
-    # 3. Fallback Periodic Check Loop (15s interval)
+    # 3. Continuous Hybrid Check Loop (4s interval for ADMS rtlog mirror + TCP 4370 fallback)
     while True:
         try:
             now_ts = time.time()
@@ -223,6 +233,24 @@ def _background_scan_collector():
                 except Exception as ex:
                     logger.debug("[Harvester Daemon] Clock audit cycle warning: %s", ex)
 
+            # Pull latest real-time ADMS Push rtlog events (since 4 terminals have DeviceType=acc -> WebServerIP=172.16.56.2)
+            try:
+                rt_push_logs = epad_client.get_realtime_attendance_logs(limit=60)
+                if rt_push_logs:
+                    storage.merge_and_save_scans(rt_push_logs)
+            except Exception:
+                pass
+
+            # Every 30s, also reconcile today's full bucket from 7-day endpoint so zero scans are ever missed
+            if now_ts - last_7d_sync > 30:
+                last_7d_sync = now_ts
+                try:
+                    logs_7d = epad_client.get_log_last_7_days()
+                    if logs_7d:
+                        storage.sync_epad_7day_logs(logs_7d)
+                except Exception:
+                    pass
+
             recent_scans = zk_client.harvest_new_attendance_records(per_device_limit=50)
             if recent_scans:
                 storage.merge_and_save_scans(recent_scans)
@@ -230,9 +258,85 @@ def _background_scan_collector():
         except Exception as e:
             logger.debug("[Harvester Daemon] Cycle warning: %s", e)
 
-        time.sleep(15)
+        time.sleep(4)
 
 threading.Thread(target=_background_scan_collector, daemon=True, name="ZkHardwareHarvester").start()
+
+
+# ---------------- Built-in ZKTeco ADMS Push Receiver (/iclock/*) ----------------
+
+@app.route("/iclock/cdata", methods=["GET", "POST"])
+def iclock_cdata():
+    """
+    Native ZKTeco ADMS / Push-AC Receiver (DeviceType=acc).
+    When any of the 4 SenseFace 4A terminals has WebServerIP pointed to this server,
+    it pushes real-time scan events (table=rtlog / ATTLOG) directly here.
+    """
+    sn = (request.args.get("SN") or "").strip()
+    table = (request.args.get("table") or "").strip().lower()
+    if request.method == "GET":
+        return (
+            f"GET OPTION FROM: {sn}\r\n"
+            "Stamp=9999\r\nOpStamp=9999\r\nErrorDelay=30\r\nDelay=2\r\n"
+            "Realtime=1\r\nEncrypt=0\r\nServerVer=3.1.2\r\nPushProtVer=2.4.1\r\n",
+            200,
+            {"Content-Type": "text/plain"}
+        )
+
+    raw_body = request.get_data(as_text=True) or ""
+    if table in ("rtlog", "attlog", "transaction") and raw_body.strip():
+        sn_map = {
+            "1313244800040": ("Làn VÀO phải", "IN"),
+            "1313244800129": ("Làn VÀO trái", "IN"),
+            "1313244800122": ("Làn RA trái", "OUT"),
+            "1313244800130": ("Làn RA phải", "OUT"),
+        }
+        dev_name, direction = sn_map.get(sn, (f"Cổng {sn}", "IN"))
+        parsed_records = []
+        for line in raw_body.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            kv = {}
+            for part in line.split("\t"):
+                if "=" in part:
+                    k, v = part.split("=", 1)
+                    kv[k.strip().lower()] = v.strip()
+            pin = kv.get("pin") or ""
+            chk_time = kv.get("time") or ""
+            card_no = kv.get("cardno") or ""
+            vtype = int(kv.get("verifytype") or 15) if str(kv.get("verifytype") or "").isdigit() else 15
+            if not pin or pin == "0" or not chk_time:
+                continue
+            p_info = zk_client._lookup_person(pin)
+            is_staff = p_info.get("is_staff", True)
+            mode_str = "Card" if (card_no and card_no != "0") or vtype in (1, 2, 3, 4) else "FaceTemplate"
+            parsed_records.append({
+                "EmployeeATID": p_info.get("atid") or pin,
+                "FullName": p_info.get("fullname", f"Nhân sự {pin}"),
+                "Department": p_info.get("department", "Nhân sự SeaZen"),
+                "SerialNumber": sn,
+                "DeviceSerialNumber": sn,
+                "DeviceName": dev_name,
+                "Direction": direction,
+                "CheckTime": chk_time,
+                "Time": chk_time,
+                "CardNumber": card_no if card_no != "0" else "",
+                "VerifyMode": mode_str,
+                "VerifyModeValue": vtype,
+                "is_staff": is_staff,
+                "SyncSource": "ADMS_DIRECT_PUSH"
+            })
+        if parsed_records:
+            storage.merge_and_save_scans(parsed_records)
+    return ("OK", 200, {"Content-Type": "text/plain"})
+
+
+@app.route("/iclock/getrequest", methods=["GET", "POST"])
+@app.route("/iclock/devicecmd", methods=["GET", "POST"])
+@app.route("/iclock/registry", methods=["GET", "POST"])
+def iclock_commands():
+    return ("OK", 200, {"Content-Type": "text/plain"})
 
 
 # ---------------- Frontend Route (React 18 + Vite SPA) ----------------
@@ -654,39 +758,35 @@ def register_visitor():
     except Exception as sp_ex:
         logger.debug("SharePoint visitor bridge fallback: %s", sp_ex)
 
-    # 2. Register customer & sync permissions to door devices
-    epad_sync_info = "Không dùng ePAD (Chế độ nạp phần cứng trực tiếp)"
+    # 2. Register customer & sync permissions to door devices (Dual-Provisioning: TCP 4370 + ADMS userauthorize)
+    epad_sync_info = "Đã nạp thẻ & phân quyền cửa"
     epad_sync_ok = True
     epad_atid = data.get("epad_atid")
     if card_number:
-        if not EPAD_ENABLED:
-            # Direct hardware enrollment to 4 ZKTeco terminals (using bridged 80000000 + SharePoint ID)
-            direct_res = zk_client.enroll_visitor_card(data)
-            if direct_res.get("success"):
-                epad_sync_ok = True
-                epad_atid = direct_res.get("employee_atid")
-                epad_sync_info = f"ĐÃ NẠP THẺ VÀO 4 MÁY CỬA TRỰC TIẾP (Mã định danh: {epad_atid}, Phân quyền Làn Vào/Ra: 2,1)"
-                data["epad_atid"] = epad_atid
-                if not data.get("id"):
-                    data["id"] = epad_atid
-            else:
-                epad_sync_ok = False
-                epad_sync_info = f"Lỗi nạp thẻ phần cứng: {direct_res.get('error')}"
-                logger.warning("Nạp thẻ phần cứng lỗi: %s", direct_res.get("error"))
+        # 2a. Direct TCP 4370 hardware enrollment to 4 ZKTeco terminals (using bridged 80000000 + SharePoint ID)
+        direct_res = zk_client.enroll_visitor_card(data)
+        if direct_res.get("success"):
+            epad_sync_ok = True
+            epad_atid = direct_res.get("employee_atid")
+            epad_sync_info = f"ĐÃ NẠP THẺ VÀO 4 MÁY CỬA TRỰC TIẾP (Mã định danh: {epad_atid}, Phân quyền Làn Vào/Ra: 2,1)"
+            data["epad_atid"] = epad_atid
+            if not data.get("id"):
+                data["id"] = epad_atid
         else:
-            try:
-                epad_res = epad_client.register_customer_epad(data, auto_sync=True)
-                if epad_res.get("success"):
-                    epad_sync_ok = True
-                    epad_atid = epad_res.get("employee_atid")
-                    epad_sync_info = f"ĐÃ ĐỒNG BỘ CỬA THÀNH CÔNG (ePAD ATID: {epad_atid}, Phân quyền Làn Vào/Ra: 2,1)"
-                    data["epad_atid"] = epad_atid
-                else:
-                    epad_sync_info = f"ePAD cảnh báo: {epad_res.get('error', 'Không xác định')}"
-                    logger.warning("Đăng ký lên ePAD trả về lỗi: %s", epad_res.get("error"))
-            except Exception as ex:
-                epad_sync_info = f"Lỗi ngoại lệ ePAD: {ex}"
-                logger.error("Lỗi khi kết nối ePAD register_customer: %s", ex)
+            epad_sync_ok = False
+            epad_sync_info = f"Lỗi nạp thẻ phần cứng TCP 4370: {direct_res.get('error')}"
+            logger.warning("Nạp thẻ phần cứng lỗi: %s", direct_res.get("error"))
+
+        # 2b. Also push ADMS Access Control authorization (userauthorize DoorIndexes='2,1') via 172.16.56.2
+        # so terminals in DeviceType=acc mode grant relay access immediately on card swipe
+        try:
+            epad_res = epad_client.register_customer_epad(data, auto_sync=True)
+            if epad_res.get("success"):
+                epad_sync_ok = True
+                adms_atid = epad_res.get("employee_atid")
+                epad_sync_info = f"ĐÃ ĐỒNG BỘ KÉP (TCP 4370 + ADMS Push DoorIndexes 2,1 · ATID: {adms_atid or epad_atid})"
+        except Exception as ex:
+            logger.debug("ADMS dual-provisioning fallback: %s", ex)
 
     # 2. Save into local persistent database (active_visitors.json)
     try:
@@ -828,15 +928,12 @@ def fast_checkout():
     target_card = record.get("card_number")
     epad_return_msg = "Không dùng thẻ"
     if target_card:
-        if not EPAD_ENABLED:
-            ret_res = zk_client.return_or_delete_card(target_card)
-            epad_return_msg = f"Đã thu hồi thẻ {target_card} trên 4 máy cửa trực tiếp thành công" if ret_res.get("success") else f"Lỗi thu hồi thẻ phần cứng: {ret_res.get('error')}"
-        else:
-            try:
-                ret_res = epad_client.return_or_delete_card(target_card)
-                epad_return_msg = f"Đã thu hồi thẻ {target_card} trên ePAD thành công" if ret_res.get("success") else f"Lỗi thu hồi thẻ: {ret_res.get('error')}"
-            except Exception as e:
-                epad_return_msg = f"Ngoại lệ khi thu hồi thẻ: {e}"
+        ret_res = zk_client.return_or_delete_card(target_card)
+        epad_return_msg = f"Đã thu hồi thẻ {target_card} trên 4 máy cửa trực tiếp thành công" if ret_res.get("success") else f"Lỗi thu hồi thẻ phần cứng: {ret_res.get('error')}"
+        try:
+            epad_client.return_or_delete_card(target_card)
+        except Exception:
+            pass
 
     # Async update SharePoint List 'VMS SEAZEN - KHÁCH RA VÀO' to CHECKED_OUT
     try:

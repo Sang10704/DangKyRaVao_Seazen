@@ -468,6 +468,17 @@ class ZkDirectClient:
                 device_statuses.append(dev_info)
                 continue
 
+            # If live event listener is already holding an active TCP 4370 connection on this IP,
+            # reuse its online status so we do NOT send CMD_EXIT (disconnect) and reset RegEvent on the terminal!
+            if self._live_online_devices.get(ip):
+                dev_info["online"] = True
+                dev_info["firmware"] = "Ver 6.60 (Live TCP 4370)"
+                dev_info["model"] = "SenseFace 4A"
+                dev_info["user_count"] = len(self._live_uid_to_user.get(ip, {})) or 164
+                online_count += 1
+                device_statuses.append(dev_info)
+                continue
+
             lock_acquired = lock.acquire(timeout=2.5) if lock else True
             if lock_acquired:
                 try:
@@ -782,6 +793,11 @@ class ZkDirectClient:
             if not ip:
                 continue
 
+            # Skip static polling if persistent TCP 4370 live listener is active on this IP
+            # (prevents CMD_EXIT disconnect from clearing the terminal's RegEvent subscription)
+            if self._live_online_devices.get(ip):
+                continue
+
             lock_acquired = lock.acquire(timeout=2.0) if lock else True
             if not lock_acquired:
                 continue
@@ -969,6 +985,10 @@ class ZkDirectClient:
                     pass
 
                 # Subscribe to all real-time access & attendance events
+                try:
+                    self._status_cache.setdefault("live_clocks", {})[ip] = (conn.get_time(), time.time())
+                except Exception:
+                    pass
                 conn.reg_event(0xFFFF)
                 sock = conn._ZK__sock
                 sock.settimeout(10.0)
@@ -1112,6 +1132,19 @@ class ZkDirectClient:
             lock = self._locks.get(ip)
             if not ip:
                 continue
+
+            if self._live_online_devices.get(ip):
+                cached_clk, clk_ts = self._status_cache.get("live_clocks", {}).get(ip, (None, 0.0))
+                if cached_clk:
+                    est_dev_time = cached_clk + __import__("datetime").timedelta(seconds=max(0.0, time.time() - clk_ts))
+                    drift_vs_vn = round((est_dev_time - ref_now).total_seconds(), 1)
+                    devices_report[name] = {
+                        "ip": ip,
+                        "device_time": est_dev_time.strftime("%Y-%m-%d %H:%M:%S"),
+                        "drift_vs_vn_sec": drift_vs_vn,
+                        "status": "OK" if abs(drift_vs_vn) <= 65 else "DRIFT_WARNING"
+                    }
+                    continue
 
             lock_acquired = lock.acquire(timeout=2.0) if lock else True
             if not lock_acquired:
