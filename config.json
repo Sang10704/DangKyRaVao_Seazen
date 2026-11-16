@@ -12,8 +12,9 @@
   "epad": {
     "enabled": false,
     "api_base": "http://172.16.56.2:4001/api",
-    "username": "Thuan.Trinh@seazen.com.vn",
-    "password": "Thuantrinh@1516",
+    "username": "123",
+    "password": "123",
+    "service_id": 1,
     "timeout_sec": 6
   },
   "doors": [

@@ -777,16 +777,16 @@ def register_visitor():
             epad_sync_info = f"Lỗi nạp thẻ phần cứng TCP 4370: {direct_res.get('error')}"
             logger.warning("Nạp thẻ phần cứng lỗi: %s", direct_res.get("error"))
 
-        # 2b. Also push ADMS Access Control authorization (userauthorize DoorIndexes='2,1') via 172.16.56.2
-        # so terminals in DeviceType=acc mode grant relay access immediately on card swipe
-        try:
-            epad_res = epad_client.register_customer_epad(data, auto_sync=True)
-            if epad_res.get("success"):
-                epad_sync_ok = True
-                adms_atid = epad_res.get("employee_atid")
-                epad_sync_info = f"ĐÃ ĐỒNG BỘ KÉP (TCP 4370 + ADMS Push DoorIndexes 2,1 · ATID: {adms_atid or epad_atid})"
-        except Exception as ex:
-            logger.debug("ADMS dual-provisioning fallback: %s", ex)
+        # 2b. Only call ePAD if EPAD_ENABLED is explicitly True in config.json
+        if EPAD_ENABLED:
+            try:
+                epad_res = epad_client.register_customer_epad(data, auto_sync=True)
+                if epad_res.get("success"):
+                    epad_sync_ok = True
+                    adms_atid = epad_res.get("employee_atid")
+                    epad_sync_info = f"ĐÃ ĐỒNG BỘ KÉP (TCP 4370 + ADMS Push DoorIndexes 2,1 · ATID: {adms_atid or epad_atid})"
+            except Exception as ex:
+                logger.debug("ADMS dual-provisioning fallback: %s", ex)
 
     # 2. Save into local persistent database (active_visitors.json)
     try:
@@ -930,10 +930,11 @@ def fast_checkout():
     if target_card:
         ret_res = zk_client.return_or_delete_card(target_card)
         epad_return_msg = f"Đã thu hồi thẻ {target_card} trên 4 máy cửa trực tiếp thành công" if ret_res.get("success") else f"Lỗi thu hồi thẻ phần cứng: {ret_res.get('error')}"
-        try:
-            epad_client.return_or_delete_card(target_card)
-        except Exception:
-            pass
+        if EPAD_ENABLED:
+            try:
+                epad_client.return_or_delete_card(target_card)
+            except Exception:
+                pass
 
     # Async update SharePoint List 'VMS SEAZEN - KHÁCH RA VÀO' to CHECKED_OUT
     try:

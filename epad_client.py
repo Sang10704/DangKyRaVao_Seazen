@@ -18,10 +18,12 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(na
 
 class EpadClient:
     def __init__(self, config: Dict[str, Any]):
-        epad_cfg = config.get("epad", {})
+        epad_cfg = config.get("epad", {}) if "epad" in config else config
         self.api_base = epad_cfg.get("api_base", "http://172.16.56.2:4001/api").rstrip("/")
-        self.username = epad_cfg.get("username", "Thuan.Trinh@seazen.com.vn")
-        self.password = epad_cfg.get("password", "Thuantrinh@1516")
+        # NEVER use human reception account (Thuan.Trinh@seazen.com.vn) to avoid kicking out reception web session.
+        # Always use stateless internal ServiceId=1 credentials ("123" / "123").
+        self.username = "123"
+        self.password = "123"
         self.timeout = epad_cfg.get("timeout_sec", 6)
         
         self.doors_config = config.get("doors", [])

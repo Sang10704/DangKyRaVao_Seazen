@@ -610,13 +610,26 @@ class ZkDirectClient:
             try:
                 zk = self._get_device_connection(ip, dev.get("port", 4370))
                 conn = zk.connect()
-                # Provision user with card directly into device flash memory
+                # 1. Remove any stale/expired user holding the same card number on the terminal
+                # so an expired guest record (e.g. from morning) never triggers "Chu kỳ thời gian không hợp lệ"
+                try:
+                    existing_users = conn.get_users()
+                    for eu in existing_users:
+                        if card_int and eu.card == card_int and int(eu.uid) != int(guest_uid):
+                            conn.delete_user(uid=eu.uid, user_id=eu.user_id)
+                            logger.info("[ZK DIRECT] Đã xóa bản ghi thẻ cũ (uid=%s, user_id=%s) trùng thẻ %s trên %s",
+                                        eu.uid, eu.user_id, card_num_str, name)
+                except Exception as clean_err:
+                    logger.debug("[ZK DIRECT] Clean old card warning on %s: %s", name, clean_err)
+
+                # 2. Provision user with group_id="" (empty string) — on SenseFace 4A, group_id="1" ('\x01')
+                # maps to an unconfigured timezone and causes "Chu kỳ thời gian không hợp lệ"!
                 conn.set_user(
                     uid=guest_uid,
                     name=f"Khach {full_name}"[:24],
                     privilege=0,
                     password="",
-                    group_id="1",
+                    group_id="",
                     user_id=guest_user_id,
                     card=card_int
                 )
