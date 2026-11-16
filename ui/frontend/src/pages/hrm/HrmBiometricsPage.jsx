@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { apiFetch } from '../../services/apiClient';
 
 export default function HrmBiometricsPage({
-  onCollapseSidebar,
+  mode = 'hrm', // 'hrm' or 'biometrics'
   departments,
   employees,
   empTotal,
@@ -13,8 +13,6 @@ export default function HrmBiometricsPage({
   onRefreshData,
   notify,
 }) {
-  const [subTab, setSubTab] = useState('employees');
-
   const [empForm, setEmpForm] = useState({
     EmployeeATID: '',
     EmployeeCode: '',
@@ -28,7 +26,8 @@ export default function HrmBiometricsPage({
     HasFace: true,
     HasFinger: false,
     FacePhotoBase64: '',
-    sync_to_hardware: false,
+    FaceTemplateBIODATA: '',
+    sync_to_hardware: true,
   });
 
   const [deptForm, setDeptForm] = useState({
@@ -54,292 +53,136 @@ export default function HrmBiometricsPage({
   };
 
   return (
-    <>
-      <header className="topbar">
-        <div className="topbar-left">
-          <button
-            type="button"
-            className="sidebar-toggle-btn"
-            onClick={onCollapseSidebar}
-            title="Thu gọn thanh điều hướng"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="3" y1="12" x2="21" y2="12"></line>
-              <line x1="3" y1="6" x2="21" y2="6"></line>
-              <line x1="3" y1="18" x2="21" y2="18"></line>
-            </svg>
-          </button>
-
-          <div className="topbar-title-wrap">
-            <div className="topbar-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="3" y="4" width="18" height="17" rx="2"></rect>
-                <circle cx="9" cy="10" r="2"></circle>
-                <path d="M5 17c0-2 1.5-3 4-3s4 1 4 3M15 9h4M15 13h4M15 17h4"></path>
-              </svg>
-            </div>
-            <div>
-              <h1 className="topbar-title">Quản lý Nhân sự, Phòng ban & Hồ sơ Sinh trắc học</h1>
-              <div className="topbar-sub">
-                Quản lý danh bạ nhân sự đang công tác, mã nhận diện khuôn mặt, số thẻ từ và cơ cấu phòng ban
-              </div>
-            </div>
-          </div>
+    <div className="tino-center" style={{ padding: '24px 32px' }}>
+      <div style={{ marginBottom: 20 }}>
+        <div className="tino-greeting-sub">
+          {mode === 'biometrics' ? 'Quản lý Khuôn mặt, Vân tay & Thẻ NFC' : 'Quản lý Danh bạ Nội bộ'}
         </div>
-      </header>
-
-      <div className="subtab-bar">
-        <button
-          type="button"
-          className={`subtab-btn ${subTab === 'employees' ? 'active' : ''}`}
-          onClick={() => setSubTab('employees')}
-        >
-          <span>Nhân sự đang công tác & Khuôn mặt ({empTotal} hồ sơ)</span>
-        </button>
-        <button
-          type="button"
-          className={`subtab-btn ${subTab === 'departments' ? 'active' : ''}`}
-          onClick={() => setSubTab('departments')}
-        >
-          <span>Danh mục Phòng ban ({departments.length})</span>
-        </button>
+        <h1 className="tino-greeting-title">
+          {mode === 'biometrics'
+            ? `Dữ liệu Sinh trắc học (${empTotal} hồ sơ)`
+            : `Nhân viên & Phòng ban (${empTotal} nhân sự · ${departments.length} phòng ban)`}
+        </h1>
       </div>
 
-      <div className="content-wrap">
-        {subTab === 'employees' && (
-          <div className="split-layout">
-            <div className="card">
-              <div className="card-header">
-                <div className="card-title">Biểu mẫu Cập nhật Nhân sự & Sinh trắc học</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: 20, alignItems: 'start' }}>
+        {/* Left Column: Employee / Biometrics / Department Form */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <div className="card">
+            <div className="card-header">
+              <div className="card-title">
+                {mode === 'biometrics'
+                  ? 'Cập nhật Sinh trắc học & Nạp xuống 4 Máy Cửa'
+                  : 'Thêm / Cập nhật Nhân viên'}
               </div>
-              <div className="card-body">
-                <form
-                  onSubmit={async (e) => {
-                    e.preventDefault();
-                    const { ok, data } = await apiFetch('/api/hrm/employee', {
-                      method: 'POST',
-                      body: JSON.stringify(empForm),
-                    });
-                    if (ok && data.success) {
-                      notify(data.message, 'success');
-                      onRefreshData();
-                    } else {
-                      notify(data.error || 'Không thể lưu hồ sơ nhân sự.', 'error');
-                    }
-                  }}
-                  style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
-                >
-                  <div className="form-grid-2">
-                    <div className="field-group">
-                      <label>Mã định danh chấm công *</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        value={empForm.EmployeeATID}
-                        onChange={(e) => setEmpForm({ ...empForm, EmployeeATID: e.target.value })}
-                        placeholder="Ví dụ: 10903"
-                        required
-                      />
-                    </div>
-                    <div className="field-group">
-                      <label>Mã số nhân viên</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        value={empForm.EmployeeCode}
-                        onChange={(e) => setEmpForm({ ...empForm, EmployeeCode: e.target.value })}
-                        placeholder="Ví dụ: SZ10903"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="field-group">
-                    <label>Họ và tên nhân sự *</label>
+            </div>
+            <div className="card-body">
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  const { ok, data } = await apiFetch('/api/hrm/employee', {
+                    method: 'POST',
+                    body: JSON.stringify(empForm),
+                  });
+                  if (ok && data.success) {
+                    notify(data.message, 'success');
+                    onRefreshData();
+                  } else {
+                    notify(data.error || 'Không thể lưu thông tin nhân viên.', 'error');
+                  }
+                }}
+                style={{ display: 'flex', flexDirection: 'column', gap: 12 }}
+              >
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div className="v-field">
+                    <label>
+                      <span className="req">*</span>Mã chấm công (ATID)
+                    </label>
                     <input
                       type="text"
-                      className="form-control"
-                      value={empForm.FullName}
-                      onChange={(e) => setEmpForm({ ...empForm, FullName: e.target.value })}
+                      className="v-input"
+                      value={empForm.EmployeeATID}
+                      onChange={(e) => setEmpForm({ ...empForm, EmployeeATID: e.target.value })}
+                      placeholder="VD: 10903"
                       required
                     />
                   </div>
-
-                  <div className="form-grid-2">
-                    <div className="field-group">
-                      <label>Phòng ban công tác</label>
-                      <select
-                        className="form-control"
-                        value={empForm.DepartmentName}
-                        onChange={(e) => setEmpForm({ ...empForm, DepartmentName: e.target.value })}
-                      >
-                        {departments.map((d) => (
-                          <option key={d.DepartmentID} value={d.DepartmentName}>
-                            {d.DepartmentName}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="field-group">
-                      <label>Chức vụ</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        value={empForm.Position}
-                        onChange={(e) => setEmpForm({ ...empForm, Position: e.target.value })}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="form-grid-2">
-                    <div className="field-group">
-                      <label>Số thẻ từ</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        value={empForm.CardNumber}
-                        onChange={(e) => setEmpForm({ ...empForm, CardNumber: e.target.value })}
-                        placeholder="Quẹt thẻ lên đầu đọc..."
-                      />
-                    </div>
-                    <div className="field-group">
-                      <label>Vai trò trên thiết bị cổng</label>
-                      <select
-                        className="form-control"
-                        value={empForm.Privilege}
-                        onChange={(e) => setEmpForm({ ...empForm, Privilege: Number(e.target.value) })}
-                      >
-                        <option value={0}>Nhân sự tiêu chuẩn</option>
-                        <option value={14}>Quản trị thiết bị</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="field-group">
-                    <label>Ảnh chân dung nhận diện</label>
+                  <div className="v-field">
+                    <label>Mã nhân viên HR</label>
                     <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handlePhotoUpload}
-                      style={{ fontSize: 12 }}
+                      type="text"
+                      className="v-input"
+                      value={empForm.EmployeeCode}
+                      onChange={(e) => setEmpForm({ ...empForm, EmployeeCode: e.target.value })}
                     />
                   </div>
+                </div>
 
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginTop: 4 }}>
-                    <input
-                      type="checkbox"
-                      checked={empForm.sync_to_hardware}
-                      onChange={(e) => setEmpForm({ ...empForm, sync_to_hardware: e.target.checked })}
-                    />
-                    <span style={{ fontWeight: 500 }}>
-                      Nạp trực tiếp thông tin nhân sự xuống 4 thiết bị cổng ngay sau khi lưu
-                    </span>
+                <div className="v-field">
+                  <label>
+                    <span className="req">*</span>Họ và tên nhân viên
                   </label>
-
-                  <button type="submit" className="btn btn-primary" style={{ marginTop: 6 }}>
-                    Lưu Hồ Sơ Nhân Sự & Sinh Trắc Học
-                  </button>
-                </form>
-              </div>
-            </div>
-
-            <div className="card">
-              <div className="card-header">
-                <div className="card-title">Danh sách Nhân sự đang công tác ({empTotal})</div>
-                <div className="filter-bar">
-                  <select
-                    className="form-control"
-                    value={empDeptFilter}
-                    onChange={(e) => setEmpDeptFilter(e.target.value)}
-                    style={{ width: 175 }}
-                  >
-                    <option value="">Tất cả phòng ban</option>
-                    {departments.map((d) => (
-                      <option key={d.DepartmentID} value={d.DepartmentName}>
-                        {d.DepartmentName}
-                      </option>
-                    ))}
-                  </select>
                   <input
                     type="text"
-                    className="form-control"
-                    value={empSearch}
-                    onChange={(e) => setEmpSearch(e.target.value)}
-                    placeholder="Tìm tên, mã chấm công, số thẻ..."
-                    style={{ width: 220 }}
+                    className="v-input"
+                    value={empForm.FullName}
+                    onChange={(e) => setEmpForm({ ...empForm, FullName: e.target.value })}
+                    required
                   />
                 </div>
-              </div>
 
-              <div className="table-scroll">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Mã chấm công</th>
-                      <th>Họ và tên</th>
-                      <th>Phòng ban</th>
-                      <th>Số thẻ từ</th>
-                      <th>Trạng thái sinh trắc</th>
-                      <th>Thao tác</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {employees.map((emp, idx) => (
-                      <tr
-                        key={idx}
-                        style={{ cursor: 'pointer' }}
-                        onClick={() =>
-                          setEmpForm({
-                            EmployeeATID: emp.atid || emp.EmployeeATID || '',
-                            EmployeeCode: emp.code || emp.EmployeeCode || '',
-                            FullName: emp.fullname || emp.FullName || '',
-                            DepartmentName: emp.department || emp.DepartmentName || 'HC QTNS',
-                            Position: emp.position || emp.Position || '',
-                            CardNumber: emp.card_number || emp.CardNumber || '',
-                            Privilege: 0,
-                            Email: emp.email || '',
-                            Phone: emp.phone || '',
-                            HasFace: true,
-                            HasFinger: false,
-                            FacePhotoBase64: '',
-                            sync_to_hardware: false,
-                          })
-                        }
-                      >
-                        <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
-                          {emp.atid || emp.EmployeeATID}
-                        </td>
-                        <td style={{ fontWeight: 600 }}>{emp.fullname || emp.FullName}</td>
-                        <td>{emp.department || emp.DepartmentName}</td>
-                        <td style={{ fontFamily: 'var(--font-mono)' }}>
-                          {emp.card_number || emp.CardNumber || '---'}
-                        </td>
-                        <td>
-                          <span className="badge badge-green">Khuôn mặt</span>
-                          {(emp.card_number || emp.CardNumber) && (
-                            <span className="badge badge-blue" style={{ marginLeft: 4 }}>
-                              Thẻ từ
-                            </span>
-                          )}
-                        </td>
-                        <td>
-                          <button type="button" className="btn btn-sm">
-                            Chọn sửa
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div className="v-field">
+                    <label>Phòng ban</label>
+                    <select
+                      className="v-input"
+                      value={empForm.DepartmentName}
+                      onChange={(e) => setEmpForm({ ...empForm, DepartmentName: e.target.value })}
+                    >
+                      {departments.map((d) => (
+                        <option key={d.DepartmentID} value={d.DepartmentName}>
+                          {d.DepartmentName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="v-field">
+                    <label>Mã thẻ từ NFC</label>
+                    <input
+                      type="text"
+                      className="v-input"
+                      value={empForm.CardNumber}
+                      onChange={(e) => setEmpForm({ ...empForm, CardNumber: e.target.value })}
+                      placeholder="Quẹt thẻ..."
+                    />
+                  </div>
+                </div>
+
+                <div className="v-field">
+                  <label>Ảnh chân dung nhận diện (Đồng bộ đính kèm)</label>
+                  <input type="file" accept="image/*" onChange={handlePhotoUpload} style={{ fontSize: 12 }} />
+                </div>
+
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12.5, fontWeight: 600 }}>
+                  <input
+                    type="checkbox"
+                    checked={empForm.sync_to_hardware}
+                    onChange={(e) => setEmpForm({ ...empForm, sync_to_hardware: e.target.checked })}
+                  />
+                  <span>Đồng bộ trực tiếp xuống 4 máy quét mặt tại cổng</span>
+                </label>
+
+                <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>
+                  Lưu Hồ Sơ & Đồng Bộ
+                </button>
+              </form>
             </div>
           </div>
-        )}
 
-        {subTab === 'departments' && (
-          <div className="split-layout">
+          {mode === 'hrm' && (
             <div className="card">
               <div className="card-header">
-                <div className="card-title">Thêm / Cập nhật Phòng ban</div>
+                <div className="card-title">Thêm Phòng ban mới ({departments.length})</div>
               </div>
               <div className="card-body">
                 <form
@@ -351,13 +194,7 @@ export default function HrmBiometricsPage({
                     });
                     if (ok && data.success) {
                       notify(data.message, 'success');
-                      setDeptForm({
-                        DepartmentCode: '',
-                        DepartmentName: '',
-                        Level: 1,
-                        Location: 'Trụ sở SeaZen',
-                        Description: '',
-                      });
+                      setDeptForm({ DepartmentCode: '', DepartmentName: '', Level: 1, Location: 'Trụ sở SeaZen', Description: '' });
                       onRefreshData();
                     } else {
                       notify(data.error || 'Không thể lưu phòng ban.', 'error');
@@ -365,85 +202,124 @@ export default function HrmBiometricsPage({
                   }}
                   style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
                 >
-                  <div className="field-group">
-                    <label>Mã phòng ban</label>
+                  <div className="v-field">
+                    <label>
+                      <span className="req">*</span>Tên phòng ban
+                    </label>
                     <input
                       type="text"
-                      className="form-control"
-                      value={deptForm.DepartmentCode}
-                      onChange={(e) => setDeptForm({ ...deptForm, DepartmentCode: e.target.value })}
-                      placeholder="Ví dụ: PB-HCNS"
-                    />
-                  </div>
-                  <div className="field-group">
-                    <label>Tên phòng ban *</label>
-                    <input
-                      type="text"
-                      className="form-control"
+                      className="v-input"
                       value={deptForm.DepartmentName}
                       onChange={(e) => setDeptForm({ ...deptForm, DepartmentName: e.target.value })}
                       required
                     />
                   </div>
-                  <div className="field-group">
-                    <label>Địa điểm làm việc</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      value={deptForm.Location}
-                      onChange={(e) => setDeptForm({ ...deptForm, Location: e.target.value })}
-                    />
-                  </div>
-                  <div className="field-group">
-                    <label>Ghi chú</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      value={deptForm.Description}
-                      onChange={(e) => setDeptForm({ ...deptForm, Description: e.target.value })}
-                    />
-                  </div>
-                  <button type="submit" className="btn btn-primary">
-                    Lưu Phòng Ban
+                  <button type="submit" className="btn btn-gold">
+                    Thêm Phòng Ban
                   </button>
                 </form>
               </div>
             </div>
+          )}
+        </div>
 
-            <div className="card">
-              <div className="card-header">
-                <div className="card-title">Danh mục Phòng ban ({departments.length})</div>
-              </div>
-              <div className="table-scroll">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>STT</th>
-                      <th>Mã phòng ban</th>
-                      <th>Tên phòng ban</th>
-                      <th>Cấp bậc</th>
-                      <th>Trạng thái</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {departments.map((d, idx) => (
-                      <tr key={d.DepartmentID}>
-                        <td>{idx + 1}</td>
-                        <td style={{ fontFamily: 'var(--font-mono)' }}>{d.DepartmentCode}</td>
-                        <td style={{ fontWeight: 600 }}>{d.DepartmentName}</td>
-                        <td>Cấp {d.Level}</td>
-                        <td>
-                          <span className="badge badge-green">Đang hoạt động</span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+        {/* Right Column: Employee & Biometrics Table */}
+        <div className="card">
+          <div className="card-header">
+            <div className="card-title">
+              Danh sách Nhân viên & Trạng thái Sinh trắc học ({empTotal})
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <select
+                className="v-input"
+                style={{ width: 170 }}
+                value={empDeptFilter}
+                onChange={(e) => setEmpDeptFilter(e.target.value)}
+              >
+                <option value="">Tất cả phòng ban</option>
+                {departments.map((d) => (
+                  <option key={d.DepartmentID} value={d.DepartmentName}>
+                    {d.DepartmentName}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="text"
+                className="v-input"
+                style={{ width: 220 }}
+                value={empSearch}
+                onChange={(e) => setEmpSearch(e.target.value)}
+                placeholder="Tìm tên, mã ATID, mã thẻ..."
+              />
             </div>
           </div>
-        )}
+
+          <div className="table-scroll" style={{ maxHeight: 540 }}>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Mã ATID</th>
+                  <th>Họ và tên</th>
+                  <th>Phòng ban</th>
+                  <th>Mã thẻ NFC</th>
+                  <th>Dữ liệu Khuôn mặt</th>
+                  <th>Thao tác</th>
+                </tr>
+              </thead>
+              <tbody>
+                {employees.map((emp, idx) => (
+                  <tr
+                    key={idx}
+                    style={{ cursor: 'pointer' }}
+                    onClick={() =>
+                      setEmpForm({
+                        EmployeeATID: emp.atid || emp.EmployeeATID || '',
+                        EmployeeCode: emp.code || emp.EmployeeCode || '',
+                        FullName: emp.fullname || emp.FullName || '',
+                        DepartmentName: emp.department || emp.DepartmentName || 'HC QTNS',
+                        Position: emp.position || emp.Position || '',
+                        CardNumber: emp.card_number || emp.CardNumber || '',
+                        Privilege: 0,
+                        Email: emp.email || '',
+                        Phone: emp.phone || '',
+                        HasFace: true,
+                        HasFinger: false,
+                        FacePhotoBase64: '',
+                        FaceTemplateBIODATA: '',
+                        sync_to_hardware: true,
+                      })
+                    }
+                  >
+                    <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700 }}>
+                      {emp.atid || emp.EmployeeATID}
+                    </td>
+                    <td style={{ fontWeight: 700, color: 'var(--jet)' }}>
+                      {emp.fullname || emp.FullName}
+                    </td>
+                    <td>{emp.department || emp.DepartmentName}</td>
+                    <td style={{ fontFamily: 'var(--font-mono)' }}>
+                      {emp.card_number || emp.CardNumber || '---'}
+                    </td>
+                    <td>
+                      <span className="badge badge-green">Khuôn mặt đã đăng ký</span>
+                      {(emp.card_number || emp.CardNumber) && (
+                        <span className="badge badge-gold" style={{ marginLeft: 6 }}>
+                          Thẻ NFC
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      <button type="button" className="btn btn-sm">
+                        Chọn sửa
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
-    </>
+    </div>
   );
 }

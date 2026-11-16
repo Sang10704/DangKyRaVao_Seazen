@@ -1,73 +1,67 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { apiFetch } from '../../services/apiClient';
 
 export default function VisitorManagementPage({
-  onCollapseSidebar,
   departments,
+  employees,
   activeVisitors,
   visitorHistory,
   customerCards,
-  preGuests,
-  contractors,
   onRefreshData,
   notify,
 }) {
-  const [subTab, setSubTab] = useState('checkin');
-  const [qrInput, setQrInput] = useState('');
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const nowTimeStr = new Date().toTimeString().slice(0, 5);
+
+  const mainQrInputRef = useRef(null);
+  const compQrInputRef = useRef(null);
+  const [showMainQrBox, setShowMainQrBox] = useState(false);
+  const [showCompQrBox, setShowCompQrBox] = useState(false);
+  const [mainQrRaw, setMainQrRaw] = useState('');
+  const [compQrRaw, setCompQrRaw] = useState('');
   const [checkoutQuery, setCheckoutQuery] = useState('');
 
-  const [visitorForm, setVisitorForm] = useState({
+  const [form, setForm] = useState({
     full_name: '',
+    birth_date: '',
+    from_date: todayStr,
+    from_time: nowTimeStr,
+    to_date: todayStr,
+    to_time: '17:30',
+    purpose: '',
     cccd_number: '',
     phone: '',
     company: '',
+    access_area: 'Sảnh Chính (Cổng Làn Vào & Làn Ra)',
+    notes: '',
+    use_phone: false,
     department: 'BGĐ SeaZen',
     host_person: '',
-    purpose: 'Liên hệ công tác',
+    host_phone: '',
     card_number: '',
     auto_unlock: false,
   });
 
-  const [preGuestForm, setPreGuestForm] = useState({
-    BookingCode: '',
-    GuestFullName: '',
-    GuestCCCD: '',
-    GuestPhone: '',
-    GuestCompany: '',
-    HostEmployeeName: '',
-    HostDepartment: 'BGĐ SeaZen',
-    VisitDate: new Date().toISOString().slice(0, 10),
-    StartTime: '08:30',
-    EndTime: '17:30',
-    Purpose: '',
-    ReservedCardNumber: '',
-    Status: 'PENDING',
+  const [compForm, setCompForm] = useState({
+    full_name: '',
+    birth_date: '',
+    cccd_number: '',
+    from_time: `${todayStr} ${nowTimeStr}`,
+    to_time: `${todayStr} 17:30`,
+    card_number: '',
   });
 
-  const [contractorForm, setContractorForm] = useState({
-    ContractorCode: '',
-    ContractorCompany: '',
-    WorkerFullName: '',
-    CCCDNumber: '',
-    Phone: '',
-    CardNumber: '',
-    WorkArea: 'Khu vực Sảnh & Tầng Kỹ Thuật',
-    SupervisorName: 'HC QTNS',
-    ValidFrom: new Date().toISOString().slice(0, 10),
-    ValidTo: new Date().toISOString().slice(0, 10),
-    Status: 'ACTIVE',
+  const [companions, setCompanions] = useState([]);
+  const [selectedCompIdx, setSelectedCompIdx] = useState([]);
+
+  // Filter employees belonging to the selected contact department for fast selection
+  const deptEmployees = employees.filter((e) => {
+    const dName = e.department || e.DepartmentName || '';
+    return !form.department || dName === form.department;
   });
 
-  const [cardForm, setCardForm] = useState({
-    CardCode: '',
-    CardNumber: '',
-    CardType: 'VISITOR',
-    Status: 'AVAILABLE',
-    Notes: '',
-  });
-
-  const handleParseQr = async (raw) => {
-    setQrInput(raw);
+  const parseQrForMain = async (raw) => {
+    setMainQrRaw(raw);
     if (!raw.includes('|')) return;
     const { ok, data } = await apiFetch('/api/visitor/parse_cccd', {
       method: 'POST',
@@ -75,38 +69,106 @@ export default function VisitorManagementPage({
     });
     if (ok && data.success && data.data) {
       const p = data.data;
-      setVisitorForm((prev) => ({
+      setForm((prev) => ({
         ...prev,
-        cccd_number: p.cccd_number || prev.cccd_number,
         full_name: p.full_name || prev.full_name,
+        cccd_number: p.cccd_number || prev.cccd_number,
+        birth_date: p.birth_date || prev.birth_date,
       }));
-      notify(`Đã điền thông tin từ căn cước công dân: ${p.full_name}`, 'success');
+      setShowMainQrBox(false);
+      setMainQrRaw('');
+      notify(`Đã đọc QR căn cước: ${p.full_name} (${p.cccd_number})`, 'success');
     }
   };
 
-  const handleRegisterVisitor = async (e) => {
+  const parseQrForCompanion = async (raw) => {
+    setCompQrRaw(raw);
+    if (!raw.includes('|')) return;
+    const { ok, data } = await apiFetch('/api/visitor/parse_cccd', {
+      method: 'POST',
+      body: JSON.stringify({ qr_string: raw }),
+    });
+    if (ok && data.success && data.data) {
+      const p = data.data;
+      setCompForm((prev) => ({
+        ...prev,
+        full_name: p.full_name || prev.full_name,
+        cccd_number: p.cccd_number || prev.cccd_number,
+        birth_date: p.birth_date || prev.birth_date,
+      }));
+      setShowCompQrBox(false);
+      setCompQrRaw('');
+      notify(`Đã đọc QR người đi cùng: ${p.full_name}`, 'success');
+    }
+  };
+
+  const handleAddCompanion = () => {
+    if (!compForm.full_name.trim() && !compForm.cccd_number.trim()) {
+      notify('Vui lòng nhập họ tên hoặc quét QR căn cước cho nhân sự đi cùng.', 'error');
+      return;
+    }
+    setCompanions((prev) => [...prev, { ...compForm }]);
+    setCompForm({
+      full_name: '',
+      birth_date: '',
+      cccd_number: '',
+      from_time: `${form.from_date} ${form.from_time}`,
+      to_time: `${form.to_date} ${form.to_time}`,
+      card_number: '',
+    });
+  };
+
+  const handleDeleteSelectedCompanions = () => {
+    if (selectedCompIdx.length === 0) {
+      setCompanions([]);
+      return;
+    }
+    setCompanions((prev) => prev.filter((_, idx) => !selectedCompIdx.includes(idx)));
+    setSelectedCompIdx([]);
+  };
+
+  const handleResetForm = () => {
+    setForm({
+      full_name: '',
+      birth_date: '',
+      from_date: todayStr,
+      from_time: nowTimeStr,
+      to_date: todayStr,
+      to_time: '17:30',
+      purpose: '',
+      cccd_number: '',
+      phone: '',
+      company: '',
+      access_area: 'Sảnh Chính (Cổng Làn Vào & Làn Ra)',
+      notes: '',
+      use_phone: false,
+      department: 'BGĐ SeaZen',
+      host_person: '',
+      host_phone: '',
+      card_number: '',
+      auto_unlock: false,
+    });
+    setCompanions([]);
+    setSelectedCompIdx([]);
+  };
+
+  const handleSubmitRegistration = async (e) => {
     e.preventDefault();
+    const payload = {
+      ...form,
+      expected_checkout_time: `${form.to_date} ${form.to_time}:00`,
+      companions,
+    };
     const { ok, data } = await apiFetch('/api/visitor/register', {
       method: 'POST',
-      body: JSON.stringify(visitorForm),
+      body: JSON.stringify(payload),
     });
     if (ok && data.success) {
-      notify(data.message || 'Đã đăng ký khách và cấp quyền thẻ thành công.', 'success');
-      setVisitorForm({
-        full_name: '',
-        cccd_number: '',
-        phone: '',
-        company: '',
-        department: 'BGĐ SeaZen',
-        host_person: '',
-        purpose: 'Liên hệ công tác',
-        card_number: '',
-        auto_unlock: false,
-      });
-      setQrInput('');
+      notify(data.message || 'Đã đăng ký khách và nạp thẻ thành công.', 'success');
+      handleResetForm();
       onRefreshData();
     } else {
-      notify(data.error || 'Không thể lưu hồ sơ khách.', 'error');
+      notify(data.error || 'Không thể đăng ký khách.', 'error');
     }
   };
 
@@ -118,7 +180,7 @@ export default function VisitorManagementPage({
       body: JSON.stringify({ query: q }),
     });
     if (ok && data.success) {
-      notify(data.message || 'Đã hoàn tất trả thẻ cho khách.', 'success');
+      notify(data.message || 'Đã thu hồi thẻ và hoàn tất trả khách.', 'success');
       setCheckoutQuery('');
       onRefreshData();
     } else {
@@ -127,803 +189,598 @@ export default function VisitorManagementPage({
   };
 
   return (
-    <>
-      <header className="topbar">
-        <div className="topbar-left">
-          <button
-            type="button"
-            className="sidebar-toggle-btn"
-            onClick={onCollapseSidebar}
-            title="Thu gọn thanh điều hướng"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="3" y1="12" x2="21" y2="12"></line>
-              <line x1="3" y1="6" x2="21" y2="6"></line>
-              <line x1="3" y1="18" x2="21" y2="18"></line>
-            </svg>
-          </button>
+    <div className="tino-center" style={{ padding: '24px 32px' }}>
+      {/* PHIẾU ĐĂNG KÝ LÀM VIỆC TRONG NHÀ MÁY / TÒA NHÀ (CHUẨN ẢNH MẪU) */}
+      <form onSubmit={handleSubmitRegistration} className="visitor-sheet">
+        <div className="visitor-sheet-header">
+          <div className="visitor-sheet-title">Phiếu đăng ký làm việc trong nhà máy / tòa nhà</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button
+              type="button"
+              className="btn-qr-navy"
+              onClick={() => {
+                setShowMainQrBox((v) => !v);
+                setTimeout(() => mainQrInputRef.current?.focus(), 60);
+              }}
+            >
+              Đọc thông tin từ QR căn cước
+            </button>
+          </div>
+        </div>
 
-          <div className="topbar-title-wrap">
-            <div className="topbar-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
-                <circle cx="9" cy="7" r="4"></circle>
-                <path d="M19 8v6M22 11h-6"></path>
-              </svg>
+        {/* Instant QR Scanner Input Bar when clicked */}
+        {showMainQrBox && (
+          <div
+            style={{
+              background: 'var(--gold-soft)',
+              border: '1px solid var(--gold)',
+              borderRadius: 8,
+              padding: '10px 14px',
+              marginBottom: 18,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+            }}
+          >
+            <input
+              ref={mainQrInputRef}
+              type="text"
+              className="v-input"
+              value={mainQrRaw}
+              onChange={(e) => parseQrForMain(e.target.value)}
+              placeholder="Đặt con trỏ tại đây và bấm súng quét mã QR trên căn cước công dân (Định dạng: Số CCCD||Họ tên|Ngày sinh...)..."
+            />
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={() => setShowMainQrBox(false)}
+            >
+              Đóng
+            </button>
+          </div>
+        )}
+
+        {/* 3-COLUMN PRIMARY VISITOR GRID */}
+        <div className="visitor-3col-grid">
+          {/* CỘT 1 */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div className="v-field">
+              <label>
+                <span className="req">*</span>Họ tên khách
+              </label>
+              <input
+                type="text"
+                className="v-input"
+                value={form.full_name}
+                onChange={(e) => setForm({ ...form, full_name: e.target.value })}
+                required
+              />
             </div>
-            <div>
-              <h1 className="topbar-title">Tiếp đón Khách, Lịch hẹn trước & Quản lý Nhà thầu</h1>
-              <div className="topbar-sub">
-                Quét mã căn cước công dân, cấp phát thẻ ra vào tạm thời và thu hồi quyền thẻ tự động khi khách ra về
+
+            <div className="v-field">
+              <label>
+                <span className="req">*</span>Ngày tháng năm sinh
+              </label>
+              <input
+                type="text"
+                className="v-input"
+                placeholder="dd/MM/yyyy"
+                value={form.birth_date}
+                onChange={(e) => setForm({ ...form, birth_date: e.target.value })}
+              />
+            </div>
+
+            <div className="v-field">
+              <label>
+                <span className="req">*</span>Từ thời gian
+              </label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 8 }}>
+                <input
+                  type="date"
+                  className="v-input"
+                  value={form.from_date}
+                  onChange={(e) => setForm({ ...form, from_date: e.target.value })}
+                />
+                <input
+                  type="time"
+                  className="v-input"
+                  value={form.from_time}
+                  onChange={(e) => setForm({ ...form, from_time: e.target.value })}
+                />
               </div>
+            </div>
+
+            <div className="v-field">
+              <label>
+                <span className="req">*</span>Đến thời gian
+              </label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 8 }}>
+                <input
+                  type="date"
+                  className="v-input"
+                  value={form.to_date}
+                  onChange={(e) => setForm({ ...form, to_date: e.target.value })}
+                />
+                <input
+                  type="time"
+                  className="v-input"
+                  value={form.to_time}
+                  onChange={(e) => setForm({ ...form, to_time: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="v-field">
+              <label>Nội dung làm việc</label>
+              <input
+                type="text"
+                className="v-input"
+                value={form.purpose}
+                onChange={(e) => setForm({ ...form, purpose: e.target.value })}
+              />
+            </div>
+          </div>
+
+          {/* CỘT 2 */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div className="v-field">
+              <label>
+                <span className="req">*</span>CMND/CCCD/Passport
+              </label>
+              <input
+                type="text"
+                className="v-input"
+                value={form.cccd_number}
+                onChange={(e) => setForm({ ...form, cccd_number: e.target.value })}
+                required
+              />
+            </div>
+
+            <div className="v-field">
+              <label>Số điện thoại</label>
+              <input
+                type="text"
+                className="v-input"
+                value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              />
+            </div>
+
+            <div className="v-field">
+              <label>
+                <span className="req">*</span>Tên công ty
+              </label>
+              <input
+                type="text"
+                className="v-input"
+                value={form.company}
+                onChange={(e) => setForm({ ...form, company: e.target.value })}
+              />
+            </div>
+
+            <div className="v-field">
+              <label>
+                <span className="req">*</span>Khu vực được phép truy cập
+              </label>
+              <select
+                className="v-input"
+                value={form.access_area}
+                onChange={(e) => setForm({ ...form, access_area: e.target.value })}
+              >
+                <option value="Sảnh Chính (Cổng Làn Vào & Làn Ra)">Sảnh Chính (Cổng Làn Vào & Làn Ra)</option>
+                <option value="Khu vực Văn phòng & Phòng họp">Khu vực Văn phòng & Phòng họp</option>
+                <option value="Khu vực Kỹ thuật & Nhà máy">Khu vực Kỹ thuật & Nhà máy</option>
+                <option value="Toàn bộ các cửa kiểm soát">Toàn bộ các cửa kiểm soát</option>
+              </select>
+            </div>
+
+            <div className="v-field">
+              <label>Ghi chú</label>
+              <input
+                type="text"
+                className="v-input"
+                value={form.notes}
+                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              />
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, paddingTop: 2 }}>
+              <span style={{ fontSize: 12.5, fontWeight: 700 }}>Sử dụng điện thoại</span>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13 }}>
+                <input
+                  type="checkbox"
+                  checked={form.use_phone}
+                  onChange={(e) => setForm({ ...form, use_phone: e.target.checked })}
+                />
+                <span>Có</span>
+              </label>
+            </div>
+          </div>
+
+          {/* CỘT 3 */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div className="v-field">
+              <label>
+                <span className="req">*</span>Phòng ban liên hệ
+              </label>
+              <select
+                className="v-input"
+                value={form.department}
+                onChange={(e) => setForm({ ...form, department: e.target.value })}
+              >
+                {departments.map((d) => (
+                  <option key={d.DepartmentID} value={d.DepartmentName}>
+                    {d.DepartmentName}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="v-field">
+              <label>
+                <span className="req">*</span>Người liên hệ
+              </label>
+              <input
+                type="text"
+                list="dept-employees-datalist"
+                className="v-input"
+                placeholder="Chọn nhanh hoặc gõ tên người liên hệ..."
+                value={form.host_person}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const found = deptEmployees.find((emp) => (emp.fullname || emp.FullName) === val);
+                  setForm({
+                    ...form,
+                    host_person: val,
+                    host_phone: found?.phone || found?.Phone || form.host_phone,
+                  });
+                }}
+              />
+              <datalist id="dept-employees-datalist">
+                {deptEmployees.slice(0, 100).map((emp, idx) => (
+                  <option key={idx} value={emp.fullname || emp.FullName}>
+                    {emp.department || emp.DepartmentName}
+                  </option>
+                ))}
+              </datalist>
+            </div>
+
+            <div className="v-field">
+              <label>
+                <span className="req">*</span>Số điện thoại người liên hệ
+              </label>
+              <input
+                type="text"
+                className="v-input"
+                value={form.host_phone}
+                onChange={(e) => setForm({ ...form, host_phone: e.target.value })}
+              />
+            </div>
+
+            <div className="v-field">
+              <label>
+                <span className="req">*</span>Mã thẻ
+              </label>
+              <input
+                type="text"
+                list="visitor-cards-datalist"
+                className="v-input"
+                placeholder="Quẹt thẻ NFC lên đầu đọc hoặc chọn thẻ..."
+                value={form.card_number}
+                onChange={(e) => setForm({ ...form, card_number: e.target.value })}
+              />
+              <datalist id="visitor-cards-datalist">
+                {customerCards.map((c) => (
+                  <option key={c.CardNumber} value={c.CardNumber}>
+                    {c.CardCode} ({c.Status})
+                  </option>
+                ))}
+              </datalist>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingTop: 6 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12.5, fontWeight: 600 }}>
+                <input
+                  type="checkbox"
+                  checked={form.auto_unlock}
+                  onChange={(e) => setForm({ ...form, auto_unlock: e.target.checked })}
+                />
+                <span>Mở cổng Làn VÀO ngay khi lưu</span>
+              </label>
             </div>
           </div>
         </div>
 
-        <div className="topbar-right">
-          <a href="/api/export/visitors" className="btn btn-sm">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="7 10 12 15 17 10"></polyline>
-              <line x1="12" y1="15" x2="12" y2="3"></line>
-            </svg>
-            <span>Xuất báo cáo Excel</span>
-          </a>
-        </div>
-      </header>
+        {/* PHẦN DƯỚI: THÔNG TIN NHÂN SỰ ĐI CÙNG */}
+        <div style={{ marginTop: 26, paddingTop: 18, borderTop: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 10 }}>
+            <span style={{ fontWeight: 700, fontSize: 13.5 }}>Thông tin nhân sự đi cùng:</span>
+            <button
+              type="button"
+              onClick={handleDeleteSelectedCompanions}
+              title="Xóa danh sách người đi cùng đã chọn"
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--text-secondary)',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              </svg>
+            </button>
+          </div>
 
-      <div className="subtab-bar">
-        <button
-          type="button"
-          className={`subtab-btn ${subTab === 'checkin' ? 'active' : ''}`}
-          onClick={() => setSubTab('checkin')}
-        >
-          <span>Tiếp đón & Cấp thẻ khách ({activeVisitors.length} đang có mặt)</span>
-        </button>
-        <button
-          type="button"
-          className={`subtab-btn ${subTab === 'prereg' ? 'active' : ''}`}
-          onClick={() => setSubTab('prereg')}
-        >
-          <span>Danh sách Khách hẹn trước ({preGuests.length})</span>
-        </button>
-        <button
-          type="button"
-          className={`subtab-btn ${subTab === 'contractors' ? 'active' : ''}`}
-          onClick={() => setSubTab('contractors')}
-        >
-          <span>Hồ sơ Nhà thầu Thi công ({contractors.length})</span>
-        </button>
-        <button
-          type="button"
-          className={`subtab-btn ${subTab === 'cards' ? 'active' : ''}`}
-          onClick={() => setSubTab('cards')}
-        >
-          <span>Kho Thẻ Khách & Nhà thầu ({customerCards.length})</span>
-        </button>
-      </div>
+          {showCompQrBox && (
+            <div
+              style={{
+                background: 'var(--gold-soft)',
+                border: '1px solid var(--gold)',
+                borderRadius: 8,
+                padding: '8px 12px',
+                marginBottom: 12,
+                display: 'flex',
+                gap: 10,
+              }}
+            >
+              <input
+                ref={compQrInputRef}
+                type="text"
+                className="v-input"
+                value={compQrRaw}
+                onChange={(e) => parseQrForCompanion(e.target.value)}
+                placeholder="Bấm súng quét mã QR CCCD của nhân sự đi cùng..."
+              />
+              <button type="button" className="btn btn-sm" onClick={() => setShowCompQrBox(false)}>
+                Đóng
+              </button>
+            </div>
+          )}
 
-      <div className="content-wrap">
-        {subTab === 'checkin' && (
-          <div className="split-layout">
-            {/* Left Form */}
-            <div className="card">
-              <div className="card-header">
-                <div className="card-title">Biểu mẫu Tiếp đón Khách & Cấp thẻ</div>
-              </div>
-              <div className="card-body">
-                <form onSubmit={handleRegisterVisitor} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <div className="field-group">
-                    <label>Quét mã căn cước công dân gắn chip (Tự động tách thông tin)</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      value={qrInput}
-                      onChange={(e) => handleParseQr(e.target.value)}
-                      placeholder="Đặt con trỏ tại đây và bấm máy quét mã..."
-                      style={{ background: 'var(--primary-soft)', borderColor: 'var(--primary-border)' }}
-                    />
-                  </div>
+          <div className="companion-bar">
+            <div className="v-field">
+              <label>
+                <span className="req">*</span>Họ tên
+              </label>
+              <input
+                type="text"
+                className="v-input"
+                value={compForm.full_name}
+                onChange={(e) => setCompForm({ ...compForm, full_name: e.target.value })}
+              />
+            </div>
 
-                  <div className="form-grid-2">
-                    <div className="field-group">
-                      <label>Họ và tên khách *</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        value={visitorForm.full_name}
-                        onChange={(e) => setVisitorForm({ ...visitorForm, full_name: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div className="field-group">
-                      <label>Số căn cước công dân *</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        value={visitorForm.cccd_number}
-                        onChange={(e) => setVisitorForm({ ...visitorForm, cccd_number: e.target.value })}
-                        required
-                      />
-                    </div>
-                  </div>
+            <div className="v-field">
+              <label>
+                <span className="req">*</span>Ngày tháng năm sinh
+              </label>
+              <input
+                type="text"
+                className="v-input"
+                placeholder="dd/MM/yyyy"
+                value={compForm.birth_date}
+                onChange={(e) => setCompForm({ ...compForm, birth_date: e.target.value })}
+              />
+            </div>
 
-                  <div className="form-grid-2">
-                    <div className="field-group">
-                      <label>Số điện thoại</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        value={visitorForm.phone}
-                        onChange={(e) => setVisitorForm({ ...visitorForm, phone: e.target.value })}
-                      />
-                    </div>
-                    <div className="field-group">
-                      <label>Đơn vị / Công ty khách</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        value={visitorForm.company}
-                        onChange={(e) => setVisitorForm({ ...visitorForm, company: e.target.value })}
-                      />
-                    </div>
-                  </div>
+            <div className="v-field">
+              <label>
+                <span className="req">*</span>CCCD/ Passport
+              </label>
+              <input
+                type="text"
+                className="v-input"
+                value={compForm.cccd_number}
+                onChange={(e) => setCompForm({ ...compForm, cccd_number: e.target.value })}
+              />
+            </div>
 
-                  <div className="form-grid-2">
-                    <div className="field-group">
-                      <label>Phòng ban liên hệ</label>
-                      <select
-                        className="form-control"
-                        value={visitorForm.department}
-                        onChange={(e) => setVisitorForm({ ...visitorForm, department: e.target.value })}
-                      >
-                        {departments.map((d) => (
-                          <option key={d.DepartmentID} value={d.DepartmentName}>
-                            {d.DepartmentName}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="field-group">
-                      <label>Cán bộ tiếp đón</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        value={visitorForm.host_person}
-                        onChange={(e) => setVisitorForm({ ...visitorForm, host_person: e.target.value })}
-                      />
-                    </div>
-                  </div>
+            <div className="v-field">
+              <label>
+                <span className="req">*</span>Từ thời gian
+              </label>
+              <input
+                type="text"
+                className="v-input"
+                placeholder="dd/MM/yyyy HH:mm"
+                value={compForm.from_time}
+                onChange={(e) => setCompForm({ ...compForm, from_time: e.target.value })}
+              />
+            </div>
 
-                  <div className="form-grid-2">
-                    <div className="field-group">
-                      <label>Số thẻ từ cấp tạm</label>
-                      <input
-                        type="text"
-                        list="visitor-card-pool"
-                        className="form-control"
-                        value={visitorForm.card_number}
-                        onChange={(e) => setVisitorForm({ ...visitorForm, card_number: e.target.value })}
-                        placeholder="Quẹt thẻ hoặc chọn từ kho..."
-                      />
-                      <datalist id="visitor-card-pool">
-                        {customerCards.map((c) => (
-                          <option key={c.CardNumber} value={c.CardNumber}>
-                            {c.CardCode}
-                          </option>
-                        ))}
-                      </datalist>
-                    </div>
-                    <div className="field-group">
-                      <label>Nội dung làm việc</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        value={visitorForm.purpose}
-                        onChange={(e) => setVisitorForm({ ...visitorForm, purpose: e.target.value })}
-                      />
-                    </div>
-                  </div>
+            <div className="v-field">
+              <label>
+                <span className="req">*</span>Đến thời gian
+              </label>
+              <input
+                type="text"
+                className="v-input"
+                placeholder="dd/MM/yyyy HH:mm"
+                value={compForm.to_time}
+                onChange={(e) => setCompForm({ ...compForm, to_time: e.target.value })}
+              />
+            </div>
 
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginTop: 4 }}>
+            <div className="v-field">
+              <label>
+                <span className="req">*</span>Mã thẻ
+              </label>
+              <input
+                type="text"
+                className="v-input"
+                placeholder="Quẹt thẻ..."
+                value={compForm.card_number}
+                onChange={(e) => setCompForm({ ...compForm, card_number: e.target.value })}
+              />
+            </div>
+
+            <button
+              type="button"
+              className="btn-qr-navy"
+              style={{ height: 36 }}
+              onClick={() => {
+                setShowCompQrBox((v) => !v);
+                setTimeout(() => compQrInputRef.current?.focus(), 60);
+              }}
+            >
+              Đọc thông tin từ QR căn cước
+            </button>
+
+            <button
+              type="button"
+              className="btn-qr-navy"
+              style={{ height: 36 }}
+              onClick={handleAddCompanion}
+            >
+              Thêm
+            </button>
+          </div>
+
+          {/* Bảng danh sách nhân sự đi cùng */}
+          <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th style={{ width: 36 }}>
                     <input
                       type="checkbox"
-                      checked={visitorForm.auto_unlock}
-                      onChange={(e) => setVisitorForm({ ...visitorForm, auto_unlock: e.target.checked })}
+                      checked={companions.length > 0 && selectedCompIdx.length === companions.length}
+                      onChange={(e) =>
+                        setSelectedCompIdx(e.target.checked ? companions.map((_, i) => i) : [])
+                      }
                     />
-                    <span style={{ fontWeight: 500 }}>Mở Cổng Làn VÀO ngay sau khi lưu đăng ký</span>
-                  </label>
-
-                  <button type="submit" className="btn btn-primary" style={{ marginTop: 6 }}>
-                    Lưu Hồ Sơ Khách & Cấp Quyền Qua Cổng
-                  </button>
-                </form>
-              </div>
-            </div>
-
-            {/* Right Active Visitors & History */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div className="card">
-                <div className="card-header">
-                  <div className="card-title">Trả thẻ nhanh & Danh sách Khách đang làm việc</div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <input
-                      type="text"
-                      className="form-control"
-                      value={checkoutQuery}
-                      onChange={(e) => setCheckoutQuery(e.target.value)}
-                      placeholder="Quẹt thẻ trả lại hoặc nhập số CCCD..."
-                      style={{ width: 240 }}
-                    />
-                    <button type="button" className="btn btn-primary" onClick={() => handleFastCheckout()}>
-                      Trả thẻ & Ra về
-                    </button>
-                  </div>
-                </div>
-                <div className="table-scroll" style={{ maxHeight: 220 }}>
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>Họ và tên khách</th>
-                        <th>Số căn cước</th>
-                        <th>Mã thẻ</th>
-                        <th>Phòng ban / Người tiếp</th>
-                        <th>Giờ vào</th>
-                        <th>Thao tác</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {activeVisitors.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} style={{ textAlign: 'center', padding: 20, color: 'var(--text-muted)' }}>
-                            Hiện không có khách nào đang giữ thẻ trong tòa nhà.
-                          </td>
-                        </tr>
-                      ) : (
-                        activeVisitors.map((v) => (
-                          <tr key={v.id}>
-                            <td style={{ fontWeight: 600 }}>{v.full_name}</td>
-                            <td style={{ fontFamily: 'var(--font-mono)' }}>{v.cccd_number}</td>
-                            <td>
-                              <span className="badge badge-blue">{v.card_number || 'Không thẻ'}</span>
-                            </td>
-                            <td>{v.department} · {v.host_person}</td>
-                            <td style={{ fontFamily: 'var(--font-mono)' }}>{v.checkin_time}</td>
-                            <td>
-                              <button
-                                type="button"
-                                className="btn btn-sm"
-                                onClick={() => handleFastCheckout(v.id)}
-                              >
-                                Thu hồi thẻ
-                              </button>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <div className="card">
-                <div className="card-header">
-                  <div className="card-title">Sổ Nhật ký Khách Ra vào ({visitorHistory.length})</div>
-                </div>
-                <div className="table-scroll" style={{ maxHeight: 260 }}>
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>Mã hồ sơ</th>
-                        <th>Họ và tên khách</th>
-                        <th>Số căn cước</th>
-                        <th>Mã thẻ</th>
-                        <th>Phòng ban liên hệ</th>
-                        <th>Giờ vào</th>
-                        <th>Giờ ra</th>
-                        <th>Trạng thái</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {visitorHistory.map((h, idx) => (
-                        <tr key={idx}>
-                          <td style={{ fontFamily: 'var(--font-mono)' }}>{h.VisitorID}</td>
-                          <td style={{ fontWeight: 600 }}>{h.FullName}</td>
-                          <td style={{ fontFamily: 'var(--font-mono)' }}>{h.CCCDNumber}</td>
-                          <td style={{ fontFamily: 'var(--font-mono)' }}>{h.CardNumber || '---'}</td>
-                          <td>{h.Department}</td>
-                          <td style={{ fontFamily: 'var(--font-mono)' }}>{h.CheckinTime}</td>
-                          <td style={{ fontFamily: 'var(--font-mono)' }}>{h.CheckoutTime || '---'}</td>
-                          <td>
-                            <span className={`badge ${h.Status === 'ACTIVE' ? 'badge-green' : 'badge-blue'}`}>
-                              {h.Status === 'ACTIVE' ? 'Đang có mặt' : 'Đã ra về'}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {subTab === 'prereg' && (
-          <div className="split-layout">
-            <div className="card">
-              <div className="card-header">
-                <div className="card-title">Đăng ký Lịch hẹn Khách trước</div>
-              </div>
-              <div className="card-body">
-                <form
-                  onSubmit={async (e) => {
-                    e.preventDefault();
-                    const { ok, data } = await apiFetch('/api/visitor/pre_register', {
-                      method: 'POST',
-                      body: JSON.stringify(preGuestForm),
-                    });
-                    if (ok && data.success) {
-                      notify(data.message, 'success');
-                      onRefreshData();
-                    } else {
-                      notify(data.error || 'Không thể lưu lịch hẹn.', 'error');
-                    }
-                  }}
-                  style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
-                >
-                  <div className="form-grid-2">
-                    <div className="field-group">
-                      <label>Họ và tên khách hẹn *</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        value={preGuestForm.GuestFullName}
-                        onChange={(e) => setPreGuestForm({ ...preGuestForm, GuestFullName: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div className="field-group">
-                      <label>Số căn cước công dân</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        value={preGuestForm.GuestCCCD}
-                        onChange={(e) => setPreGuestForm({ ...preGuestForm, GuestCCCD: e.target.value })}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="form-grid-2">
-                    <div className="field-group">
-                      <label>Số điện thoại</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        value={preGuestForm.GuestPhone}
-                        onChange={(e) => setPreGuestForm({ ...preGuestForm, GuestPhone: e.target.value })}
-                      />
-                    </div>
-                    <div className="field-group">
-                      <label>Đơn vị công tác</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        value={preGuestForm.GuestCompany}
-                        onChange={(e) => setPreGuestForm({ ...preGuestForm, GuestCompany: e.target.value })}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="form-grid-2">
-                    <div className="field-group">
-                      <label>Cán bộ bảo lãnh *</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        value={preGuestForm.HostEmployeeName}
-                        onChange={(e) => setPreGuestForm({ ...preGuestForm, HostEmployeeName: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div className="field-group">
-                      <label>Phòng ban bảo lãnh</label>
-                      <select
-                        className="form-control"
-                        value={preGuestForm.HostDepartment}
-                        onChange={(e) => setPreGuestForm({ ...preGuestForm, HostDepartment: e.target.value })}
-                      >
-                        {departments.map((d) => (
-                          <option key={d.DepartmentID} value={d.DepartmentName}>
-                            {d.DepartmentName}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="form-grid-3">
-                    <div className="field-group">
-                      <label>Ngày hẹn</label>
-                      <input
-                        type="date"
-                        className="form-control"
-                        value={preGuestForm.VisitDate}
-                        onChange={(e) => setPreGuestForm({ ...preGuestForm, VisitDate: e.target.value })}
-                      />
-                    </div>
-                    <div className="field-group">
-                      <label>Giờ bắt đầu</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        value={preGuestForm.StartTime}
-                        onChange={(e) => setPreGuestForm({ ...preGuestForm, StartTime: e.target.value })}
-                      />
-                    </div>
-                    <div className="field-group">
-                      <label>Giờ kết thúc</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        value={preGuestForm.EndTime}
-                        onChange={(e) => setPreGuestForm({ ...preGuestForm, EndTime: e.target.value })}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="field-group">
-                    <label>Nội dung làm việc</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      value={preGuestForm.Purpose}
-                      onChange={(e) => setPreGuestForm({ ...preGuestForm, Purpose: e.target.value })}
-                    />
-                  </div>
-
-                  <button type="submit" className="btn btn-primary">
-                    Lưu Lịch Hẹn Khách Trước
-                  </button>
-                </form>
-              </div>
-            </div>
-
-            <div className="card">
-              <div className="card-header">
-                <div className="card-title">Danh sách Khách đã đăng ký hẹn trước ({preGuests.length})</div>
-              </div>
-              <div className="table-scroll">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Mã lịch hẹn</th>
-                      <th>Họ và tên khách</th>
-                      <th>Đơn vị</th>
-                      <th>Cán bộ bảo lãnh</th>
-                      <th>Ngày / Khung giờ</th>
-                      <th>Thao tác</th>
+                  </th>
+                  <th style={{ width: 44 }}>#</th>
+                  <th>HỌ TÊN</th>
+                  <th>NĂM SINH</th>
+                  <th>CCCD/ PASSPORT</th>
+                  <th>THỜI GIAN VÀO</th>
+                  <th>THỜI GIAN RA</th>
+                  <th>MÃ THẺ</th>
+                </tr>
+              </thead>
+              <tbody>
+                {companions.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} style={{ textAlign: 'center', padding: 36, color: 'var(--text-muted)' }}>
+                      Không có dữ liệu
+                    </td>
+                  </tr>
+                ) : (
+                  companions.map((c, idx) => (
+                    <tr key={idx}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={selectedCompIdx.includes(idx)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedCompIdx((prev) => [...prev, idx]);
+                            } else {
+                              setSelectedCompIdx((prev) => prev.filter((i) => i !== idx));
+                            }
+                          }}
+                        />
+                      </td>
+                      <td>{idx + 1}</td>
+                      <td style={{ fontWeight: 600 }}>{c.full_name}</td>
+                      <td>{c.birth_date}</td>
+                      <td style={{ fontFamily: 'var(--font-mono)' }}>{c.cccd_number}</td>
+                      <td style={{ fontFamily: 'var(--font-mono)' }}>{c.from_time}</td>
+                      <td style={{ fontFamily: 'var(--font-mono)' }}>{c.to_time}</td>
+                      <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{c.card_number}</td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {preGuests.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>
-                          Chưa có lịch hẹn khách trước nào.
-                        </td>
-                      </tr>
-                    ) : (
-                      preGuests.map((g, i) => (
-                        <tr key={i}>
-                          <td style={{ fontFamily: 'var(--font-mono)' }}>{g.BookingCode}</td>
-                          <td style={{ fontWeight: 600 }}>{g.GuestFullName}</td>
-                          <td>{g.GuestCompany || '---'}</td>
-                          <td>{g.HostEmployeeName} ({g.HostDepartment})</td>
-                          <td style={{ fontFamily: 'var(--font-mono)' }}>{g.VisitDate} · {g.StartTime}</td>
-                          <td>
-                            <button
-                              type="button"
-                              className="btn btn-primary btn-sm"
-                              onClick={() => {
-                                setVisitorForm({
-                                  full_name: g.GuestFullName || '',
-                                  cccd_number: g.GuestCCCD || '',
-                                  phone: g.GuestPhone || '',
-                                  company: g.GuestCompany || '',
-                                  department: g.HostDepartment || 'BGĐ SeaZen',
-                                  host_person: g.HostEmployeeName || '',
-                                  purpose: g.Purpose || 'Theo lịch hẹn trước',
-                                  card_number: g.ReservedCardNumber || '',
-                                  auto_unlock: false,
-                                });
-                                setSubTab('checkin');
-                              }}
-                            >
-                              Tiếp nhận vào cổng
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
-        )}
 
-        {subTab === 'contractors' && (
-          <div className="split-layout">
-            <div className="card">
-              <div className="card-header">
-                <div className="card-title">Biểu mẫu Đăng ký Nhân sự Nhà thầu</div>
-              </div>
-              <div className="card-body">
-                <form
-                  onSubmit={async (e) => {
-                    e.preventDefault();
-                    const { ok, data } = await apiFetch('/api/visitor/contractor', {
-                      method: 'POST',
-                      body: JSON.stringify(contractorForm),
-                    });
-                    if (ok && data.success) {
-                      notify(data.message, 'success');
-                      onRefreshData();
-                    } else {
-                      notify(data.error || 'Không thể lưu hồ sơ nhà thầu.', 'error');
-                    }
-                  }}
-                  style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
-                >
-                  <div className="field-group">
-                    <label>Tên đơn vị nhà thầu thi công *</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      value={contractorForm.ContractorCompany}
-                      onChange={(e) => setContractorForm({ ...contractorForm, ContractorCompany: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div className="form-grid-2">
-                    <div className="field-group">
-                      <label>Họ và tên nhân sự thi công *</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        value={contractorForm.WorkerFullName}
-                        onChange={(e) => setContractorForm({ ...contractorForm, WorkerFullName: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div className="field-group">
-                      <label>Số căn cước công dân</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        value={contractorForm.CCCDNumber}
-                        onChange={(e) => setContractorForm({ ...contractorForm, CCCDNumber: e.target.value })}
-                      />
-                    </div>
-                  </div>
-                  <div className="form-grid-2">
-                    <div className="field-group">
-                      <label>Mã thẻ cấp phát</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        value={contractorForm.CardNumber}
-                        onChange={(e) => setContractorForm({ ...contractorForm, CardNumber: e.target.value })}
-                      />
-                    </div>
-                    <div className="field-group">
-                      <label>Khu vực làm việc</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        value={contractorForm.WorkArea}
-                        onChange={(e) => setContractorForm({ ...contractorForm, WorkArea: e.target.value })}
-                      />
-                    </div>
-                  </div>
-                  <div className="form-grid-2">
-                    <div className="field-group">
-                      <label>Hiệu lực từ ngày</label>
-                      <input
-                        type="date"
-                        className="form-control"
-                        value={contractorForm.ValidFrom}
-                        onChange={(e) => setContractorForm({ ...contractorForm, ValidFrom: e.target.value })}
-                      />
-                    </div>
-                    <div className="field-group">
-                      <label>Hiệu lực đến ngày</label>
-                      <input
-                        type="date"
-                        className="form-control"
-                        value={contractorForm.ValidTo}
-                        onChange={(e) => setContractorForm({ ...contractorForm, ValidTo: e.target.value })}
-                      />
-                    </div>
-                  </div>
-                  <button type="submit" className="btn btn-primary">
-                    Lưu Hồ Sơ Nhà Thầu
-                  </button>
-                </form>
-              </div>
-            </div>
-
-            <div className="card">
-              <div className="card-header">
-                <div className="card-title">Danh sách Nhân sự Nhà thầu ({contractors.length})</div>
-              </div>
-              <div className="table-scroll">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Mã hồ sơ</th>
-                      <th>Đơn vị nhà thầu</th>
-                      <th>Họ tên nhân sự</th>
-                      <th>Số căn cước</th>
-                      <th>Mã thẻ</th>
-                      <th>Khu vực</th>
-                      <th>Thời hạn</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {contractors.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>
-                          Chưa có hồ sơ nhà thầu thi công nào.
-                        </td>
-                      </tr>
-                    ) : (
-                      contractors.map((c, i) => (
-                        <tr key={i}>
-                          <td style={{ fontFamily: 'var(--font-mono)' }}>{c.ContractorCode}</td>
-                          <td>{c.ContractorCompany}</td>
-                          <td style={{ fontWeight: 600 }}>{c.WorkerFullName}</td>
-                          <td style={{ fontFamily: 'var(--font-mono)' }}>{c.CCCDNumber}</td>
-                          <td style={{ fontFamily: 'var(--font-mono)' }}>{c.CardNumber}</td>
-                          <td>{c.WorkArea}</td>
-                          <td style={{ fontFamily: 'var(--font-mono)' }}>{c.ValidFrom} → {c.ValidTo}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+          {/* Nút Hủy bỏ & Đồng ý góc dưới phải */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18 }}>
+            <button type="button" className="btn" onClick={handleResetForm}>
+              Hủy bỏ
+            </button>
+            <button type="submit" className="btn-qr-navy" style={{ padding: '0 26px', height: 36 }}>
+              Đồng ý
+            </button>
           </div>
-        )}
+        </div>
+      </form>
 
-        {subTab === 'cards' && (
-          <div className="split-layout">
-            <div className="card">
-              <div className="card-header">
-                <div className="card-title">Khai báo Thẻ mới vào Kho thẻ</div>
-              </div>
-              <div className="card-body">
-                <form
-                  onSubmit={async (e) => {
-                    e.preventDefault();
-                    const { ok, data } = await apiFetch('/api/visitor/card', {
-                      method: 'POST',
-                      body: JSON.stringify(cardForm),
-                    });
-                    if (ok && data.success) {
-                      notify(data.message, 'success');
-                      setCardForm({ CardCode: '', CardNumber: '', CardType: 'VISITOR', Status: 'AVAILABLE', Notes: '' });
-                      onRefreshData();
-                    } else {
-                      notify(data.error || 'Không thể lưu thẻ.', 'error');
-                    }
-                  }}
-                  style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
-                >
-                  <div className="form-grid-2">
-                    <div className="field-group">
-                      <label>Mã định danh thẻ</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        value={cardForm.CardCode}
-                        onChange={(e) => setCardForm({ ...cardForm, CardCode: e.target.value })}
-                        placeholder="Ví dụ: THE-KHACH-01"
-                      />
-                    </div>
-                    <div className="field-group">
-                      <label>Số thẻ từ *</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        value={cardForm.CardNumber}
-                        onChange={(e) => setCardForm({ ...cardForm, CardNumber: e.target.value })}
-                        placeholder="Quẹt thẻ lên đầu đọc..."
-                        required
-                      />
-                    </div>
-                  </div>
-                  <div className="form-grid-2">
-                    <div className="field-group">
-                      <label>Nhóm thẻ</label>
-                      <select
-                        className="form-control"
-                        value={cardForm.CardType}
-                        onChange={(e) => setCardForm({ ...cardForm, CardType: e.target.value })}
+      {/* DANH SÁCH KHÁCH ĐANG LÀM VIỆC & TRẢ THẺ NHANH */}
+      <div className="card" style={{ marginTop: 22 }}>
+        <div className="card-header">
+          <div className="card-title">
+            Khách đang làm việc trong tòa nhà ({activeVisitors.length}) & Thu hồi thẻ nhanh
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              type="text"
+              className="v-input"
+              style={{ width: 260 }}
+              value={checkoutQuery}
+              onChange={(e) => setCheckoutQuery(e.target.value)}
+              placeholder="Quẹt thẻ trả lại hoặc quét QR CCCD..."
+            />
+            <button type="button" className="btn btn-gold" onClick={() => handleFastCheckout()}>
+              Trả thẻ & Check-out
+            </button>
+          </div>
+        </div>
+
+        <div className="table-scroll" style={{ maxHeight: 280 }}>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Mã định danh (SharePoint ID)</th>
+                <th>Họ tên khách</th>
+                <th>CMND/CCCD</th>
+                <th>Mã thẻ NFC</th>
+                <th>Phòng ban / Người liên hệ</th>
+                <th>Giờ vào</th>
+                <th>Thao tác</th>
+              </tr>
+            </thead>
+            <tbody>
+              {activeVisitors.length === 0 ? (
+                <tr>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>
+                    Hiện không có khách nào đang giữ thẻ trong tòa nhà.
+                  </td>
+                </tr>
+              ) : (
+                activeVisitors.map((v) => (
+                  <tr key={v.id}>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{v.id}</td>
+                    <td style={{ fontWeight: 700 }}>{v.full_name}</td>
+                    <td style={{ fontFamily: 'var(--font-mono)' }}>{v.cccd_number}</td>
+                    <td>
+                      <span className="badge badge-gold">{v.card_number || 'Không thẻ'}</span>
+                    </td>
+                    <td>{v.department} · {v.host_person}</td>
+                    <td style={{ fontFamily: 'var(--font-mono)' }}>{v.checkin_time}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        onClick={() => handleFastCheckout(v.id)}
                       >
-                        <option value="VISITOR">Thẻ Khách liên hệ</option>
-                        <option value="CONTRACTOR">Thẻ Nhà thầu</option>
-                        <option value="VIP">Thẻ Khách ưu tiên</option>
-                      </select>
-                    </div>
-                    <div className="field-group">
-                      <label>Trạng thái thẻ</label>
-                      <select
-                        className="form-control"
-                        value={cardForm.Status}
-                        onChange={(e) => setCardForm({ ...cardForm, Status: e.target.value })}
-                      >
-                        <option value="AVAILABLE">Sẵn sàng cấp phát</option>
-                        <option value="ASSIGNED">Đang cấp cho khách</option>
-                        <option value="LOCKED">Tạm khóa</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div className="field-group">
-                    <label>Ghi chú</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      value={cardForm.Notes}
-                      onChange={(e) => setCardForm({ ...cardForm, Notes: e.target.value })}
-                    />
-                  </div>
-                  <button type="submit" className="btn btn-primary">
-                    Lưu Vào Kho Thẻ
-                  </button>
-                </form>
-              </div>
-            </div>
-
-            <div className="card">
-              <div className="card-header">
-                <div className="card-title">Danh mục Thẻ Khách & Nhà thầu ({customerCards.length})</div>
-              </div>
-              <div className="table-scroll">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Mã định danh thẻ</th>
-                      <th>Số thẻ từ</th>
-                      <th>Nhóm thẻ</th>
-                      <th>Trạng thái</th>
-                      <th>Ghi chú</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {customerCards.map((c, idx) => (
-                      <tr key={idx}>
-                        <td style={{ fontWeight: 600 }}>{c.CardCode}</td>
-                        <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--primary)' }}>
-                          {c.CardNumber}
-                        </td>
-                        <td>{c.CardType === 'CONTRACTOR' ? 'Nhà thầu' : 'Khách liên hệ'}</td>
-                        <td>
-                          <span className={`badge ${c.Status === 'AVAILABLE' ? 'badge-green' : 'badge-amber'}`}>
-                            {c.Status === 'AVAILABLE' ? 'Sẵn sàng' : 'Đang sử dụng'}
-                          </span>
-                        </td>
-                        <td>{c.Notes}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
+                        Thu hồi thẻ
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
-    </>
+    </div>
   );
 }

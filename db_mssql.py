@@ -355,10 +355,102 @@ def insert_attendance_logs_bulk(scans: List[Dict[str, Any]]) -> int:
                 ))
                 if cursor.rowcount > 0:
                     inserted += 1
+                    # Also upsert daily timekeeping summary row for staff
+                    if is_staff:
+                        try:
+                            work_date = dt_obj.date()
+                            cursor.execute("""
+                                IF NOT EXISTS (
+                                    SELECT 1 FROM tbl_DailyTimekeeping
+                                    WHERE WorkDate = ? AND EmployeeATID = ?
+                                )
+                                BEGIN
+                                    INSERT INTO tbl_DailyTimekeeping (
+                                        WorkDate, EmployeeATID, EmployeeCode, FullName, DepartmentName,
+                                        ShiftCode, FirstInTime, LastOutTime, TotalScans, LateMinutes, EarlyLeaveMinutes, TotalHours, AttendanceStatus
+                                    ) VALUES (
+                                        ?, ?, ?, ?, ?, 'HC_0800_1730', ?, NULL, 1,
+                                        CASE WHEN (? * 60 + ?) > (8 * 60 + 5) THEN (? * 60 + ?) - (8 * 60) ELSE 0 END,
+                                        0, 0,
+                                        CASE WHEN (? * 60 + ?) > (8 * 60 + 5) THEN 'LATE' ELSE 'MISSING_OUT' END
+                                    )
+                                END
+                                ELSE
+                                BEGIN
+                                    UPDATE tbl_DailyTimekeeping
+                                    SET FirstInTime = CASE WHEN ? < FirstInTime THEN ? ELSE FirstInTime END,
+                                        LastOutTime = CASE WHEN ? > FirstInTime THEN ? ELSE LastOutTime END,
+                                        TotalScans = TotalScans + 1,
+                                        TotalHours = CASE
+                                            WHEN ? > FirstInTime THEN ROUND(CAST(DATEDIFF(MINUTE, FirstInTime, ?) AS FLOAT) / 60.0, 2)
+                                            ELSE TotalHours
+                                        END,
+                                        AttendanceStatus = CASE
+                                            WHEN LateMinutes > 0 THEN 'LATE'
+                                            WHEN ? > FirstInTime THEN 'PRESENT'
+                                            ELSE AttendanceStatus
+                                        END,
+                                        UpdatedAt = GETDATE()
+                                    WHERE WorkDate = ? AND EmployeeATID = ?
+                                END
+                            """, (
+                                work_date, atid,
+                                work_date, atid, atid, full_name or f"Nhân sự {atid}", dept or "Nhân sự SeaZen", dt_obj,
+                                dt_obj.hour, dt_obj.minute, dt_obj.hour, dt_obj.minute,
+                                dt_obj.hour, dt_obj.minute,
+                                dt_obj, dt_obj, dt_obj, dt_obj, dt_obj, dt_obj, dt_obj,
+                                work_date, atid
+                            ))
+                        except Exception as tk_err:
+                            logger.debug("DailyTimekeeping upsert warning: %s", tk_err)
             conn.commit()
     except Exception as e:
         logger.error("MSSQL insert_attendance_logs_bulk error: %s", e)
     return inserted
+
+
+def get_attendance_logs_by_date_db(date_str: str, limit: int = 1000) -> List[Dict[str, Any]]:
+    """Fetches attendance logs for a specific YYYY-MM-DD date from tbl_AttendanceLogs."""
+    if not is_mssql_active():
+        return []
+    try:
+        conn_str = get_connection_string()
+        with pyodbc.connect(conn_str, timeout=4) as conn:
+            cursor = conn.cursor()
+            cursor.execute(f"""
+                SELECT TOP ({int(limit)})
+                    EmployeeATID, FullName, Department, DeviceSerialNumber, DeviceName,
+                    CheckTime, VerifyMode, VerifyModeValue, InOutMode, IsStaff, SyncSource
+                FROM tbl_AttendanceLogs
+                WHERE CAST(CheckTime AS DATE) = ?
+                ORDER BY CheckTime DESC
+            """, (date_str,))
+            cols = [c[0] for c in cursor.description]
+            out = []
+            for row in cursor.fetchall():
+                d = dict(zip(cols, row))
+                chk = d["CheckTime"].strftime("%Y-%m-%d %H:%M:%S") if d.get("CheckTime") else ""
+                dev_name = str(d.get("DeviceName") or "")
+                out.append({
+                    "EmployeeATID": str(d.get("EmployeeATID") or ""),
+                    "FullName": str(d.get("FullName") or ""),
+                    "Department": str(d.get("Department") or ""),
+                    "SerialNumber": str(d.get("DeviceSerialNumber") or ""),
+                    "DeviceSerialNumber": str(d.get("DeviceSerialNumber") or ""),
+                    "DeviceName": dev_name,
+                    "Direction": "IN" if "vào" in dev_name.lower() else "OUT",
+                    "CheckTime": chk,
+                    "Time": chk,
+                    "VerifyMode": str(d.get("VerifyMode") or "FaceTemplate"),
+                    "VerifyModeValue": d.get("VerifyModeValue"),
+                    "InOutMode": d.get("InOutMode", 0),
+                    "is_staff": bool(d.get("IsStaff", True)),
+                    "SyncSource": str(d.get("SyncSource") or "DIRECT_TCP")
+                })
+            return out
+    except Exception as e:
+        logger.debug("MSSQL get_attendance_logs_by_date_db error: %s", e)
+        return []
 
 
 def insert_door_action(action: Dict[str, Any]) -> bool:

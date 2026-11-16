@@ -730,3 +730,288 @@ def sync_table_to_sharepoint(sql_table: str, max_rows: int = 200) -> Dict[str, A
         "inserted": inserted,
         "updated": updated
     }
+
+
+# ==============================================================================
+# REAL-TIME 2-WAY SHAREPOINT LIVE CRUD, VISITOR NFC BRIDGE (80000000 + ID)
+# & BIOMETRIC ATTACHMENT ENGINE (OAuth2 Bearer Token - No Cookies)
+# ==============================================================================
+
+import base64
+import re
+import threading
+
+_SP_KNOWN_LIST_IDS = {
+    "tbl_Departments": "37bbb8fb-c962-43cc-927e-d7c5aa027362",
+    "tbl_Employees": "fcdea7f0-6785-4cd8-8a7f-8822a1972b90",
+    "tbl_EmployeeBiometrics": "f5dd0c2a-da81-4250-9019-ae2fc06bfb9f",
+    "tbl_Doors": "9ef2e4c9-c41c-4e49-9f72-142287008787",
+    "tbl_Devices": "239097a0-2c2c-456c-9580-11503b404aa6",
+    "tbl_AccessTimezones": "9dd2d910-3ddf-4588-9446-9e91928cd5d0",
+    "tbl_AccessGroups": "b97f07c2-4145-4ea9-87f1-d80b3f767b8a",
+    "tbl_DepartmentAccessGroups": "77ba54f6-46e6-4e5a-8673-39eb8f583cc2",
+    "tbl_CustomerCards": "dd8e8041-bdda-490b-9732-3315051d6dd6",
+    "tbl_Visitors": "51807cfc-481d-4dae-bd82-baa7a3e1541a",
+    "tbl_PreRegisteredGuests": "48365c09-63d8-4673-ade1-f91bf548c45a",
+    "tbl_Contractors": "8c299f2e-f043-43f3-8df8-cbfb387959f1",
+    "tbl_AttendanceLogs": "946c43f2-394e-4d14-a6dd-973f516e5dfa",
+    "tbl_Shifts": "1be3e7b8-a265-4081-8aff-00e1d3c3a231",
+    "tbl_DailyTimekeeping": "f0146c4f-5ef7-40b7-aa42-379337b20e64",
+    "tbl_DeviceCommands": "95bfcbe2-17ca-4a9c-8910-af8775ab0f84",
+    "tbl_DoorAuditLogs": "b3021bb3-bf0e-4c8b-9a39-41801a573f44",
+    "tbl_ClockSyncAuditLogs": "08a63f38-f2af-4f03-bb26-676f7a1a24c3",
+}
+
+
+def sanitize_sp_attachment_name(filename: str) -> str:
+    """Clean attachment filename per sharepoint-attachments.md standard."""
+    cleaned = re.sub(r'[~"#%&*:<>?/\\{|}]', '_', str(filename or "file.bin").strip())
+    cleaned = re.sub(r'\s+', '_', cleaned)[:115]
+    return cleaned.replace("'", "''")
+
+
+def _get_sp_write_headers(sp_token: str) -> Dict[str, str]:
+    ctx_resp = requests.post(
+        f"{SP_SITE_URL}/_api/contextinfo",
+        headers={"Authorization": f"Bearer {sp_token}", "Accept": "application/json;odata=nometadata"},
+        timeout=8
+    )
+    digest = ctx_resp.json().get("FormDigestValue", "") if ctx_resp.status_code == 200 else ""
+    return {
+        "Authorization": f"Bearer {sp_token}",
+        "Accept": "application/json;odata=nometadata",
+        "Content-Type": "application/json;odata=nometadata",
+        "X-RequestDigest": digest,
+    }
+
+
+def create_visitor_on_sharepoint_and_get_bridged_atid(visitor_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Creates a new item in SharePoint List 'VMS SEAZEN - KHÁCH RA VÀO',
+    obtains its SharePoint Item ID (Id), computes the bridged ZKTeco user_id = 80000000 + Id,
+    and updates MaHoSoKhach on SharePoint so the 4 ZKTeco terminals and SharePoint share the exact 1-to-1 key.
+    """
+    tok_info = get_sharepoint_tokens()
+    if not tok_info.get("ok"):
+        return {"ok": False, "error": tok_info.get("error")}
+
+    sp_token = tok_info["sp_token"]
+    list_id = _SP_KNOWN_LIST_IDS["tbl_Visitors"]
+    headers_write = _get_sp_write_headers(sp_token)
+
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    payload = {
+        "Title": str(visitor_data.get("id") or "PENDING"),
+        "MaHoSoKhach": str(visitor_data.get("id") or "PENDING"),
+        "HoVaTenKhach": str(visitor_data.get("full_name") or "Khách")[:250],
+        "SoCCCD": str(visitor_data.get("cccd_number") or "")[:100],
+        "SoTheRFID": str(visitor_data.get("card_number") or "")[:100],
+        "SoDienThoai": str(visitor_data.get("phone") or "")[:100],
+        "DonViCongTac": str(visitor_data.get("company") or "")[:250],
+        "PhongBanLienHe": str(visitor_data.get("department") or "")[:250],
+        "NguoiTiepDon": str(visitor_data.get("host_person") or "")[:250],
+        "MucDich": str(visitor_data.get("purpose") or "")[:1000],
+        "GioVao": str(visitor_data.get("checkin_time") or now_str),
+        "TrangThai": "ACTIVE",
+        "NhanVienTiepDon": str(visitor_data.get("operator") or "Lễ tân")[:200],
+    }
+
+    try:
+        r = requests.post(
+            f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items",
+            headers=headers_write,
+            json=payload,
+            timeout=8
+        )
+        if r.status_code in (200, 201):
+            sp_item = r.json()
+            sp_id = int(sp_item.get("Id") or sp_item.get("ID") or 0)
+            bridged_atid = str(80000000 + sp_id)
+            # Update Title & MaHoSoKhach on SharePoint to match bridged_atid (80000000 + sp_id)
+            requests.post(
+                f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items({sp_id})",
+                headers={**headers_write, "X-HTTP-Method": "MERGE", "If-Match": "*"},
+                json={"Title": bridged_atid, "MaHoSoKhach": bridged_atid},
+                timeout=6
+            )
+            return {"ok": True, "sp_item_id": sp_id, "bridged_atid": bridged_atid}
+    except Exception as e:
+        logger.debug("create_visitor_on_sharepoint warning: %s", e)
+
+    return {"ok": False}
+
+
+def checkout_visitor_on_sharepoint_async(visitor_record: Dict[str, Any]) -> None:
+    """Marks the visitor item as CHECKED_OUT on SharePoint List 'VMS SEAZEN - KHÁCH RA VÀO'."""
+    def _worker():
+        try:
+            tok_info = get_sharepoint_tokens()
+            if not tok_info.get("ok"):
+                return
+            sp_token = tok_info["sp_token"]
+            list_id = _SP_KNOWN_LIST_IDS["tbl_Visitors"]
+            headers_read = {"Authorization": f"Bearer {sp_token}", "Accept": "application/json;odata=nometadata"}
+            headers_write = _get_sp_write_headers(sp_token)
+
+            atid = str(visitor_record.get("epad_atid") or visitor_record.get("id") or "").strip()
+            sp_id = visitor_record.get("sp_item_id")
+            if not sp_id and atid.isdigit() and int(atid) > 80000000:
+                sp_id = int(atid) - 80000000
+
+            if not sp_id:
+                r = requests.get(
+                    f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items?$select=Id,Title,MaHoSoKhach,SoTheRFID&$top=500",
+                    headers=headers_read,
+                    timeout=8
+                )
+                if r.status_code == 200:
+                    for it in r.json().get("value", []):
+                        if it.get("Title") == atid or it.get("MaHoSoKhach") == atid or (
+                            visitor_record.get("card_number") and it.get("SoTheRFID") == visitor_record.get("card_number")
+                        ):
+                            sp_id = it.get("Id")
+                            break
+
+            if sp_id:
+                requests.post(
+                    f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items({sp_id})",
+                    headers={**headers_write, "X-HTTP-Method": "MERGE", "If-Match": "*"},
+                    json={
+                        "TrangThai": "CHECKED_OUT",
+                        "GioRa": str(visitor_record.get("checkout_time") or datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+                    },
+                    timeout=8
+                )
+        except Exception as e:
+            logger.debug("checkout_visitor_on_sharepoint_async warning: %s", e)
+
+    threading.Thread(target=_worker, daemon=True).start()
+
+
+def push_live_scans_to_sharepoint_async(scans: List[Dict[str, Any]]) -> None:
+    """
+    Asynchronously pushes real-time captured scans (from TCP 4370 live_capture)
+    to SharePoint List 'VMS SEAZEN - NHẬT KÝ QUẸT THẺ' without blocking hardware threads.
+    """
+    if not scans:
+        return
+
+    def _worker():
+        try:
+            tok_info = get_sharepoint_tokens()
+            if not tok_info.get("ok"):
+                return
+            sp_token = tok_info["sp_token"]
+            list_id = _SP_KNOWN_LIST_IDS["tbl_AttendanceLogs"]
+            headers_write = _get_sp_write_headers(sp_token)
+
+            for sc in scans[:10]:
+                atid = str(sc.get("EmployeeATID") or "").strip()
+                if not atid:
+                    continue
+                payload = {
+                    "Title": atid[:250],
+                    "MaChamCongATID": atid[:250],
+                    "HoVaTen": str(sc.get("FullName") or "")[:250],
+                    "PhongBan": str(sc.get("Department") or "")[:250],
+                    "SerialThietBi": str(sc.get("SerialNumber") or sc.get("DeviceSerialNumber") or "")[:100],
+                    "TenThietBiCua": str(sc.get("DeviceName") or "")[:200],
+                    "ThoiGianQuet": str(sc.get("CheckTime") or ""),
+                    "PhuongThucXacThuc": str(sc.get("VerifyMode") or "FaceTemplate")[:100],
+                    "LaNhanVien": bool(sc.get("is_staff", True)),
+                    "NguonDongBo": str(sc.get("SyncSource") or "LIVE_REG_EVENT")[:100],
+                }
+                requests.post(
+                    f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items",
+                    headers=headers_write,
+                    json=payload,
+                    timeout=8
+                )
+        except Exception as e:
+            logger.debug("push_live_scans_to_sharepoint_async warning: %s", e)
+
+    threading.Thread(target=_worker, daemon=True).start()
+
+
+def upload_biometric_attachment_to_sharepoint_async(
+    employee_atid: str,
+    face_photo_b64: Optional[str] = None,
+    face_biodata: Optional[str] = None
+) -> None:
+    """
+    Syncs biometric status and uploads portrait photo (.jpg) / face vector (.biodata)
+    directly to SharePoint List 'VMS SEAZEN - SINH TRẮC HỌC' AttachmentFiles using OAuth2 Bearer Token.
+    """
+    def _worker():
+        try:
+            tok_info = get_sharepoint_tokens()
+            if not tok_info.get("ok"):
+                return
+            sp_token = tok_info["sp_token"]
+            list_id = _SP_KNOWN_LIST_IDS["tbl_EmployeeBiometrics"]
+            headers_read = {"Authorization": f"Bearer {sp_token}", "Accept": "application/json;odata=nometadata"}
+            headers_write = _get_sp_write_headers(sp_token)
+            digest = headers_write.get("X-RequestDigest", "")
+
+            # Find or create item for employee_atid
+            r = requests.get(
+                f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items?$select=Id,Title&$filter=Title eq '{employee_atid}'",
+                headers=headers_read,
+                timeout=8
+            )
+            sp_item_id = None
+            if r.status_code == 200 and r.json().get("value"):
+                sp_item_id = r.json()["value"][0]["Id"]
+            else:
+                cr = requests.post(
+                    f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items",
+                    headers=headers_write,
+                    json={
+                        "Title": employee_atid,
+                        "MaChamCongATID": employee_atid,
+                        "DaCoKhuonMat": True,
+                        "PhienBanThuatToan": "ZKTeco_VisibleLight_v58.12",
+                        "LanDongBoCuoi": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    },
+                    timeout=8
+                )
+                if cr.status_code in (200, 201):
+                    sp_item_id = cr.json().get("Id")
+
+            if not sp_item_id:
+                return
+
+            if face_photo_b64:
+                raw_b64 = face_photo_b64.split(",", 1)[1] if "," in face_photo_b64 else face_photo_b64
+                raw_bytes = base64.b64decode(raw_b64)
+                safe_name = sanitize_sp_attachment_name(f"portrait_{employee_atid}.jpg")
+                requests.post(
+                    f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items({sp_item_id})/AttachmentFiles/add(FileName='{safe_name}')",
+                    headers={
+                        "Authorization": f"Bearer {sp_token}",
+                        "X-RequestDigest": digest,
+                        "Content-Type": "application/octet-stream",
+                        "Accept": "application/json;odata=verbose"
+                    },
+                    data=raw_bytes,
+                    timeout=12
+                )
+
+            if face_biodata:
+                raw_bytes = face_biodata.encode("utf-8")
+                safe_name = sanitize_sp_attachment_name(f"face_v2_{employee_atid}.biodata")
+                requests.post(
+                    f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items({sp_item_id})/AttachmentFiles/add(FileName='{safe_name}')",
+                    headers={
+                        "Authorization": f"Bearer {sp_token}",
+                        "X-RequestDigest": digest,
+                        "Content-Type": "application/octet-stream",
+                        "Accept": "application/json;odata=verbose"
+                    },
+                    data=raw_bytes,
+                    timeout=12
+                )
+        except Exception as e:
+            logger.debug("upload_biometric_attachment_to_sharepoint_async warning: %s", e)
+
+    threading.Thread(target=_worker, daemon=True).start()

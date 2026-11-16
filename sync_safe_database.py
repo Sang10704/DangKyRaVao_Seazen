@@ -429,7 +429,6 @@ def run_all_safe_sync() -> dict:
     run_safe_schema_upgrade()
     conn_str = db_mssql.get_connection_string()
     with pyodbc.connect(conn_str, timeout=15) as conn:
-        epad_res = sync_from_epad_stateless_api(conn)
         zk_res = sync_from_zk_hardware_readonly(conn)
         seed_operational_tables_if_empty(conn)
 
@@ -446,7 +445,7 @@ def run_all_safe_sync() -> dict:
 
     return {
         "success": True,
-        "epad_stateless_sync": epad_res,
+        "mode": "DIRECT_ZKTECO_TCP4370_ONLY (Zero ePAD API)",
         "zk_hardware_readonly_sync": zk_res,
         "table_counts": table_counts
     }

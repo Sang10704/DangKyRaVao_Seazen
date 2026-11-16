@@ -167,25 +167,30 @@ def auth_me():
 def _background_scan_collector():
     """
     Continuous 24/7 Background Harvester:
-    1. Direct TCP communication (Port 4370) with all 4 ZKTeco SenseFace 4A terminals.
-    2. Zero-lock snappy polling (connects, reads recent logs, disconnects immediately).
-    3. Incremental backfill: compares with latest scan in DB/cache so no punch is ever dropped.
-    4. Automatically writes to both Microsoft SQL Server tbl_AttendanceLogs and daily_scans.json cache.
-    5. Periodically synchronizes terminal clocks to ensure 100% timestamp accuracy.
-    6. Operates 100% independently from ePAD without kicking reception sessions.
+    1. Starts 4 persistent TCP 4370 Real-Time Event Listeners (CMD_REG_EVENT: EF_ATTLOG | EF_VERIFY)
+       to capture every face/card scan on ZKTeco SenseFace 4A in <50ms (even in push-ac mode).
+    2. Fallback periodic check of static AttLog buffer every 15s.
+    3. Writes immediately to both Microsoft SQL Server (tbl_AttendanceLogs + tbl_DailyTimekeeping)
+       and daily_scans.json cache.
+    4. Operates 100% independently from ePAD (zero ePAD API calls).
     """
-    logger.info("[Harvester Daemon] Khởi động luồng thu thập dữ liệu phần cứng 24/7 từ 4 máy ZKTeco SenseFace...")
+    logger.info("[Harvester Daemon] Khởi động luồng bắt sự kiện trực tiếp 24/7 (TCP 4370 reg_event) từ 4 máy ZKTeco SenseFace...")
 
-    # 1. Initial Clock Sync & Startup Backfill
+    # 1. Start persistent real-time event listeners on all 4 ZKTeco terminals
+    try:
+        zk_client.start_live_event_listeners(storage.merge_and_save_scans)
+    except Exception as ex:
+        logger.warning("[Harvester Daemon] Lỗi khởi tạo live event listeners: %s", ex)
+
+    # 2. Initial Read-Only Clock Audit & Startup Backfill
     try:
         time_sync_res = zk_client.sync_all_device_clocks()
-        logger.info("[Harvester Daemon] Đồng bộ giờ ban đầu 4 thiết bị: %s", time_sync_res)
+        logger.info("[Harvester Daemon] Đối soát giờ ban đầu 4 thiết bị: %s", time_sync_res.get("mode"))
     except Exception as ex:
-        logger.warning("[Harvester Daemon] Lỗi đồng bộ giờ ban đầu: %s", ex)
+        logger.warning("[Harvester Daemon] Lỗi đối soát giờ ban đầu: %s", ex)
 
-    # 2. Startup Backfill from Terminals
     try:
-        startup_logs = zk_client.harvest_new_attendance_records(per_device_limit=150)
+        startup_logs = zk_client.harvest_new_attendance_records(per_device_limit=200)
         if startup_logs:
             storage.merge_and_save_scans(startup_logs)
             logger.info("[Harvester Daemon] Đồng bộ ban đầu: Đã nạp %d lượt quét từ 4 máy vào hệ thống", len(startup_logs))
@@ -194,29 +199,25 @@ def _background_scan_collector():
 
     last_clock_sync = time.time()
 
-    # 3. Main Snappy Polling Loop
+    # 3. Fallback Periodic Check Loop (15s interval)
     while True:
         try:
-            # Periodic Clock Synchronization (Every 1 hour)
             now_ts = time.time()
             if now_ts - last_clock_sync > 3600:
                 try:
                     zk_client.sync_all_device_clocks()
                     last_clock_sync = now_ts
                 except Exception as ex:
-                    logger.debug("[Harvester Daemon] Clock sync cycle warning: %s", ex)
+                    logger.debug("[Harvester Daemon] Clock audit cycle warning: %s", ex)
 
-            # Harvest new scans from 4 terminals
-            latest_time = storage.get_latest_scan_time()
-            recent_scans = zk_client.harvest_new_attendance_records(since_time=latest_time, per_device_limit=50)
-
+            recent_scans = zk_client.harvest_new_attendance_records(per_device_limit=50)
             if recent_scans:
                 storage.merge_and_save_scans(recent_scans)
 
         except Exception as e:
             logger.debug("[Harvester Daemon] Cycle warning: %s", e)
 
-        time.sleep(4)
+        time.sleep(15)
 
 threading.Thread(target=_background_scan_collector, daemon=True, name="ZkHardwareHarvester").start()
 
@@ -629,19 +630,32 @@ def register_visitor():
                     "conflict_visitor": item
                 }), 400
 
-    # 1. Register customer & sync permissions to door devices
+    # 1. Create SharePoint Item in 'VMS SEAZEN - KHÁCH RA VÀO' to get 1-to-1 bridged ATID (80000000 + SharePoint Item ID)
+    try:
+        import sharepoint_vms_sync
+        sp_vis = sharepoint_vms_sync.create_visitor_on_sharepoint_and_get_bridged_atid(data)
+        if sp_vis.get("ok"):
+            data["sp_item_id"] = sp_vis["sp_item_id"]
+            data["epad_atid"] = sp_vis["bridged_atid"]
+            data["id"] = sp_vis["bridged_atid"]
+    except Exception as sp_ex:
+        logger.debug("SharePoint visitor bridge fallback: %s", sp_ex)
+
+    # 2. Register customer & sync permissions to door devices
     epad_sync_info = "Không dùng ePAD (Chế độ nạp phần cứng trực tiếp)"
     epad_sync_ok = True
-    epad_atid = None
+    epad_atid = data.get("epad_atid")
     if card_number:
         if not EPAD_ENABLED:
-            # Direct hardware enrollment to 4 ZKTeco terminals
+            # Direct hardware enrollment to 4 ZKTeco terminals (using bridged 80000000 + SharePoint ID)
             direct_res = zk_client.enroll_visitor_card(data)
             if direct_res.get("success"):
                 epad_sync_ok = True
                 epad_atid = direct_res.get("employee_atid")
-                epad_sync_info = f"ĐÃ NẠP THẺ VÀO 4 MÁY CỬA TRỰC TIẾP (Mã khách: {epad_atid}, Phân quyền Làn Vào/Ra: 2,1)"
+                epad_sync_info = f"ĐÃ NẠP THẺ VÀO 4 MÁY CỬA TRỰC TIẾP (Mã định danh: {epad_atid}, Phân quyền Làn Vào/Ra: 2,1)"
                 data["epad_atid"] = epad_atid
+                if not data.get("id"):
+                    data["id"] = epad_atid
             else:
                 epad_sync_ok = False
                 epad_sync_info = f"Lỗi nạp thẻ phần cứng: {direct_res.get('error')}"
@@ -698,7 +712,50 @@ def register_visitor():
     print(f"    * Hệ thống Cửa  : {epad_sync_info}", flush=True)
     print("=" * 76 + "\n", flush=True)
 
-    # 4. Optional auto unlock (default False)
+    # 4. Process accompanying visitors (Thông tin nhân sự đi cùng) if provided
+    companions = data.get("companions") or []
+    companion_records = []
+    if isinstance(companions, list):
+        for comp in companions:
+            c_name = str(comp.get("full_name") or "").strip()
+            c_cccd = str(comp.get("cccd_number") or "").strip()
+            c_card = str(comp.get("card_number") or "").strip()
+            if not c_name and not c_cccd:
+                continue
+            comp_payload = {
+                "full_name": c_name,
+                "cccd_number": c_cccd,
+                "birth_date": comp.get("birth_date") or "",
+                "card_number": c_card.lstrip("0") if c_card.isdigit() else c_card,
+                "company": data.get("company") or "",
+                "department": data.get("department") or "",
+                "host_person": data.get("host_person") or "",
+                "purpose": f"Đi cùng đoàn: {full_name} - {data.get('purpose') or ''}".strip(" -"),
+                "operator": data.get("operator") or "Lễ tân",
+                "expected_checkout_time": comp.get("to_time") or data.get("expected_checkout_time")
+            }
+            try:
+                import sharepoint_vms_sync
+                sp_c = sharepoint_vms_sync.create_visitor_on_sharepoint_and_get_bridged_atid(comp_payload)
+                if sp_c.get("ok"):
+                    comp_payload["sp_item_id"] = sp_c["sp_item_id"]
+                    comp_payload["epad_atid"] = sp_c["bridged_atid"]
+                    comp_payload["id"] = sp_c["bridged_atid"]
+            except Exception:
+                pass
+            if comp_payload.get("card_number") and not EPAD_ENABLED:
+                c_hw = zk_client.enroll_visitor_card(comp_payload)
+                if c_hw.get("success"):
+                    comp_payload["epad_atid"] = c_hw.get("employee_atid")
+                    if not comp_payload.get("id"):
+                        comp_payload["id"] = c_hw.get("employee_atid")
+            try:
+                c_rec = storage.add_visitor(comp_payload)
+                companion_records.append(c_rec)
+            except Exception as ce:
+                logger.warning("Companion registration warning: %s", ce)
+
+    # 5. Optional auto unlock (default False)
     auto_unlock = data.get("auto_unlock", False)
     if auto_unlock:
         zk_client.unlock_door(door_id=1, auto_off_seconds=1)
@@ -711,15 +768,17 @@ def register_visitor():
             success=True
         )
 
+    extra_comp_msg = f" (kèm {len(companion_records)} nhân sự đi cùng)" if companion_records else ""
     resp_msg = (
-        f"Đã đăng ký thành công cho khách {full_name or cccd_num}. Đã lưu CSDL & đồng bộ thiết bị cửa."
+        f"Đã đăng ký thành công cho khách {full_name or cccd_num}{extra_comp_msg}. Đã lưu hệ thống & đồng bộ thiết bị cửa."
         if epad_sync_ok or not card_number
-        else f"Đã lưu CSDL cho khách {full_name or cccd_num} nhưng {epad_sync_info}."
+        else f"Đã lưu hồ sơ cho khách {full_name or cccd_num}{extra_comp_msg} nhưng {epad_sync_info}."
     )
 
     return jsonify({
         "success": True,
         "visitor": record,
+        "companions": companion_records,
         "epad_sync": epad_sync_info,
         "epad_sync_ok": epad_sync_ok,
         "message": resp_msg
@@ -765,6 +824,13 @@ def fast_checkout():
                 epad_return_msg = f"Đã thu hồi thẻ {target_card} trên ePAD thành công" if ret_res.get("success") else f"Lỗi thu hồi thẻ: {ret_res.get('error')}"
             except Exception as e:
                 epad_return_msg = f"Ngoại lệ khi thu hồi thẻ: {e}"
+
+    # Async update SharePoint List 'VMS SEAZEN - KHÁCH RA VÀO' to CHECKED_OUT
+    try:
+        import sharepoint_vms_sync
+        sharepoint_vms_sync.checkout_visitor_on_sharepoint_async(record)
+    except Exception:
+        pass
 
     # Explicit, highly visible terminal stdout logging for Checkout
     print("\n" + "=" * 76, flush=True)
@@ -1224,6 +1290,17 @@ def api_upsert_employee():
     import db_mssql
     data = request.get_json(silent=True) or {}
     res = db_mssql.upsert_employee_and_biometrics_db(data)
+    atid = str(data.get("EmployeeATID") or "").strip()
+    if res.get("success") and atid and (data.get("FacePhotoBase64") or data.get("FaceTemplateBIODATA")):
+        try:
+            import sharepoint_vms_sync
+            sharepoint_vms_sync.upload_biometric_attachment_to_sharepoint_async(
+                employee_atid=atid,
+                face_photo_b64=data.get("FacePhotoBase64"),
+                face_biodata=data.get("FaceTemplateBIODATA")
+            )
+        except Exception:
+            pass
     if res.get("success") and data.get("sync_to_hardware"):
         u = get_current_user()
         operator = u["full_name"] if u else "Quản trị viên"
@@ -1291,6 +1368,97 @@ def api_upsert_access_group():
     data = request.get_json(silent=True) or {}
     res = db_mssql.upsert_access_group_db(data)
     return jsonify(res), (200 if res.get("success") else 400)
+
+
+@app.route("/api/timekeeping/summary", methods=["GET"])
+@require_role(["admin", "staff"])
+def api_timekeeping_summary():
+    """
+    Calculates daily timekeeping from First-In scan and Last-Out scan per employee per day:
+    - FirstInTime (Đầu ngày quét)
+    - LastOutTime (Cuối ngày quét)
+    - TotalHours & WorkUnit (Dữ liệu công)
+    - LateMinutes (Đi trễ so với 08:05)
+    """
+    import db_mssql
+    target_date = (request.args.get("date") or "").strip()
+    dept_filter = (request.args.get("department") or "").strip()
+    q_filter = (request.args.get("search") or "").strip().lower()
+
+    rows = []
+    if target_date and target_date != "ALL":
+        scans = storage.get_saved_scans(target_date)
+        grouped = {}
+        for s in scans:
+            ptype = determine_scan_person_type(s)
+            if not ptype.get("is_staff", True):
+                continue
+            atid = str(s.get("EmployeeATID") or "").strip()
+            if not atid:
+                continue
+            chk_str = str(s.get("CheckTime") or s.get("Time") or "").replace("T", " ").strip()
+            if not chk_str:
+                continue
+            entry = grouped.setdefault(atid, {
+                "WorkDate": target_date,
+                "EmployeeATID": atid,
+                "FullName": s.get("FullName") or f"Nhân sự {atid}",
+                "DepartmentName": s.get("Department") or "Nhân sự SeaZen",
+                "times": []
+            })
+            entry["times"].append(chk_str)
+
+        for atid, info in grouped.items():
+            times_sorted = sorted(info["times"])
+            first_in = times_sorted[0]
+            last_out = times_sorted[-1] if len(times_sorted) > 1 else None
+            total_scans = len(times_sorted)
+            late_mins = 0
+            total_hours = 0.0
+            try:
+                dt_in = datetime.strptime(first_in, "%Y-%m-%d %H:%M:%S")
+                in_mins = dt_in.hour * 60 + dt_in.minute
+                if in_mins > (8 * 60 + 5):
+                    late_mins = in_mins - (8 * 60)
+                if last_out:
+                    dt_out = datetime.strptime(last_out, "%Y-%m-%d %H:%M:%S")
+                    diff_h = (dt_out - dt_in).total_seconds() / 3600.0
+                    total_hours = round(max(0.0, diff_h), 2)
+            except Exception:
+                pass
+
+            work_unit = 1.0 if total_hours >= 7.5 else (0.5 if total_hours >= 3.5 else 0.0)
+            status = "LATE" if late_mins > 0 else ("MISSING_OUT" if not last_out else "PRESENT")
+            rows.append({
+                "WorkDate": target_date,
+                "EmployeeATID": atid,
+                "FullName": info["FullName"],
+                "DepartmentName": info["DepartmentName"],
+                "FirstInTime": first_in,
+                "LastOutTime": last_out,
+                "TotalScans": total_scans,
+                "LateMinutes": late_mins,
+                "TotalHours": total_hours,
+                "WorkUnit": work_unit,
+                "AttendanceStatus": status
+            })
+    else:
+        raw_dtk = db_mssql.get_table_rows("tbl_DailyTimekeeping", limit=500)
+        for r in raw_dtk:
+            th = float(r.get("TotalHours") or 0.0)
+            r["WorkUnit"] = 1.0 if th >= 7.5 else (0.5 if th >= 3.5 else 0.0)
+            rows.append(r)
+
+    if dept_filter:
+        rows = [r for r in rows if str(r.get("DepartmentName") or "") == dept_filter]
+    if q_filter:
+        rows = [
+            r for r in rows
+            if q_filter in f"{r.get('FullName','')} {r.get('EmployeeATID','')} {r.get('DepartmentName','')}".lower()
+        ]
+
+    rows.sort(key=lambda x: (str(x.get("WorkDate", "")), str(x.get("FirstInTime", ""))), reverse=True)
+    return jsonify({"success": True, "count": len(rows), "rows": rows})
 
 
 @app.route("/api/attendance/shift", methods=["POST"])

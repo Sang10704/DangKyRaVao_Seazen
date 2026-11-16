@@ -7,14 +7,11 @@ import LoginPage from './pages/auth/LoginPage';
 import LiveCommandPage from './pages/live/LiveCommandPage';
 import VisitorManagementPage from './pages/visitors/VisitorManagementPage';
 import HrmBiometricsPage from './pages/hrm/HrmBiometricsPage';
-import AccessRulesPage from './pages/access/AccessRulesPage';
 import TimekeepingPage from './pages/attendance/TimekeepingPage';
-import DataManagementPage from './pages/sync/DataManagementPage';
 
 export default function App() {
   const [user, setUser] = useState(null);
   const [gateReady, setGateReady] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [currentPath, setCurrentPath] = useState(() => {
     const p = window.location.pathname;
     return Object.values(ROUTES).includes(p) && p !== ROUTES.LOGIN ? p : ROUTES.LIVE;
@@ -33,7 +30,7 @@ export default function App() {
   const [analytics, setAnalytics] = useState(null);
   const [doorLoading, setDoorLoading] = useState({});
 
-  // Enterprise Modules State
+  // Core Data State
   const [departments, setDepartments] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [empTotal, setEmpTotal] = useState(0);
@@ -43,23 +40,6 @@ export default function App() {
   const [activeVisitors, setActiveVisitors] = useState([]);
   const [visitorHistory, setVisitorHistory] = useState([]);
   const [customerCards, setCustomerCards] = useState([]);
-  const [preGuests, setPreGuests] = useState([]);
-  const [contractors, setContractors] = useState([]);
-
-  const [timezones, setTimezones] = useState([]);
-  const [accessGroups, setAccessGroups] = useState([]);
-  const [deptAccessGroups, setDeptAccessGroups] = useState([]);
-  const [deviceCommands, setDeviceCommands] = useState([]);
-
-  const [dailyTimekeeping, setDailyTimekeeping] = useState([]);
-  const [shifts, setShifts] = useState([]);
-
-  const [sqlOverview, setSqlOverview] = useState({ tables: [], total_rows: 0, connection: {} });
-  const [selectedSqlTable, setSelectedSqlTable] = useState('tbl_Employees');
-  const [sqlTableRows, setSqlTableRows] = useState([]);
-  const [spStatus, setSpStatus] = useState({ authenticated: false, schemas: [] });
-  const [syncBusy, setSyncBusy] = useState(false);
-  const [lastSyncReport, setLastSyncReport] = useState(null);
 
   const notify = useCallback((msg, type = 'info') => {
     const id = Date.now() + Math.random();
@@ -108,42 +88,17 @@ export default function App() {
     if (visRes.ok && visRes.data.visitors) setActiveVisitors(visRes.data.visitors);
   }, [user, scanDate, scanCategory, scanDirection, scanSearch]);
 
-  const fetchAllEnterpriseData = useCallback(async () => {
+  const fetchCoreDirectory = useCallback(async () => {
     if (!user) return;
-    const [
-      deptRes,
-      empRes,
-      sqlRes,
-      spRes,
-      cardsRes,
-      preRes,
-      conRes,
-      histRes,
-      tzRes,
-      grpRes,
-      dgrpRes,
-      cmdRes,
-      dtkRes,
-      shfRes,
-    ] = await Promise.all([
+    const [deptRes, empRes, cardsRes, histRes] = await Promise.all([
       apiFetch('/api/sql/table/tbl_Departments?limit=100'),
       apiFetch(
         `/api/employees?q=${encodeURIComponent(empSearch)}&department=${encodeURIComponent(
           empDeptFilter
-        )}&page=1&limit=80`
+        )}&page=1&limit=120`
       ),
-      apiFetch('/api/sql/overview'),
-      apiFetch('/api/sharepoint/vms_status'),
       apiFetch('/api/sql/table/tbl_CustomerCards?limit=200'),
-      apiFetch('/api/sql/table/tbl_PreRegisteredGuests?limit=200'),
-      apiFetch('/api/sql/table/tbl_Contractors?limit=200'),
       apiFetch('/api/sql/table/tbl_Visitors?limit=200'),
-      apiFetch('/api/sql/table/tbl_AccessTimezones?limit=100'),
-      apiFetch('/api/sql/table/tbl_AccessGroups?limit=100'),
-      apiFetch('/api/sql/table/tbl_DepartmentAccessGroups?limit=100'),
-      apiFetch('/api/sql/table/tbl_DeviceCommands?limit=100'),
-      apiFetch('/api/sql/table/tbl_DailyTimekeeping?limit=300'),
-      apiFetch('/api/sql/table/tbl_Shifts?limit=50'),
     ]);
 
     if (deptRes.ok && deptRes.data.rows) setDepartments(deptRes.data.rows);
@@ -151,18 +106,8 @@ export default function App() {
       setEmployees(empRes.data.employees);
       setEmpTotal(empRes.data.total || empRes.data.employees.length);
     }
-    if (sqlRes.ok) setSqlOverview(sqlRes.data);
-    if (spRes.ok) setSpStatus(spRes.data);
     if (cardsRes.ok && cardsRes.data.rows) setCustomerCards(cardsRes.data.rows);
-    if (preRes.ok && preRes.data.rows) setPreGuests(preRes.data.rows);
-    if (conRes.ok && conRes.data.rows) setContractors(conRes.data.rows);
     if (histRes.ok && histRes.data.rows) setVisitorHistory(histRes.data.rows);
-    if (tzRes.ok && tzRes.data.rows) setTimezones(tzRes.data.rows);
-    if (grpRes.ok && grpRes.data.rows) setAccessGroups(grpRes.data.rows);
-    if (dgrpRes.ok && dgrpRes.data.rows) setDeptAccessGroups(dgrpRes.data.rows);
-    if (cmdRes.ok && cmdRes.data.rows) setDeviceCommands(cmdRes.data.rows);
-    if (dtkRes.ok && dtkRes.data.rows) setDailyTimekeeping(dtkRes.data.rows);
-    if (shfRes.ok && shfRes.data.rows) setShifts(shfRes.data.rows);
   }, [user, empSearch, empDeptFilter]);
 
   useEffect(() => {
@@ -184,24 +129,14 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     fetchLiveStreams();
-    const t = setInterval(fetchLiveStreams, 4000);
+    const t = setInterval(fetchLiveStreams, 3000);
     return () => clearInterval(t);
   }, [user, fetchLiveStreams]);
 
   useEffect(() => {
     if (!user) return;
-    fetchAllEnterpriseData();
-  }, [user, fetchAllEnterpriseData]);
-
-  useEffect(() => {
-    if (!user || !selectedSqlTable) return;
-    (async () => {
-      const { ok, data } = await apiFetch(`/api/sql/table/${selectedSqlTable}?limit=200`);
-      if (ok && data.rows) {
-        setSqlTableRows(data.rows);
-      }
-    })();
-  }, [user, selectedSqlTable]);
+    fetchCoreDirectory();
+  }, [user, fetchCoreDirectory]);
 
   const handleLogout = async () => {
     await apiFetch('/api/auth/logout', { method: 'POST' });
@@ -246,74 +181,17 @@ export default function App() {
     }
   };
 
-  const handleRunSafeSyncTest = async () => {
-    setSyncBusy(true);
-    try {
-      const { ok, data } = await apiFetch('/api/sync/safe_test', { method: 'POST' });
-      if (ok && data.success) {
-        setLastSyncReport(data);
-        notify('Đã cập nhật dữ liệu từ thiết bị cổng an toàn.', 'success');
-        fetchAllEnterpriseData();
-      } else {
-        notify(data.error || 'Không thể cập nhật dữ liệu.', 'error');
-      }
-    } finally {
-      setSyncBusy(false);
-    }
-  };
-
-  const handleProvisionCloudLists = async () => {
-    setSyncBusy(true);
-    try {
-      const { ok, data } = await apiFetch('/api/sharepoint/provision_lists', {
-        method: 'POST',
-        body: JSON.stringify({}),
-      });
-      if (ok && data.success) {
-        notify('Đã đồng bộ cấu trúc 18 danh mục lưu trữ thành công.', 'success');
-        fetchAllEnterpriseData();
-      } else {
-        notify(data.error || 'Không thể đồng bộ cấu trúc danh mục.', 'error');
-      }
-    } finally {
-      setSyncBusy(false);
-    }
-  };
-
-  const handleSyncSingleCategory = async (sqlTable) => {
-    setSyncBusy(true);
-    try {
-      const { ok, data } = await apiFetch('/api/sharepoint/sync_table', {
-        method: 'POST',
-        body: JSON.stringify({ sql_table: sqlTable, max_rows: 200 }),
-      });
-      if (ok && data.success) {
-        notify(
-          `Đã đồng bộ ${data.rows_processed} bản ghi lên danh sách "${data.list_title}".`,
-          'success'
-        );
-        fetchAllEnterpriseData();
-      } else {
-        notify(data.error || 'Không thể đồng bộ danh mục.', 'error');
-      }
-    } finally {
-      setSyncBusy(false);
-    }
-  };
-
   const pcClockInvalid = clockAudit && clockAudit.pc_clock_valid === false;
 
   return (
     <>
-      {/* 1. Strict Loading Gate (#loadingGate) */}
       <div id="loadingGate" className={!gateReady ? 'active' : ''}>
         <div className="gate-box">
           <div className="gate-spinner"></div>
-          <div className="gate-text">Đang kiểm tra tài khoản...</div>
+          <div style={{ fontWeight: 600 }}>Đang khởi tạo hệ thống...</div>
         </div>
       </div>
 
-      {/* 2. Toast Container (#toastContainer) */}
       <div id="toastContainer">
         {toasts.map((t) => (
           <div key={t.id} className={`toast-msg ${t.type}`}>
@@ -322,7 +200,6 @@ export default function App() {
         ))}
       </div>
 
-      {/* 3. Login View or Main Workspace Shell */}
       {gateReady && !user && (
         <LoginPage
           clockAudit={clockAudit}
@@ -334,26 +211,22 @@ export default function App() {
       )}
 
       {gateReady && user && (
-        <div
-          id="appWorkspace"
-          className={`ready ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}
-        >
+        <div id="appWorkspace">
           <SidebarShell
             currentPath={currentPath}
             onNavigate={handleNavigate}
             user={user}
             onLogout={handleLogout}
-            onExpandSidebar={() => setSidebarCollapsed(false)}
             activeVisitorsCount={activeVisitors.length}
           />
 
-          <div className="main-area">
+          <div className="main-area" style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
             {pcClockInvalid && (
               <div
                 style={{
                   background: 'var(--red)',
                   color: '#ffffff',
-                  padding: '8px 16px',
+                  padding: '8px 20px',
                   fontSize: 12.5,
                   fontWeight: 600,
                   display: 'flex',
@@ -363,7 +236,7 @@ export default function App() {
               >
                 <span>
                   Cảnh báo: Đồng hồ trên máy tính này ({clockAudit.local_pc_time}) đang lệch{' '}
-                  {clockAudit.pc_drift_sec} giây so với Giờ chuẩn Việt Nam ({clockAudit.vietnam_ntp_time}). Hệ thống đã khóa cập nhật giờ tự động để bảo vệ 4 thiết bị cổng. Vui lòng chỉnh lại giờ máy tính.
+                  {clockAudit.pc_drift_sec} giây so với Giờ chuẩn Việt Nam ({clockAudit.vietnam_ntp_time}). Hệ thống đã khóa cập nhật giờ tự động để bảo vệ 4 thiết bị cổng.
                 </span>
                 <button
                   type="button"
@@ -377,12 +250,12 @@ export default function App() {
 
             {currentPath === ROUTES.LIVE && (
               <LiveCommandPage
-                onCollapseSidebar={() => setSidebarCollapsed(true)}
+                user={user}
                 clockAudit={clockAudit}
                 onOpenClockModal={() => setClockModalOpen(true)}
+                onNavigate={handleNavigate}
                 analytics={analytics}
-                activeVisitorsCount={activeVisitors.length}
-                totalRecordsCount={sqlOverview.total_rows}
+                activeVisitors={activeVisitors}
                 realtimeLogs={realtimeLogs}
                 scanDate={scanDate}
                 setScanDate={setScanDate}
@@ -400,24 +273,22 @@ export default function App() {
 
             {currentPath === ROUTES.VISITORS && (
               <VisitorManagementPage
-                onCollapseSidebar={() => setSidebarCollapsed(true)}
                 departments={departments}
+                employees={employees}
                 activeVisitors={activeVisitors}
                 visitorHistory={visitorHistory}
                 customerCards={customerCards}
-                preGuests={preGuests}
-                contractors={contractors}
                 onRefreshData={() => {
                   fetchLiveStreams();
-                  fetchAllEnterpriseData();
+                  fetchCoreDirectory();
                 }}
                 notify={notify}
               />
             )}
 
-            {currentPath === ROUTES.HRM && (
+            {(currentPath === ROUTES.HRM || currentPath === ROUTES.BIOMETRICS) && (
               <HrmBiometricsPage
-                onCollapseSidebar={() => setSidebarCollapsed(true)}
+                mode={currentPath === ROUTES.BIOMETRICS ? 'biometrics' : 'hrm'}
                 departments={departments}
                 employees={employees}
                 empTotal={empTotal}
@@ -425,47 +296,13 @@ export default function App() {
                 setEmpSearch={setEmpSearch}
                 empDeptFilter={empDeptFilter}
                 setEmpDeptFilter={setEmpDeptFilter}
-                onRefreshData={fetchAllEnterpriseData}
-                notify={notify}
-              />
-            )}
-
-            {currentPath === ROUTES.ACCESS_RULES && (
-              <AccessRulesPage
-                onCollapseSidebar={() => setSidebarCollapsed(true)}
-                timezones={timezones}
-                accessGroups={accessGroups}
-                deptAccessGroups={deptAccessGroups}
-                deviceCommands={deviceCommands}
-                onRefreshData={fetchAllEnterpriseData}
+                onRefreshData={fetchCoreDirectory}
                 notify={notify}
               />
             )}
 
             {currentPath === ROUTES.TIMEKEEPING && (
-              <TimekeepingPage
-                onCollapseSidebar={() => setSidebarCollapsed(true)}
-                dailyTimekeeping={dailyTimekeeping}
-                shifts={shifts}
-                onRefreshData={fetchAllEnterpriseData}
-                notify={notify}
-              />
-            )}
-
-            {currentPath === ROUTES.DATA_SYNC && (
-              <DataManagementPage
-                onCollapseSidebar={() => setSidebarCollapsed(true)}
-                sqlOverview={sqlOverview}
-                selectedSqlTable={selectedSqlTable}
-                setSelectedSqlTable={setSelectedSqlTable}
-                sqlTableRows={sqlTableRows}
-                spStatus={spStatus}
-                syncBusy={syncBusy}
-                lastSyncReport={lastSyncReport}
-                onRunSafeSyncTest={handleRunSafeSyncTest}
-                onProvisionCloudLists={handleProvisionCloudLists}
-                onSyncSingleCategory={handleSyncSingleCategory}
-              />
+              <TimekeepingPage departments={departments} />
             )}
           </div>
 

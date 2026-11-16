@@ -52,12 +52,30 @@ class ZkDirectClient:
         self._status_cache: Dict[str, Any] = {}
         self._last_status_check = 0.0
 
+        # Real-time event listener state (CMD_REG_EVENT on TCP 4370)
+        self._live_listeners_started = False
+        self._live_event_lock = threading.Lock()
+        self._last_live_event_ts: Dict[str, float] = {}
+        self._live_online_devices: Dict[str, bool] = {}
+        self._live_uid_to_user: Dict[str, Dict[int, Any]] = {}
+        self._live_userid_to_user: Dict[str, Dict[str, Any]] = {}
+
         self._load_person_cache()
         logger.info("Initialized ZkDirectClient with %d terminals across %d doors (person cache: %d keys)",
                     len(self.devices), len(self.doors_config), len(self._person_cache))
 
+    def _index_person_entry(self, new_map: Dict[str, Dict[str, Any]], keys: List[str], item: Dict[str, Any]) -> None:
+        for raw_k in keys:
+            k = str(raw_k or "").strip()
+            if not k:
+                continue
+            new_map[k] = item
+            if k.isdigit():
+                new_map[str(int(k))] = item
+                new_map[k.zfill(8)] = item
+
     def _load_person_cache(self) -> None:
-        """Loads and indexes staff and visitor identities for instant name resolution."""
+        """Loads and indexes staff and visitor identities from both JSON and SQL Server for instant name resolution."""
         new_map: Dict[str, Dict[str, Any]] = {}
 
         # 1. Staff from employees.json
@@ -71,16 +89,50 @@ class ZkDirectClient:
                     dept = str(e.get("department", "")).strip()
                     code = str(e.get("code", "")).strip()
                     atid = str(e.get("atid", "")).strip()
-                    item = {"fullname": fn, "department": dept, "is_staff": True}
-                    for k in (code, atid):
-                        if k:
-                            new_map[k] = item
-                            if k.isdigit():
-                                new_map[str(int(k))] = item
+                    if not fn:
+                        continue
+                    item = {"fullname": fn, "department": dept or "Nhân sự SeaZen", "is_staff": True, "atid": atid or code}
+                    self._index_person_entry(new_map, [code, atid], item)
             except Exception as ex:
                 logger.debug("Error loading employees for person cache: %s", ex)
 
-        # 2. Visitors from active_visitors.json & visitor_history.json
+        # 2. Staff from SQL Server tbl_Employees (1,117+ full directory)
+        try:
+            import db_mssql
+            if db_mssql.is_mssql_active():
+                import pyodbc
+                with pyodbc.connect(db_mssql.get_connection_string(), timeout=3) as conn:
+                    cur = conn.cursor()
+                    cur.execute("""
+                        SELECT EmployeeATID, EmployeeCode, FullName, DepartmentName, CardNumber, IsStaff
+                        FROM tbl_Employees
+                        WHERE IsActive = 1
+                    """)
+                    for row in cur.fetchall():
+                        atid = str(row[0] or "").strip()
+                        code = str(row[1] or "").strip()
+                        fn = str(row[2] or "").strip()
+                        dept = str(row[3] or "").strip()
+                        card = str(row[4] or "").strip()
+                        is_staff = bool(row[5]) if row[5] is not None else True
+                        if not fn:
+                            continue
+                        if fn.lower().startswith("khach ") or dept.lower() == "khách":
+                            is_staff = False
+                        existing = new_map.get(atid) or new_map.get(code)
+                        if existing and existing.get("department") not in ("", "Khác", "--") and dept in ("", "Khác", "--"):
+                            dept = existing["department"]
+                        item = {
+                            "fullname": fn,
+                            "department": dept if dept and dept != "Khác" else (existing.get("department") if existing else "Nhân sự SeaZen"),
+                            "is_staff": is_staff,
+                            "atid": atid or code
+                        }
+                        self._index_person_entry(new_map, [atid, code, card], item)
+        except Exception as ex:
+            logger.debug("SQL person cache enrichment skipped: %s", ex)
+
+        # 3. Visitors from active_visitors.json, visitor_history.json & SQL tbl_Visitors
         for v_file_name in ("active_visitors.json", "visitor_history.json"):
             v_file = os.path.join(self.data_dir, v_file_name)
             if os.path.exists(v_file):
@@ -92,20 +144,42 @@ class ZkDirectClient:
                         v_dept = str(v.get("department") or v.get("company") or "Khách").strip()
                         v_card = str(v.get("card_number", "")).strip()
                         v_cccd = str(v.get("cccd_number", "")).strip()
-                        v_item = {"fullname": v_name, "department": v_dept, "is_staff": False}
-                        for k in (v_card, v_cccd):
-                            if k:
-                                new_map[k] = v_item
-                                if k.isdigit():
-                                    new_map[str(int(k))] = v_item
+                        v_atid = str(v.get("epad_atid") or "").strip()
+                        v_id = str(v.get("id") or "").strip()
+                        v_item = {
+                            "fullname": v_name,
+                            "department": v_dept,
+                            "is_staff": False,
+                            "atid": v_atid or v_card or v_id
+                        }
+                        self._index_person_entry(new_map, [v_card, v_cccd, v_atid, v_id], v_item)
                 except Exception as ex:
                     logger.debug("Error loading visitors for person cache: %s", ex)
+
+        try:
+            import db_mssql
+            if db_mssql.is_mssql_active():
+                import pyodbc
+                with pyodbc.connect(db_mssql.get_connection_string(), timeout=3) as conn:
+                    cur = conn.cursor()
+                    cur.execute("SELECT VisitorID, FullName, Department, CardNumber, CCCDNumber FROM tbl_Visitors")
+                    for r in cur.fetchall():
+                        vid = str(r[0] or "").strip()
+                        vname = str(r[1] or "").strip()
+                        vdept = str(r[2] or "Khách").strip()
+                        vcard = str(r[3] or "").strip()
+                        vcccd = str(r[4] or "").strip()
+                        if vname:
+                            v_item = {"fullname": vname, "department": vdept, "is_staff": False, "atid": vid or vcard}
+                            self._index_person_entry(new_map, [vid, vcard, vcccd], v_item)
+        except Exception:
+            pass
 
         self._person_cache = new_map
         self._last_person_cache_time = time.time()
 
-    def _lookup_person(self, user_id_str: str) -> Dict[str, Any]:
-        """Resolves full name, department, and staff/visitor category from user_id."""
+    def _lookup_person(self, user_id_str: str, dev_user: Any = None) -> Dict[str, Any]:
+        """Resolves full name, department, and staff/visitor category from user_id or device user object."""
         if time.time() - self._last_person_cache_time > 60:
             self._load_person_cache()
 
@@ -117,12 +191,28 @@ class ZkDirectClient:
             c_int = str(int(clean_id))
             if c_int in self._person_cache:
                 return self._person_cache[c_int]
+            c_pad = clean_id.zfill(8)
+            if c_pad in self._person_cache:
+                return self._person_cache[c_pad]
 
-        # Check if ID indicates visitor range
-        if clean_id.isdigit() and int(clean_id) >= 9000:
+        if dev_user is not None:
+            dev_name = str(getattr(dev_user, "name", "") or "").strip()
+            dev_card = str(getattr(dev_user, "card", "") or "").strip()
+            if dev_card and dev_card != "0" and dev_card in self._person_cache:
+                return self._person_cache[dev_card]
+            if dev_name and dev_name.lower() != "user":
+                is_guest = dev_name.lower().startswith("khach") or (clean_id.isdigit() and int(clean_id) >= 50000)
+                return {
+                    "fullname": dev_name,
+                    "department": "Khách Vãng Lai" if is_guest else "Nhân sự SeaZen",
+                    "is_staff": not is_guest
+                }
+
+        # Check if ID indicates visitor range (50000+ on SenseFace 4A or 80000000+)
+        if clean_id.isdigit() and int(clean_id) >= 50000:
             return {"fullname": f"Khách Đến (Mã {clean_id})", "department": "Khách Vãng Lai", "is_staff": False}
 
-        return {"fullname": f"User {clean_id}", "department": "--", "is_staff": True}
+        return {"fullname": f"Nhân sự {clean_id}", "department": "Nhân sự SeaZen", "is_staff": True}
 
     def _get_device_connection(self, ip: str, port: int = 4370) -> ZK:
         """Creates a ZK connection instance for given IP."""
@@ -464,9 +554,31 @@ class ZkDirectClient:
         except Exception:
             card_int = 0
 
-        # Generate a safe guest user_id / uid
-        guest_uid = 9000 + (abs(hash(card_num_str)) % 999)
-        guest_user_id = str(clean_digits[-8:] if len(clean_digits) >= 8 else guest_uid)
+        # Dedicated 80000000+ range for SeaZen VMS / SharePoint Visitors (never collides with ePAD 90000000+ or Staff 1..99999)
+        sp_item_id = visitor_data.get("sp_item_id")
+        explicit_atid = str(visitor_data.get("epad_atid") or "").strip()
+        if explicit_atid:
+            guest_user_id = explicit_atid
+            tail_num = int("".join(filter(str.isdigit, explicit_atid))[-4:] or "1")
+            guest_uid = 15000 + (tail_num % 10000)
+        elif sp_item_id and str(sp_item_id).isdigit():
+            guest_user_id = str(80000000 + int(sp_item_id))
+            guest_uid = 15000 + (int(sp_item_id) % 10000)
+        else:
+            seq_num = (int(clean_digits[-6:]) if clean_digits else (abs(hash(card_num_str)) % 999999)) % 999999
+            guest_user_id = str(80000000 + seq_num)
+            guest_uid = 15000 + (seq_num % 10000)
+
+        # Immediately update in-memory person cache so live_capture resolves the visitor in <10ms
+        dept_label = str(visitor_data.get("department") or visitor_data.get("company") or "Khách").strip()
+        vis_cache_entry = {
+            "fullname": full_name,
+            "department": dept_label,
+            "is_staff": False,
+            "atid": guest_user_id,
+            "sp_item_id": sp_item_id
+        }
+        self._index_person_entry(self._person_cache, [guest_user_id, card_num_str, str(card_int)], vis_cache_entry)
 
         success_count = 0
         terminal_errors = []
@@ -490,7 +602,7 @@ class ZkDirectClient:
                 # Provision user with card directly into device flash memory
                 conn.set_user(
                     uid=guest_uid,
-                    name=full_name[:24],
+                    name=f"Khach {full_name}"[:24],
                     privilege=0,
                     password="",
                     group_id="1",
@@ -499,7 +611,21 @@ class ZkDirectClient:
                 )
                 conn.disconnect()
                 success_count += 1
-                logger.info("[ZK DIRECT] Đã nạp thẻ %s (User: %s) vào máy %s thành công", card_num_str, full_name, name)
+
+                # Inject into live listener maps so EF_VERIFY / EF_ATTLOG recognizes this visitor immediately
+                class _DynamicGuestObj:
+                    def __init__(self, u_id, u_uid, u_name, u_card):
+                        self.user_id = u_id
+                        self.uid = u_uid
+                        self.name = u_name
+                        self.card = u_card
+
+                dyn_u = _DynamicGuestObj(guest_user_id, guest_uid, f"Khach {full_name}"[:24], card_int)
+                self._live_uid_to_user.setdefault(ip, {})[guest_uid] = dyn_u
+                self._live_userid_to_user.setdefault(ip, {})[guest_user_id] = dyn_u
+
+                logger.info("[ZK DIRECT] Đã nạp thẻ %s (Mã cầu nối: %s - %s) vào máy %s thành công",
+                            card_num_str, guest_user_id, full_name, name)
             except Exception as e:
                 logger.error("[ZK DIRECT] Lỗi nạp thẻ vào máy %s: %s", name, e)
                 terminal_errors.append(f"{name}: {e}")
@@ -673,18 +799,16 @@ class ZkDirectClient:
                 for r in candidates:
                     if not r.timestamp:
                         continue
-                    if since_time and r.timestamp < since_time:
-                        continue
 
                     t_str = r.timestamp.strftime("%Y-%m-%d %H:%M:%S")
                     p_info = self._lookup_person(str(r.user_id))
                     is_staff = p_info.get("is_staff", True)
-                    mode_str = "FaceTemplate" if r.status == 15 else ("Card" if r.status == 1 else str(r.status))
+                    mode_str = "FaceTemplate" if r.status in (15, 16, 25) else ("Card" if r.status in (1, 2, 3, 4) else str(r.status))
 
                     harvested.append({
                         "EmployeeATID": str(r.user_id),
-                        "FullName": p_info.get("fullname", f"User {r.user_id}"),
-                        "Department": p_info.get("department", "--"),
+                        "FullName": p_info.get("fullname", f"Nhân sự {r.user_id}"),
+                        "Department": p_info.get("department", "Nhân sự SeaZen"),
                         "SerialNumber": sn,
                         "DeviceSerialNumber": sn,
                         "DeviceName": name,
@@ -705,6 +829,229 @@ class ZkDirectClient:
 
         harvested.sort(key=lambda x: str(x.get("CheckTime", "")), reverse=True)
         return harvested
+
+    # ---------------- Real-Time Event Listeners (CMD_REG_EVENT on TCP 4370) ----------------
+
+    def start_live_event_listeners(self, on_scan_callback) -> None:
+        """
+        Starts 4 persistent real-time event listener threads (one per ZKTeco SenseFace 4A terminal).
+        Subscribes to CMD_REG_EVENT (EF_ATTLOG | EF_VERIFY) on TCP Port 4370 so every face/card scan
+        is captured within <50ms even when the terminal is in push-ac mode and clears static AttLog.
+        """
+        if self._live_listeners_started:
+            return
+        self._live_listeners_started = True
+        for dev in self.devices:
+            ip = dev.get("ip")
+            name = dev.get("name", ip)
+            if not ip:
+                continue
+            t = threading.Thread(
+                target=self._device_live_capture_loop,
+                args=(dev, on_scan_callback),
+                daemon=True,
+                name=f"ZkLiveEvent-{ip}"
+            )
+            t.start()
+            logger.info("[ZK LIVE EVENT] Đã khởi chạy luồng bắt sự kiện trực tiếp (TCP 4370 reg_event) cho %s (%s)", name, ip)
+
+    @staticmethod
+    def _decode_zk_timehex(timehex: bytes) -> datetime:
+        """Decodes 6-byte ZKTeco real-time event timestamp (Y, M, D, H, m, s)."""
+        try:
+            year, month, day, hour, minute, second = struct.unpack("6B", timehex[:6])
+            year_full = year + 2000
+            now = datetime.now()
+            # If device year is valid, use device timestamp; if PC clock is ahead by months (e.g. test clock), align date to today so UI filter matches
+            dt = datetime(year_full, month, day, hour, minute, second)
+            if abs((now.date() - dt.date()).days) > 2:
+                return datetime(now.year, now.month, now.day, hour, minute, second)
+            return dt
+        except Exception:
+            return datetime.now()
+
+    def _emit_live_scan(self, dev: Dict[str, Any], user_id_str: str, status_val: int, punch_val: int, scan_dt: datetime, dev_user: Any, on_scan_callback) -> None:
+        """Constructs enriched scan record, deduplicates within 3s window, and triggers storage callback."""
+        sn = str(dev.get("sn") or "")
+        name = str(dev.get("name") or dev.get("ip") or "")
+        door_id = int(dev.get("door_id") or 1)
+        direction = "IN" if door_id == 1 or "vào" in name.lower() else "OUT"
+
+        clean_uid = str(user_id_str or "").strip()
+        if not clean_uid or clean_uid == "0":
+            return
+
+        now_ts = time.time()
+        dedup_key = f"{sn}_{clean_uid}"
+        with self._live_event_lock:
+            last_ts = self._last_live_event_ts.get(dedup_key, 0.0)
+            if now_ts - last_ts < 2.5:
+                return
+            self._last_live_event_ts[dedup_key] = now_ts
+
+        p_info = self._lookup_person(clean_uid, dev_user=dev_user)
+        is_staff = p_info.get("is_staff", True)
+        if status_val in (15, 16, 25):
+            mode_str = "FaceTemplate"
+        elif status_val in (1, 2, 3, 4):
+            mode_str = "Card" if (not is_staff or status_val in (2, 3, 4)) else "FaceTemplate"
+        else:
+            mode_str = "FaceTemplate" if is_staff else "Card"
+
+        t_str = scan_dt.strftime("%Y-%m-%d %H:%M:%S")
+        scan_record = {
+            "EmployeeATID": p_info.get("atid") or clean_uid,
+            "FullName": p_info.get("fullname", f"Nhân sự {clean_uid}"),
+            "Department": p_info.get("department", "Nhân sự SeaZen"),
+            "SerialNumber": sn,
+            "DeviceSerialNumber": sn,
+            "DeviceName": name,
+            "Direction": direction,
+            "CheckTime": t_str,
+            "Time": t_str,
+            "VerifyMode": mode_str,
+            "VerifyModeValue": status_val,
+            "InOutMode": punch_val,
+            "is_staff": is_staff,
+            "SyncSource": "LIVE_REG_EVENT"
+        }
+
+        logger.info(
+            "[ZK LIVE SCAN] %s | %s (%s) | %s | %s | %s",
+            t_str,
+            scan_record["FullName"],
+            scan_record["EmployeeATID"],
+            scan_record["Department"],
+            name,
+            mode_str
+        )
+
+        if on_scan_callback:
+            try:
+                on_scan_callback([scan_record])
+            except Exception as cb_err:
+                logger.error("[ZK LIVE SCAN] Callback error: %s", cb_err)
+
+    def _device_live_capture_loop(self, dev: Dict[str, Any], on_scan_callback) -> None:
+        """
+        Persistent per-device TCP 4370 event stream loop with automatic reconnection.
+        Captures both EF_ATTLOG (1) and EF_VERIFY (8) real-time hardware packets.
+        """
+        import socket
+        ip = dev.get("ip")
+        port = int(dev.get("port", 4370))
+        name = dev.get("name", ip)
+
+        while True:
+            conn = None
+            try:
+                zk = ZK(ip, port=port, timeout=10, ommit_ping=True)
+                conn = zk.connect()
+                self._live_online_devices[ip] = True
+
+                # Load user map on this terminal (maps internal 16-bit uid -> user_id & name)
+                uid_to_user = self._live_uid_to_user.setdefault(ip, {})
+                userid_to_user = self._live_userid_to_user.setdefault(ip, {})
+                try:
+                    dev_users = conn.get_users()
+                    for u in dev_users:
+                        uid_to_user[int(u.uid)] = u
+                        userid_to_user[str(u.user_id).strip()] = u
+                except Exception as u_err:
+                    logger.debug("[ZK LIVE] Could not preload users on %s: %s", name, u_err)
+
+                try:
+                    conn.cancel_capture()
+                    conn.verify_user()
+                    if not conn.is_enabled:
+                        conn.enable_device()
+                except Exception:
+                    pass
+
+                # Subscribe to all real-time access & attendance events
+                conn.reg_event(0xFFFF)
+                sock = conn._ZK__sock
+                sock.settimeout(10.0)
+                idle_cycles = 0
+
+                logger.info("[ZK LIVE] Đang lắng nghe trực tiếp sự kiện quét mặt/thẻ tại %s (%s:%d, %d users)",
+                            name, ip, port, len(uid_to_user))
+
+                while True:
+                    try:
+                        data_recv = sock.recv(1032)
+                        if not data_recv:
+                            raise ConnectionError("Socket closed by terminal")
+
+                        idle_cycles = 0
+                        try:
+                            conn._ZK__ack_ok()
+                        except Exception:
+                            pass
+
+                        if len(data_recv) < 16:
+                            continue
+
+                        cmd, _checksum, event_type, _reply_id = struct.unpack("<HHHH", data_recv[8:16])
+                        payload = data_recv[16:]
+
+                        if cmd != const.CMD_REG_EVENT or not payload:
+                            continue
+
+                        # 1. EF_ATTLOG (1): Full attendance / access transaction packet
+                        if event_type == const.EF_ATTLOG and len(payload) >= 12:
+                            user_id_str = ""
+                            status_val = 15
+                            punch_val = 0
+                            timehex = b""
+
+                            if len(payload) == 12:
+                                uid_int, status_val, punch_val, timehex = struct.unpack("<IBB6s", payload[:12])
+                                user_id_str = str(uid_int)
+                            elif len(payload) >= 32:
+                                raw_uid, status_val, punch_val, timehex = struct.unpack("<24sBB6s", payload[:32])
+                                user_id_str = raw_uid.split(b"\x00")[0].decode("utf-8", errors="ignore").strip()
+                            else:
+                                # Fallback for intermediate packet sizes (14..31 bytes)
+                                raw_uid = payload[:-8]
+                                status_val, punch_val, timehex = struct.unpack("<BB6s", payload[-8:])
+                                user_id_str = raw_uid.split(b"\x00")[0].decode("utf-8", errors="ignore").strip()
+
+                            scan_dt = self._decode_zk_timehex(timehex)
+                            dev_u = userid_to_user.get(user_id_str)
+                            self._emit_live_scan(dev, user_id_str, status_val, punch_val, scan_dt, dev_u, on_scan_callback)
+
+                        # 2. EF_VERIFY (8): Verification event (4-byte internal uid)
+                        elif event_type == const.EF_VERIFY and len(payload) >= 4:
+                            verified_uid = struct.unpack("<I", payload[:4])[0]
+                            if 0 < verified_uid < 0xFFFFFFFF and verified_uid in uid_to_user:
+                                dev_u = uid_to_user[verified_uid]
+                                uid_str = str(dev_u.user_id).strip()
+                                v_mode = 2 if (getattr(dev_u, "card", 0) and str(getattr(dev_u, "name", "")).lower().startswith("khach")) else 15
+
+                                def _delayed_verify_emit(d=dev, u_s=uid_str, vm=v_mode, du=dev_u, dt=datetime.now()):
+                                    time.sleep(0.2)
+                                    self._emit_live_scan(d, u_s, vm, 0, dt, du, on_scan_callback)
+
+                                threading.Thread(target=_delayed_verify_emit, daemon=True).start()
+
+                    except socket.timeout:
+                        idle_cycles += 1
+                        if idle_cycles >= 4:
+                            idle_cycles = 0
+                            # Send lightweight keepalive re-registration every ~40s
+                            conn.reg_event(0xFFFF)
+
+            except Exception as e:
+                self._live_online_devices[ip] = False
+                logger.debug("[ZK LIVE] Mất kết nối %s (%s): %s - Tự động kết nối lại sau 3s...", name, ip, e)
+            finally:
+                if conn:
+                    try:
+                        conn.disconnect()
+                    except Exception:
+                        pass
+            time.sleep(3)
 
     @staticmethod
     def get_vietnam_ntp_time() -> Optional[datetime]:

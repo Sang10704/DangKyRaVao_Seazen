@@ -744,6 +744,15 @@ class StorageManager:
             except Exception as e:
                 logger.debug("[Storage] Lỗi lưu log vào MSSQL: %s", e)
 
+            # Asynchronous Write-Through to SharePoint Online List 'VMS SEAZEN - NHẬT KÝ QUẸT THẺ'
+            try:
+                import sharepoint_vms_sync
+                live_events = [x for x in new_logs if x.get("SyncSource") == "LIVE_REG_EVENT"]
+                if live_events:
+                    sharepoint_vms_sync.push_live_scans_to_sharepoint_async(live_events)
+            except Exception as sp_err:
+                logger.debug("[Storage] SharePoint async push skipped: %s", sp_err)
+
         return [l for l in merged if str(l.get("CheckTime", "")).startswith(today_str)]
 
     def get_latest_scan_time(self) -> Optional[datetime]:
@@ -782,10 +791,27 @@ class StorageManager:
         return len(all_new)
 
     def get_saved_scans(self, target_date: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Returns all accumulated scans recorded for target_date (defaults to today) via in-memory cache."""
+        """Returns all accumulated scans recorded for target_date (defaults to today) via in-memory cache and SQL Server."""
         date_str = target_date or datetime.now().strftime("%Y-%m-%d")
         all_logs = self._load_scans_cache()
-        return [l for l in all_logs if str(l.get("CheckTime", "")).startswith(date_str)]
+        filtered = [l for l in all_logs if str(l.get("CheckTime", "")).startswith(date_str)]
+        seen_keys = {
+            f"{str(l.get('CheckTime') or l.get('Time') or '').replace('T', ' ')}_{l.get('EmployeeATID', '')}_{l.get('SerialNumber') or l.get('DeviceSerialNumber', '')}"
+            for l in filtered
+        }
+        try:
+            import db_mssql
+            if db_mssql.is_mssql_active():
+                db_logs = db_mssql.get_attendance_logs_by_date_db(date_str)
+                for dl in db_logs:
+                    k = f"{str(dl.get('CheckTime', '')).replace('T', ' ')}_{dl.get('EmployeeATID', '')}_{dl.get('SerialNumber', '')}"
+                    if k not in seen_keys:
+                        seen_keys.add(k)
+                        filtered.append(dl)
+        except Exception:
+            pass
+        filtered.sort(key=lambda x: str(x.get("CheckTime", "")).replace("T", " "), reverse=True)
+        return filtered
 
     def get_available_dates(self) -> List[str]:
         """Returns all unique dates (YYYY-MM-DD) available in scan and visitor history."""
@@ -1001,6 +1027,8 @@ class StorageManager:
             "date": selected_date,
             "is_today": is_today,
             "available_dates": self.get_available_dates(),
+            "currently_inside_staff": len(staff_present),
+            "currently_inside_visitors": len(visitor_present),
             "kpi": {
                 "staff_count": len(staff_present),
                 "staff_present": len(staff_present),
