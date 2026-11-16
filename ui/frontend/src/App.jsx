@@ -244,12 +244,11 @@ export default function App() {
   }, [user, selectedSqlTable, fetchSqlTable]);
 
   // Handlers
-  const handleLogin = async (e) => {
-    e.preventDefault();
+  const performLogin = async (cred, pwd) => {
     setLoginError('');
     const { ok, data } = await apiFetch('/api/auth/login', {
       method: 'POST',
-      body: JSON.stringify(loginForm),
+      body: JSON.stringify({ credential: cred, password: pwd }),
     });
     if (ok && data.success) {
       setUser(data.user);
@@ -257,6 +256,11 @@ export default function App() {
     } else {
       setLoginError(data.error || 'Đăng nhập thất bại');
     }
+  };
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    await performLogin(loginForm.credential, loginForm.password);
   };
 
   const handleLogout = async () => {
@@ -535,22 +539,28 @@ export default function App() {
 
           <div className="mt-6 pt-5 border-t border-slate-800">
             <div className="text-[11px] font-mono uppercase text-slate-400 mb-2">
-              Chọn nhanh tài khoản kiểm thử (DevTest):
+              Đăng nhập nhanh 1-Click (DevTest):
             </div>
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => setLoginForm({ credential: 'admin', password: '123' })}
-                className="px-3 py-1.5 text-xs font-mono border border-slate-700 hover:border-slate-500 rounded text-left text-slate-300"
+                onClick={() => {
+                  setLoginForm({ credential: 'admin', password: 'Admin@123' });
+                  performLogin('admin', 'Admin@123');
+                }}
+                className="px-3 py-2 text-xs font-mono border border-slate-700 hover:border-sky-500 hover:bg-slate-800 rounded text-left text-slate-200 transition"
               >
-                Admin (admin / 123)
+                Admin (admin / Admin@123)
               </button>
               <button
                 type="button"
-                onClick={() => setLoginForm({ credential: 'letan', password: '123' })}
-                className="px-3 py-1.5 text-xs font-mono border border-slate-700 hover:border-slate-500 rounded text-left text-slate-300"
+                onClick={() => {
+                  setLoginForm({ credential: 'nhanvien', password: 'Nhanvien@123' });
+                  performLogin('nhanvien', 'Nhanvien@123');
+                }}
+                className="px-3 py-2 text-xs font-mono border border-slate-700 hover:border-sky-500 hover:bg-slate-800 rounded text-left text-slate-200 transition"
               >
-                Lễ tân (letan / 123)
+                Lễ tân (nhanvien / Nhanvien@123)
               </button>
             </div>
           </div>
