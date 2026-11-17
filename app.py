@@ -2121,6 +2121,279 @@ def api_timekeeping_export_excel():
     )
 
 
+@app.route("/api/timekeeping/export_excel_bcc", methods=["GET"])
+@require_role(["admin", "staff"])
+def api_timekeeping_export_excel_bcc():
+    """
+    Exports timekeeping data in BCC SZ-EXPERT format.
+    Columns: Ngày | Thứ | Số hiệu | Họ và tên | Thời gian sớm nhất | Thời gian trễ nhất | Giờ làm việc | Ghi chú
+    One row per employee per day.
+    Weekend rule:
+      - First Saturday + Last Saturday of the range's month = working day (included normally)
+      - All other Saturdays + all Sundays = "Ngày nghỉ tuần"
+    """
+    import io
+    import calendar as _calendar
+    from flask import send_file
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    from openpyxl.utils import get_column_letter
+
+    month_str = (request.args.get("month") or "").strip()
+    from_date = (request.args.get("from_date") or "").strip()
+    to_date = (request.args.get("to_date") or "").strip()
+    dept_filter = (request.args.get("department") or "").strip()
+    q_filter = (request.args.get("search") or "").strip().lower()
+
+    matrix = _build_timekeeping_matrix_data(month_str, from_date, to_date, dept_filter, q_filter)
+    days = matrix["days"]
+    employees = matrix["employees"]
+
+    # --- Weekend helper: first & last Saturday of given year/month ---
+    def _get_first_last_sat(year: int, month: int):
+        last_day = _calendar.monthrange(year, month)[1]
+        sats = [
+            d for d in range(1, last_day + 1)
+            if _calendar.date(year, month, d).weekday() == 5
+        ]
+        if not sats:
+            return set()
+        return {sats[0], sats[-1]}
+
+    # Pre-compute for all year/month combos that appear in days
+    _sat_cache: dict = {}
+    def _is_working_saturday(d_iso: str) -> bool:
+        from datetime import date as _date
+        try:
+            dt = _date.fromisoformat(d_iso)
+        except Exception:
+            return False
+        if dt.weekday() != 5:
+            return False
+        key = (dt.year, dt.month)
+        if key not in _sat_cache:
+            _sat_cache[key] = _get_first_last_sat(dt.year, dt.month)
+        return dt.day in _sat_cache[key]
+
+    # Day-of-week labels (Monday=0)
+    _thu_labels = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "Chủ Nhật"]
+
+    # --- Style setup ---
+    thin = Side(style="thin", color="BDBDBD")
+    brd = Border(left=thin, right=thin, top=thin, bottom=thin)
+    hdr_fill = PatternFill(start_color="1A1A2E", end_color="1A1A2E", fill_type="solid")
+    rest_fill = PatternFill(start_color="F5F5F5", end_color="F5F5F5", fill_type="solid")
+    work_sat_fill = PatternFill(start_color="EBF5EB", end_color="EBF5EB", fill_type="solid")
+    note_fill = PatternFill(start_color="FFF8E1", end_color="FFF8E1", fill_type="solid")
+
+    fnt_hdr = Font(name="Arial", size=10, bold=True, color="FFFFFF")
+    fnt_emp = Font(name="Arial", size=10, bold=True, color="111111")
+    fnt_norm = Font(name="Arial", size=10, color="111111")
+    fnt_rest = Font(name="Arial", size=10, italic=True, color="9E9E9E")
+    fnt_time = Font(name="Arial", size=10, color="1565C0")
+    fnt_note = Font(name="Arial", size=9, italic=True, color="B45309")
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "BCC_SZ-EXPERT"
+
+    dept_label = dept_filter if dept_filter else "Tất cả phòng ban"
+    ws.merge_cells("A1:H1")
+    ws.cell(1, 1, f"BẢNG CHẤM CÔNG SZ-EXPERT – {matrix['from_date']} đến {matrix['to_date']} – {dept_label}").font = Font(name="Arial", size=13, bold=True)
+    ws.row_dimensions[1].height = 20
+
+    # Header row
+    headers = ["Ngày", "Thứ", "Số hiệu", "Họ và tên",
+               "Thời gian sớm nhất", "Thời gian trễ nhất", "Giờ làm việc", "Ghi chú"]
+    for ci, h in enumerate(headers, 1):
+        c = ws.cell(3, ci, h)
+        c.font = fnt_hdr
+        c.fill = hdr_fill
+        c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        c.border = brd
+    ws.row_dimensions[3].height = 22
+
+    # Column widths
+    col_widths = [13, 10, 12, 26, 20, 20, 16, 30]
+    for ci, w in enumerate(col_widths, 1):
+        ws.column_dimensions[get_column_letter(ci)].width = w
+
+    # Build lookup: atid -> employee row
+    emp_lookup = {e["employee_atid"]: e for e in employees}
+
+    cur_row = 4
+    for emp in employees:
+        for dm in days:
+            d_iso = dm["date"]
+            wd = dm["date"]
+            # Parse weekday from dm
+            try:
+                from datetime import date as _date2
+                _dt = _date2.fromisoformat(d_iso)
+                wd_idx = _dt.weekday()  # 0=Mon..6=Sun
+            except Exception:
+                wd_idx = 0
+
+            thu_label = _thu_labels[wd_idx]
+            is_sunday = wd_idx == 6
+            is_saturday = wd_idx == 5
+            is_rest_day = is_sunday or (is_saturday and not _is_working_saturday(d_iso))
+
+            cell_data = emp.get("days", {}).get(d_iso)
+
+            # Col A: Date
+            c_date = ws.cell(cur_row, 1)
+            try:
+                from datetime import date as _date3
+                c_date.value = _date3.fromisoformat(d_iso)
+                c_date.number_format = "DD/MM/YYYY"
+            except Exception:
+                c_date.value = d_iso
+            c_date.font = fnt_norm
+            c_date.alignment = Alignment(horizontal="center", vertical="center")
+            c_date.border = brd
+
+            # Col B: Thứ
+            c_thu = ws.cell(cur_row, 2, thu_label)
+            c_thu.font = fnt_rest if is_rest_day else fnt_norm
+            c_thu.alignment = Alignment(horizontal="center", vertical="center")
+            c_thu.border = brd
+
+            # Col C: Số hiệu (ATID)
+            c_atid = ws.cell(cur_row, 3)
+            try:
+                c_atid.value = int(emp["employee_atid"])
+            except Exception:
+                c_atid.value = emp["employee_atid"]
+            c_atid.font = fnt_norm
+            c_atid.alignment = Alignment(horizontal="center", vertical="center")
+            c_atid.border = brd
+
+            # Col D: Họ và tên
+            c_name = ws.cell(cur_row, 4, emp["full_name"])
+            c_name.font = fnt_emp
+            c_name.alignment = Alignment(horizontal="left", vertical="center")
+            c_name.border = brd
+
+            fill_row = rest_fill if is_rest_day else (work_sat_fill if is_saturday else None)
+
+            if is_rest_day:
+                # Rest day: blank times, "Ngày nghỉ tuần" in Ghi chú
+                for ci in range(1, 9):
+                    _c = ws.cell(cur_row, ci)
+                    _c.fill = rest_fill
+                    _c.border = brd
+                    if _c.font and _c.font.color:
+                        pass  # keep existing font set above
+                # Override fonts for rest-day rows
+                ws.cell(cur_row, 1).font = fnt_rest
+                ws.cell(cur_row, 2).font = fnt_rest
+                ws.cell(cur_row, 3).font = fnt_rest
+                ws.cell(cur_row, 4).font = fnt_rest
+
+                ws.cell(cur_row, 5).value = None
+                ws.cell(cur_row, 5).font = fnt_rest
+                ws.cell(cur_row, 5).border = brd
+                ws.cell(cur_row, 5).fill = rest_fill
+
+                ws.cell(cur_row, 6).value = None
+                ws.cell(cur_row, 6).font = fnt_rest
+                ws.cell(cur_row, 6).border = brd
+                ws.cell(cur_row, 6).fill = rest_fill
+
+                ws.cell(cur_row, 7, "0.0").font = fnt_rest
+                ws.cell(cur_row, 7).border = brd
+                ws.cell(cur_row, 7).fill = rest_fill
+                ws.cell(cur_row, 7).alignment = Alignment(horizontal="center", vertical="center")
+
+                c_note = ws.cell(cur_row, 8, "Ngày nghỉ tuần")
+                c_note.font = fnt_note
+                c_note.fill = rest_fill
+                c_note.border = brd
+                c_note.alignment = Alignment(horizontal="left", vertical="center")
+            else:
+                # Working day
+                if fill_row:
+                    for ci in range(1, 9):
+                        ws.cell(cur_row, ci).fill = fill_row
+
+                if cell_data:
+                    # Col E: Thời gian sớm nhất (First In)
+                    in_t = cell_data.get("in_time", "")
+                    out_t = cell_data.get("out_time", "")
+                    hours_val = cell_data.get("hours", 0.0)
+
+                    c_in = ws.cell(cur_row, 5)
+                    if in_t and in_t != "---":
+                        try:
+                            from datetime import time as _time
+                            h, m = int(in_t[:2]), int(in_t[3:5])
+                            c_in.value = _time(h, m)
+                            c_in.number_format = "HH:MM"
+                        except Exception:
+                            c_in.value = in_t
+                    c_in.font = fnt_time
+                    c_in.alignment = Alignment(horizontal="center", vertical="center")
+                    c_in.border = brd
+
+                    c_out = ws.cell(cur_row, 6)
+                    if out_t and out_t != "---":
+                        try:
+                            from datetime import time as _time2
+                            h2, m2 = int(out_t[:2]), int(out_t[3:5])
+                            c_out.value = _time2(h2, m2)
+                            c_out.number_format = "HH:MM"
+                        except Exception:
+                            c_out.value = out_t
+                    c_out.font = fnt_time
+                    c_out.alignment = Alignment(horizontal="center", vertical="center")
+                    c_out.border = brd
+
+                    # Col G: Giờ làm việc (numeric hours)
+                    c_hrs = ws.cell(cur_row, 7)
+                    c_hrs.value = hours_val if hours_val > 0 else "0.0"
+                    c_hrs.font = fnt_emp
+                    c_hrs.alignment = Alignment(horizontal="center", vertical="center")
+                    c_hrs.border = brd
+
+                    # Col H: Ghi chú (note if overtime on rest day, or early/late)
+                    note_text = ""
+                    if hours_val > 0 and not cell_data.get("has_out"):
+                        note_text = "Thiếu giờ ra"
+                    c_note2 = ws.cell(cur_row, 8, note_text)
+                    c_note2.font = fnt_note if note_text else fnt_norm
+                    c_note2.fill = note_fill if note_text else (fill_row or PatternFill())
+                    c_note2.alignment = Alignment(horizontal="left", vertical="center")
+                    c_note2.border = brd
+                else:
+                    # Present in date range but no scan this day
+                    ws.cell(cur_row, 5).value = None
+                    ws.cell(cur_row, 5).border = brd
+                    ws.cell(cur_row, 5).alignment = Alignment(horizontal="center", vertical="center")
+                    ws.cell(cur_row, 6).value = None
+                    ws.cell(cur_row, 6).border = brd
+                    ws.cell(cur_row, 6).alignment = Alignment(horizontal="center", vertical="center")
+                    ws.cell(cur_row, 7, "0.0").font = fnt_norm
+                    ws.cell(cur_row, 7).border = brd
+                    ws.cell(cur_row, 7).alignment = Alignment(horizontal="center", vertical="center")
+                    ws.cell(cur_row, 8).value = None
+                    ws.cell(cur_row, 8).border = brd
+
+            ws.row_dimensions[cur_row].height = 16
+            cur_row += 1
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f"BCC_SZ-EXPERT_{matrix['from_date']}_{matrix['to_date']}.xlsx"
+    return send_file(
+        buf,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=fname
+    )
+
+
 @app.route("/api/timekeeping/summary", methods=["GET"])
 @require_role(["admin", "staff"])
 def api_timekeeping_summary():

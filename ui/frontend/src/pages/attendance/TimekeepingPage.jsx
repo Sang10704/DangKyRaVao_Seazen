@@ -29,6 +29,18 @@ export default function TimekeepingPage({ departments }) {
   const [dailyTotals, setDailyTotals] = useState({});
   const [loading, setLoading] = useState(false);
 
+  const exportMenuRef = React.useRef(null);
+  useEffect(() => {
+    if (!showExportMenu) return;
+    const handleOutside = (e) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target)) {
+        setShowExportMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [showExportMenu]);
+
   const fetchMatrix = useCallback(async () => {
     setLoading(true);
     try {
@@ -63,14 +75,26 @@ export default function TimekeepingPage({ departments }) {
     }
   };
 
-  const handleExportExcel = () => {
+  const [showExportMenu, setShowExportMenu] = React.useState(false);
+
+  const buildParams = () => {
     const params = new URLSearchParams();
     if (monthFilter) params.set('month', monthFilter);
     if (fromDate) params.set('from_date', fromDate);
     if (toDate) params.set('to_date', toDate);
     if (deptFilter) params.set('department', deptFilter);
     if (searchQuery) params.set('search', searchQuery);
-    window.location.href = `/api/timekeeping/export_excel?${params.toString()}`;
+    return params.toString();
+  };
+
+  const handleExportExcel = () => {
+    window.location.href = `/api/timekeeping/export_excel?${buildParams()}`;
+    setShowExportMenu(false);
+  };
+
+  const handleExportBCC = () => {
+    window.location.href = `/api/timekeeping/export_excel_bcc?${buildParams()}`;
+    setShowExportMenu(false);
   };
 
   return (
@@ -160,19 +184,62 @@ export default function TimekeepingPage({ departments }) {
               />
             </div>
 
-            <button
-              type="button"
-              className="btn btn-gold"
-              style={{ height: 34, padding: '0 14px', fontWeight: 700 }}
-              onClick={handleExportExcel}
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="7 10 12 15 17 10"></polyline>
-                <line x1="12" y1="15" x2="12" y2="3"></line>
-              </svg>
-              <span>Xuất Excel</span>
-            </button>
+            {/* Export split-button */}
+            <div style={{ position: 'relative' }} ref={exportMenuRef}>
+              <div style={{ display: 'flex', border: '1px solid #B45309', borderRadius: 6, overflow: 'hidden' }}>
+                <button
+                  type="button"
+                  className="btn btn-gold"
+                  style={{ height: 34, padding: '0 14px', fontWeight: 700, border: 'none', borderRadius: 0 }}
+                  onClick={handleExportExcel}
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                  </svg>
+                  <span>Xuất Excel</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-gold"
+                  style={{ height: 34, padding: '0 8px', border: 'none', borderRadius: 0, borderLeft: '1px solid rgba(0,0,0,0.15)' }}
+                  onClick={() => setShowExportMenu(v => !v)}
+                  title="Chọn định dạng xuất"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                  </svg>
+                </button>
+              </div>
+              {showExportMenu && (
+                <div
+                  style={{
+                    position: 'absolute', top: '100%', right: 0, marginTop: 4,
+                    background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8,
+                    boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 100, minWidth: 200,
+                  }}
+                >
+                  <button
+                    type="button"
+                    style={{ display: 'block', width: '100%', padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#111' }}
+                    onClick={handleExportExcel}
+                  >
+                    Xuất chuẩn SeaZen
+                    <div style={{ fontSize: 11, color: '#6B7280', fontWeight: 400, marginTop: 1 }}>Bảng pivot theo ngày (mặc định)</div>
+                  </button>
+                  <div style={{ borderTop: '1px solid #F3F4F6' }} />
+                  <button
+                    type="button"
+                    style={{ display: 'block', width: '100%', padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#111' }}
+                    onClick={handleExportBCC}
+                  >
+                    Xuất BCC SZ-EXPERT
+                    <div style={{ fontSize: 11, color: '#6B7280', fontWeight: 400, marginTop: 1 }}>Mỗi dòng = 1 NV × 1 ngày, T7 đầu/cuối tháng đi làm</div>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
