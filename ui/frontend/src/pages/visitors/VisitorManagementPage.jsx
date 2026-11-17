@@ -84,7 +84,7 @@ export default function VisitorManagementPage({
     from_date: todayStr,
     from_time: nowTimeStr,
     to_date: todayStr,
-    to_time: '17:30',
+    to_time: '16:45',
     purpose: '',
     cccd_number: '',
     phone: '',
@@ -104,7 +104,7 @@ export default function VisitorManagementPage({
     birth_date: '',
     cccd_number: '',
     from_time: `${todayStr} ${nowTimeStr}`,
-    to_time: `${todayStr} 17:30`,
+    to_time: `${todayStr} 16:45`,
     card_number: '',
   });
 

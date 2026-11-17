@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 
 export default function LoginPage({ onLoginSuccess, clockAudit }) {
-  const [credential, setCredential] = useState('admin');
+  const [credential, setCredential] = useState('SeazenAdmin');
   const [password, setPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(false);
@@ -63,7 +63,7 @@ export default function LoginPage({ onLoginSuccess, clockAudit }) {
               Quản lý Cổng, Sinh trắc học & Tiếp đón Khách
             </h1>
             <p style={{ fontSize: 13, color: '#9ca3af', marginTop: 12, lineHeight: 1.6 }}>
-              Điều khiển đóng mở trực tiếp 4 máy nhận diện khuôn mặt, tự động tổng hợp công đầu ngày - cuối ngày và cấp thẻ khách qua mã QR căn cước công dân.
+              Điều khiển đóng mở trực tiếp 4 máy nhận diện khuôn mặt, tổng hợp công chuẩn 07:45 - 16:45, đồng bộ SharePoint Online và cấp thẻ khách qua mã QR căn cước.
             </p>
           </div>
 
@@ -127,7 +127,7 @@ export default function LoginPage({ onLoginSuccess, clockAudit }) {
                 style={{ height: 40, borderRadius: 10 }}
                 value={credential}
                 onChange={(e) => setCredential(e.target.value)}
-                placeholder="admin hoặc nhanvien"
+                placeholder="SeazenAdmin hoặc Letan"
                 required
               />
             </div>
@@ -163,16 +163,24 @@ export default function LoginPage({ onLoginSuccess, clockAudit }) {
               <button
                 type="button"
                 className="btn btn-sm"
-                onClick={() => performLogin('admin', 'Admin@123')}
+                onClick={() => {
+                  setCredential('SeazenAdmin');
+                  setPassword('SeazenAdmin@1516');
+                  performLogin('SeazenAdmin', 'SeazenAdmin@1516');
+                }}
               >
-                Quản trị viên (admin)
+                Admin (SeazenAdmin)
               </button>
               <button
                 type="button"
                 className="btn btn-sm"
-                onClick={() => performLogin('nhanvien', 'Nhanvien@123')}
+                onClick={() => {
+                  setCredential('Letan');
+                  setPassword('Letan@1516');
+                  performLogin('Letan', 'Letan@1516');
+                }}
               >
-                Lễ tân (nhanvien)
+                Lễ tân (Letan)
               </button>
             </div>
           </div>

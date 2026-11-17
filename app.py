@@ -77,13 +77,6 @@ def get_current_user() -> Optional[Dict[str, Any]]:
         u = storage.get_user_by_id(user_id)
         if u:
             return u
-    # Auto-login default admin user so launching the app enters the system immediately without prompting
-    default_admin = storage.get_user_by_credential("admin")
-    if default_admin:
-        session["user_id"] = default_admin["id"]
-        session["role"] = default_admin["role"]
-        session["full_name"] = default_admin["full_name"]
-        return default_admin
     return None
 
 
@@ -143,7 +136,8 @@ def auth_login():
             "username": user["username"],
             "email": user.get("email", ""),
             "full_name": user["full_name"],
-            "role": user["role"]
+            "role": user["role"],
+            "allowed_pages": user.get("allowed_pages", ["ALL"] if user["role"] == "admin" else ["/visitors"])
         }
     })
 
@@ -172,7 +166,8 @@ def auth_me():
             "username": user["username"],
             "email": user.get("email", ""),
             "full_name": user["full_name"],
-            "role": user["role"]
+            "role": user["role"],
+            "allowed_pages": user.get("allowed_pages", ["ALL"] if user["role"] == "admin" else ["/visitors"])
         }
     })
 
@@ -1496,6 +1491,16 @@ def api_upsert_department():
     import db_mssql
     data = request.get_json(silent=True) or {}
     res = db_mssql.upsert_department_db(data)
+    if res.get("success"):
+        try:
+            import sharepoint_vms_sync
+            threading.Thread(
+                target=sharepoint_vms_sync.sync_table_to_sharepoint,
+                args=("tbl_Departments", 200),
+                daemon=True
+            ).start()
+        except Exception:
+            pass
     return jsonify(res), (200 if res.get("success") else 400)
 
 
@@ -1506,14 +1511,20 @@ def api_upsert_employee():
     data = request.get_json(silent=True) or {}
     res = db_mssql.upsert_employee_and_biometrics_db(data)
     atid = str(data.get("EmployeeATID") or "").strip()
-    if res.get("success") and atid and (data.get("FacePhotoBase64") or data.get("FaceTemplateBIODATA")):
+    if res.get("success"):
         try:
             import sharepoint_vms_sync
-            sharepoint_vms_sync.upload_biometric_attachment_to_sharepoint_async(
-                employee_atid=atid,
-                face_photo_b64=data.get("FacePhotoBase64"),
-                face_biodata=data.get("FaceTemplateBIODATA")
-            )
+            threading.Thread(
+                target=sharepoint_vms_sync.sync_table_to_sharepoint,
+                args=("tbl_Employees", 200),
+                daemon=True
+            ).start()
+            if atid and (data.get("FacePhotoBase64") or data.get("FaceTemplateBIODATA")):
+                sharepoint_vms_sync.upload_biometric_attachment_to_sharepoint_async(
+                    employee_atid=atid,
+                    face_photo_b64=data.get("FacePhotoBase64"),
+                    face_biodata=data.get("FaceTemplateBIODATA")
+                )
         except Exception:
             pass
     if res.get("success") and data.get("sync_to_hardware"):
@@ -1621,6 +1632,495 @@ def api_upsert_access_group():
     return jsonify(res), (200 if res.get("success") else 400)
 
 
+def _build_timekeeping_matrix_data(
+    month_str: str = "",
+    from_date_str: str = "",
+    to_date_str: str = "",
+    dept_filter: str = "",
+    q_filter: str = ""
+) -> Dict[str, Any]:
+    """
+    Builds the Employee x Day Timekeeping Pivot Matrix:
+    - Standard Working Hours: 07:45 - 16:45
+    - Each day cell has 2 lines:
+        Line 1: Total hours (e.g. '9.1', '8.5', or '-' if only 1 scan)
+        Line 2: First-In - Last-Out (e.g. '07:45 - 16:48', or '07:48 - ---')
+    """
+    import calendar
+    from datetime import date as dt_date, timedelta
+    import db_mssql
+
+    now = datetime.now()
+    if month_str and len(month_str) == 7 and "-" in month_str and not (from_date_str and to_date_str):
+        y_m = month_str.split("-")
+        yr, mo = int(y_m[0]), int(y_m[1])
+        last_day = calendar.monthrange(yr, mo)[1]
+        from_date_str = f"{yr:04d}-{mo:02d}-01"
+        to_date_str = f"{yr:04d}-{mo:02d}-{last_day:02d}"
+
+    if not from_date_str or not to_date_str:
+        yr, mo = now.year, now.month
+        last_day = calendar.monthrange(yr, mo)[1]
+        from_date_str = from_date_str or f"{yr:04d}-{mo:02d}-01"
+        to_date_str = to_date_str or f"{yr:04d}-{mo:02d}-{last_day:02d}"
+
+    try:
+        d_start = datetime.strptime(from_date_str[:10], "%Y-%m-%d").date()
+        d_end = datetime.strptime(to_date_str[:10], "%Y-%m-%d").date()
+    except Exception:
+        d_start = dt_date(now.year, now.month, 1)
+        d_end = dt_date(now.year, now.month, calendar.monthrange(now.year, now.month)[1])
+
+    if d_end < d_start:
+        d_start, d_end = d_end, d_start
+    if (d_end - d_start).days > 62:
+        d_end = d_start + timedelta(days=62)
+
+    from_iso = d_start.strftime("%Y-%m-%d")
+    to_iso = d_end.strftime("%Y-%m-%d")
+
+    dow_names = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"]
+    days_meta = []
+    cur_d = d_start
+    while cur_d <= d_end:
+        d_iso = cur_d.strftime("%Y-%m-%d")
+        wd = cur_d.weekday()  # 0=Mon .. 6=Sun
+        days_meta.append({
+            "date": d_iso,
+            "day_num": f"{cur_d.day:02d}",
+            "month_num": f"{cur_d.month:02d}",
+            "dow": dow_names[wd],
+            "is_sunday": wd == 6
+        })
+        cur_d += timedelta(days=1)
+
+    # 1. Load Employee Directory for accurate EmployeeCode & DepartmentName
+    emp_dir: Dict[str, Dict[str, str]] = {}
+    emp_json_path = os.path.join(BASE_DIR, "data", "employees.json")
+    if os.path.exists(emp_json_path):
+        try:
+            with open(emp_json_path, "r", encoding="utf-8") as f:
+                for e in json.load(f):
+                    raw_id = str(e.get("atid") or e.get("code") or "").strip()
+                    if not raw_id:
+                        continue
+                    norm_id = str(int(raw_id)) if raw_id.isdigit() else raw_id
+                    fn = str(e.get("fullname") or "").strip()
+                    dept = str(e.get("department") or "").strip()
+                    if fn and not fn.lower().startswith("khach"):
+                        emp_dir[norm_id] = {
+                            "code": str(e.get("code") or norm_id).lstrip("0") or norm_id,
+                            "full_name": fn,
+                            "department": dept if dept and dept not in ("Khác", "--") else "HC QTNS"
+                        }
+        except Exception:
+            pass
+
+    if db_mssql.is_mssql_active():
+        try:
+            import pyodbc
+            with pyodbc.connect(db_mssql.get_connection_string(), timeout=4) as conn:
+                cur = conn.cursor()
+                cur.execute("""
+                    SELECT EmployeeATID, EmployeeCode, FullName, DepartmentName
+                    FROM tbl_Employees
+                    WHERE IsStaff = 1 AND IsActive = 1
+                """)
+                for r in cur.fetchall():
+                    raw_id = str(r[0] or "").strip()
+                    if not raw_id:
+                        continue
+                    norm_id = str(int(raw_id)) if raw_id.isdigit() else raw_id
+                    fn = str(r[2] or "").strip()
+                    dept = str(r[3] or "").strip()
+                    if not fn or fn.lower().startswith("khach") or (norm_id.isdigit() and int(norm_id) >= 56000):
+                        continue
+                    existing = emp_dir.get(norm_id, {})
+                    emp_dir[norm_id] = {
+                        "code": str(r[1] or existing.get("code") or norm_id).lstrip("0") or norm_id,
+                        "full_name": fn,
+                        "department": dept if dept and dept not in ("Khác", "--", "Nhân sự SeaZen") else (existing.get("department") or "HC QTNS")
+                    }
+        except Exception:
+            pass
+
+    # 2. Collect all scans in [from_iso .. to_iso] from both SQL Server and local cache
+    # grouped_times[norm_id][date_iso] = set of "HH:MM:SS" strings
+    grouped_times: Dict[str, Dict[str, set]] = {}
+    fallback_meta: Dict[str, Dict[str, str]] = {}
+
+    def _add_scan_point(raw_atid: Any, raw_name: Any, raw_dept: Any, chk_str: str) -> None:
+        s_id = str(raw_atid or "").strip()
+        if not s_id:
+            return
+        norm_id = str(int(s_id)) if s_id.isdigit() else s_id
+        # Exclude visitor IDs (56235..56254, 80000000+)
+        if norm_id.isdigit() and int(norm_id) >= 56000:
+            return
+        fn_str = str(raw_name or "").strip()
+        if fn_str.lower().startswith("khach") or fn_str.lower().startswith("nv 00056"):
+            return
+        chk_clean = str(chk_str or "").replace("T", " ").strip()
+        if len(chk_clean) < 16:
+            return
+        d_part = chk_clean[:10]
+        t_part = chk_clean[11:19]
+        if d_part < from_iso or d_part > to_iso:
+            return
+        grouped_times.setdefault(norm_id, {}).setdefault(d_part, set()).add(t_part)
+        if norm_id not in fallback_meta and fn_str:
+            fallback_meta[norm_id] = {
+                "code": norm_id,
+                "full_name": fn_str,
+                "department": str(raw_dept or "").strip() or "HC QTNS"
+            }
+
+    # 2a. From local daily_scans.json cache
+    for s in storage._load_scans_cache():
+        ptype = determine_scan_person_type(s)
+        if not ptype.get("is_staff", True):
+            continue
+        _add_scan_point(
+            s.get("EmployeeATID"),
+            s.get("FullName"),
+            s.get("Department"),
+            s.get("CheckTime") or s.get("Time") or ""
+        )
+
+    # 2b. From SQL Server tbl_AttendanceLogs & tbl_DailyTimekeeping
+    if db_mssql.is_mssql_active():
+        try:
+            import pyodbc
+            with pyodbc.connect(db_mssql.get_connection_string(), timeout=5) as conn:
+                cur = conn.cursor()
+                cur.execute("""
+                    SELECT EmployeeATID, FullName, Department, CONVERT(VARCHAR(19), CheckTime, 120)
+                    FROM tbl_AttendanceLogs
+                    WHERE IsStaff = 1 AND CAST(CheckTime AS DATE) BETWEEN ? AND ?
+                """, (from_iso, to_iso))
+                for r in cur.fetchall():
+                    _add_scan_point(r[0], r[1], r[2], r[3])
+
+                cur.execute("""
+                    SELECT EmployeeATID, FullName, DepartmentName,
+                           CONVERT(VARCHAR(19), FirstInTime, 120),
+                           CONVERT(VARCHAR(19), LastOutTime, 120)
+                    FROM tbl_DailyTimekeeping
+                    WHERE WorkDate BETWEEN ? AND ?
+                """, (from_iso, to_iso))
+                for r in cur.fetchall():
+                    if r[3]:
+                        _add_scan_point(r[0], r[1], r[2], r[3])
+                    if r[4]:
+                        _add_scan_point(r[0], r[1], r[2], r[4])
+        except Exception as e:
+            logger.debug("Matrix SQL query warning: %s", e)
+
+    # 3. Build Employee Rows & Daily Totals
+    daily_totals: Dict[str, Dict[str, Any]] = {
+        dm["date"]: {"present_count": 0, "total_hours": 0.0} for dm in days_meta
+    }
+    employee_rows = []
+
+    for norm_id, day_map in grouped_times.items():
+        meta = emp_dir.get(norm_id) or fallback_meta.get(norm_id) or {
+            "code": norm_id,
+            "full_name": f"Nhân sự {norm_id}",
+            "department": "HC QTNS"
+        }
+        dept_name = meta.get("department") or "HC QTNS"
+        if dept_name in ("Nhân sự SeaZen", "Khác", "--"):
+            dept_name = emp_dir.get(norm_id, {}).get("department") or "HC QTNS"
+        full_name = meta.get("full_name") or f"Nhân sự {norm_id}"
+        emp_code = meta.get("code") or norm_id
+
+        if dept_filter and dept_name != dept_filter:
+            continue
+        if q_filter:
+            hay = f"{emp_code} {norm_id} {full_name} {dept_name}".lower()
+            if q_filter not in hay:
+                continue
+
+        cells: Dict[str, Dict[str, Any]] = {}
+        emp_total_hours = 0.0
+        emp_present_days = 0
+        emp_work_units = 0.0
+
+        for d_iso, times_set in day_map.items():
+            if not times_set:
+                continue
+            t_sorted = sorted(times_set)
+            first_t = t_sorted[0]
+            last_t = t_sorted[-1] if len(t_sorted) > 1 else None
+
+            in_hhmm = first_t[:5]
+            out_hhmm = "---"
+            hours_val = 0.0
+            has_out = False
+
+            try:
+                t1 = datetime.strptime(first_t[:8], "%H:%M:%S")
+                if last_t and last_t != first_t:
+                    t2 = datetime.strptime(last_t[:8], "%H:%M:%S")
+                    diff_sec = (t2 - t1).total_seconds()
+                    # Only count as valid Out scan if at least 3 minutes apart from First-In
+                    if diff_sec >= 180:
+                        has_out = True
+                        out_hhmm = last_t[:5]
+                        hours_val = round(diff_sec / 3600.0, 1)
+            except Exception:
+                pass
+
+            # Standard work day: 07:45 to 16:45 (9.0h span = 8.0h work + 1.0h break)
+            work_unit = 1.0 if hours_val >= 7.5 else (0.5 if hours_val >= 3.5 else 0.0)
+            emp_present_days += 1
+            emp_total_hours = round(emp_total_hours + hours_val, 1)
+            emp_work_units = round(emp_work_units + work_unit, 1)
+
+            if d_iso in daily_totals:
+                daily_totals[d_iso]["present_count"] += 1
+                daily_totals[d_iso]["total_hours"] = round(daily_totals[d_iso]["total_hours"] + hours_val, 1)
+
+            hours_str = (str(int(hours_val)) if hours_val.is_integer() else str(hours_val)) if has_out else "-"
+            cells[d_iso] = {
+                "hours": hours_val,
+                "hours_display": hours_str,
+                "time_range": f"{in_hhmm} - {out_hhmm}",
+                "in_time": in_hhmm,
+                "out_time": out_hhmm,
+                "has_out": has_out,
+                "work_unit": work_unit
+            }
+
+        if cells:
+            employee_rows.append({
+                "employee_atid": norm_id,
+                "employee_code": emp_code,
+                "full_name": full_name,
+                "department": dept_name,
+                "total_hours": emp_total_hours,
+                "present_days": emp_present_days,
+                "total_work_units": emp_work_units,
+                "days": cells
+            })
+
+    employee_rows.sort(key=lambda r: (r["department"], r["full_name"]))
+    return {
+        "success": True,
+        "shift_standard": "07:45 - 16:45",
+        "from_date": from_iso,
+        "to_date": to_iso,
+        "days": days_meta,
+        "employees": employee_rows,
+        "daily_totals": daily_totals,
+        "total_employees": len(employee_rows)
+    }
+
+
+@app.route("/api/timekeeping/matrix", methods=["GET"])
+@require_role(["admin", "staff"])
+def api_timekeeping_matrix():
+    month_str = (request.args.get("month") or "").strip()
+    from_date = (request.args.get("from_date") or "").strip()
+    to_date = (request.args.get("to_date") or "").strip()
+    dept_filter = (request.args.get("department") or "").strip()
+    q_filter = (request.args.get("search") or "").strip().lower()
+    data = _build_timekeeping_matrix_data(month_str, from_date, to_date, dept_filter, q_filter)
+    return jsonify(data)
+
+
+@app.route("/api/timekeeping/export_excel", methods=["GET"])
+@require_role(["admin", "staff"])
+def api_timekeeping_export_excel():
+    """
+    Exports the filtered Timekeeping Matrix to an Excel (.xlsx) file.
+    Columns: STT | Mã số NV | Họ và tên | Phòng ban | <Day Columns> | Tổng giờ công | Số ngày có mặt
+    Each day cell contains 2 lines:
+      Line 1: Total hours (e.g. 9.1)
+      Line 2: CheckIn - CheckOut (e.g. 07:45 - 16:48)
+    """
+    import io
+    from flask import send_file
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    from openpyxl.utils import get_column_letter
+
+    month_str = (request.args.get("month") or "").strip()
+    from_date = (request.args.get("from_date") or "").strip()
+    to_date = (request.args.get("to_date") or "").strip()
+    dept_filter = (request.args.get("department") or "").strip()
+    q_filter = (request.args.get("search") or "").strip().lower()
+
+    matrix = _build_timekeeping_matrix_data(month_str, from_date, to_date, dept_filter, q_filter)
+    days = matrix["days"]
+    employees = matrix["employees"]
+    daily_totals = matrix["daily_totals"]
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Bang_Tong_Hop_Cong"
+
+    thin_side = Side(style="thin", color="D1D5DB")
+    border_all = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
+    header_fill = PatternFill(start_color="111111", end_color="111111", fill_type="solid")
+    sun_head_fill = PatternFill(start_color="9A6700", end_color="9A6700", fill_type="solid")
+    sun_cell_fill = PatternFill(start_color="FEF9EE", end_color="FEF9EE", fill_type="solid")
+    total_fill = PatternFill(start_color="F3F4F6", end_color="F3F4F6", fill_type="solid")
+
+    font_title = Font(name="Arial", size=13, bold=True, color="111111")
+    font_sub = Font(name="Arial", size=10, italic=True, color="4B5563")
+    font_head = Font(name="Arial", size=10, bold=True, color="FFFFFF")
+    font_emp = Font(name="Arial", size=10, bold=True, color="111111")
+    font_norm = Font(name="Arial", size=10, color="111111")
+    font_cell = Font(name="Arial", size=9.5, bold=True, color="0F5132")
+
+    total_cols = 4 + len(days) + 2
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=min(total_cols, 16))
+    ws.cell(row=1, column=1, value=f"BẢNG TỔNG HỢP CÔNG NHÂN VIÊN SEAZEN ({matrix['from_date']} đến {matrix['to_date']})").font = font_title
+
+    ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=min(total_cols, 16))
+    dept_label = dept_filter if dept_filter else "Tất cả phòng ban"
+    ws.cell(row=2, column=1, value=f"Giờ làm việc chuẩn: 07:45 - 16:45 | Phòng ban: {dept_label} | Tổng nhân sự: {len(employees)}").font = font_sub
+
+    # Row 4: Table Headers
+    fixed_headers = ["STT", "MÃ SỐ NV", "HỌ VÀ TÊN", "PHÒNG BAN"]
+    for idx, h_text in enumerate(fixed_headers, start=1):
+        c = ws.cell(row=4, column=idx, value=h_text)
+        c.font = font_head
+        c.fill = header_fill
+        c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        c.border = border_all
+
+    for d_idx, dm in enumerate(days, start=5):
+        c = ws.cell(row=4, column=d_idx, value=f"{dm['day_num']}/{dm['month_num']}\n({dm['dow']})")
+        c.font = font_head
+        c.fill = sun_head_fill if dm["is_sunday"] else header_fill
+        c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        c.border = border_all
+
+    c_tot_h = ws.cell(row=4, column=5 + len(days), value="TỔNG GIỜ")
+    c_tot_h.font = font_head
+    c_tot_h.fill = header_fill
+    c_tot_h.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    c_tot_h.border = border_all
+
+    c_tot_d = ws.cell(row=4, column=6 + len(days), value="NGÀY CÓ MẶT")
+    c_tot_d.font = font_head
+    c_tot_d.fill = header_fill
+    c_tot_d.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    c_tot_d.border = border_all
+
+    ws.row_dimensions[4].height = 28
+
+    # Employee Rows
+    for r_i, emp in enumerate(employees, start=1):
+        row_num = 4 + r_i
+        ws.row_dimensions[row_num].height = 28
+
+        c1 = ws.cell(row=row_num, column=1, value=r_i)
+        c1.alignment = Alignment(horizontal="center", vertical="center")
+        c1.font = font_norm
+        c1.border = border_all
+
+        c2 = ws.cell(row=row_num, column=2, value=emp["employee_code"])
+        c2.alignment = Alignment(horizontal="center", vertical="center")
+        c2.font = font_emp
+        c2.border = border_all
+
+        c3 = ws.cell(row=row_num, column=3, value=emp["full_name"].upper())
+        c3.alignment = Alignment(horizontal="left", vertical="center")
+        c3.font = font_emp
+        c3.border = border_all
+
+        c4 = ws.cell(row=row_num, column=4, value=emp["department"])
+        c4.alignment = Alignment(horizontal="left", vertical="center")
+        c4.font = font_norm
+        c4.border = border_all
+
+        emp_days = emp.get("days", {})
+        for d_idx, dm in enumerate(days, start=5):
+            cell_obj = emp_days.get(dm["date"])
+            cell_ref = ws.cell(row=row_num, column=d_idx)
+            if cell_obj:
+                # 2 lines: Line 1 = Total hours, Line 2 = In - Out
+                cell_ref.value = f"{cell_obj['hours_display']}\n{cell_obj['time_range']}"
+                cell_ref.font = font_cell
+            else:
+                cell_ref.value = ""
+            if dm["is_sunday"]:
+                cell_ref.fill = sun_cell_fill
+            cell_ref.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            cell_ref.border = border_all
+
+        ct1 = ws.cell(row=row_num, column=5 + len(days), value=emp["total_hours"])
+        ct1.alignment = Alignment(horizontal="center", vertical="center")
+        ct1.font = font_emp
+        ct1.border = border_all
+
+        ct2 = ws.cell(row=row_num, column=6 + len(days), value=emp["present_days"])
+        ct2.alignment = Alignment(horizontal="center", vertical="center")
+        ct2.font = font_norm
+        ct2.border = border_all
+
+    # Footer Summary Row (TỔNG CỘNG)
+    foot_row = 5 + len(employees)
+    ws.row_dimensions[foot_row].height = 28
+    ws.merge_cells(start_row=foot_row, start_column=1, end_row=foot_row, end_column=4)
+    for col_k in range(1, 5):
+        fc = ws.cell(row=foot_row, column=col_k)
+        fc.fill = total_fill
+        fc.border = border_all
+    ws.cell(row=foot_row, column=1, value="TỔNG CỘNG (NGƯỜI / GIỜ):").font = font_emp
+    ws.cell(row=foot_row, column=1).alignment = Alignment(horizontal="right", vertical="center")
+
+    for d_idx, dm in enumerate(days, start=5):
+        dtot = daily_totals.get(dm["date"], {"present_count": 0, "total_hours": 0.0})
+        fc = ws.cell(row=foot_row, column=d_idx)
+        if dtot["present_count"] > 0:
+            fc.value = f"{dtot['present_count']} NV\n{dtot['total_hours']}h"
+        else:
+            fc.value = "-"
+        fc.font = font_emp
+        fc.fill = total_fill
+        fc.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        fc.border = border_all
+
+    grand_hours = round(sum(e["total_hours"] for e in employees), 1)
+    grand_days = sum(e["present_days"] for e in employees)
+    f_gh = ws.cell(row=foot_row, column=5 + len(days), value=grand_hours)
+    f_gh.font = font_emp
+    f_gh.fill = total_fill
+    f_gh.alignment = Alignment(horizontal="center", vertical="center")
+    f_gh.border = border_all
+
+    f_gd = ws.cell(row=foot_row, column=6 + len(days), value=grand_days)
+    f_gd.font = font_emp
+    f_gd.fill = total_fill
+    f_gd.alignment = Alignment(horizontal="center", vertical="center")
+    f_gd.border = border_all
+
+    # Column widths
+    ws.column_dimensions["A"].width = 6
+    ws.column_dimensions["B"].width = 12
+    ws.column_dimensions["C"].width = 26
+    ws.column_dimensions["D"].width = 18
+    for d_idx in range(5, 5 + len(days)):
+        ws.column_dimensions[get_column_letter(d_idx)].width = 13
+    ws.column_dimensions[get_column_letter(5 + len(days))].width = 12
+    ws.column_dimensions[get_column_letter(6 + len(days))].width = 13
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f"Bang_Tong_Hop_Cong_SeaZen_{matrix['from_date']}_{matrix['to_date']}.xlsx"
+    return send_file(
+        buf,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=fname
+    )
+
+
 @app.route("/api/timekeeping/summary", methods=["GET"])
 @require_role(["admin", "staff"])
 def api_timekeeping_summary():
@@ -1725,6 +2225,20 @@ def api_upsert_shift():
 def api_sharepoint_vms_status():
     import sharepoint_vms_sync
     return jsonify(sharepoint_vms_sync.get_vms_sharepoint_status())
+
+
+@app.route("/api/sharepoint/connect_account", methods=["POST"])
+@require_role(["admin"])
+def api_sharepoint_connect_account():
+    """Triggers interactive Microsoft 365 OAuth2 login on the server PC if no cached token is found."""
+    import sharepoint_vms_sync
+    tok = sharepoint_vms_sync.get_sharepoint_tokens(allow_interactive=True)
+    return jsonify({
+        "success": bool(tok.get("ok")),
+        "account": tok.get("account"),
+        "cache_path": tok.get("cache_path"),
+        "error": tok.get("error")
+    })
 
 
 @app.route("/api/sharepoint/provision_lists", methods=["POST"])

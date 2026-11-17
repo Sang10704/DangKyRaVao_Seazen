@@ -946,3 +946,163 @@ table.data-table tr:hover td {
   justify-content: flex-end;
   gap: 8px;
 }
+
+/* =========================================================================
+   TIMEKEEPING PIVOT MATRIX TABLE (07:45 - 16:45, 2-LINE CELLS)
+   ========================================================================= */
+table.tk-matrix-table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12px;
+}
+table.tk-matrix-table th,
+table.tk-matrix-table td {
+  border-right: 1px solid #e5e7eb;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 6px 8px;
+  vertical-align: middle;
+}
+table.tk-matrix-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 12;
+  background: #f8fafc;
+  color: var(--jet);
+  font-weight: 700;
+  text-align: center;
+  border-bottom: 2px solid #d1d5db;
+}
+table.tk-matrix-table thead th.sun-col {
+  background: #fdf6e7;
+}
+table.tk-matrix-table td.sun-col {
+  background: #fffcf5;
+}
+table.tk-matrix-table .sticky-c1 {
+  position: sticky;
+  left: 0;
+  width: 44px;
+  min-width: 44px;
+  max-width: 44px;
+  text-align: center;
+  background: #ffffff;
+  z-index: 8;
+}
+table.tk-matrix-table .sticky-c2 {
+  position: sticky;
+  left: 44px;
+  width: 82px;
+  min-width: 82px;
+  max-width: 82px;
+  text-align: center;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  background: #ffffff;
+  z-index: 8;
+}
+table.tk-matrix-table .sticky-c3 {
+  position: sticky;
+  left: 126px;
+  width: 196px;
+  min-width: 196px;
+  max-width: 196px;
+  text-align: left;
+  font-weight: 700;
+  color: var(--jet);
+  background: #ffffff;
+  z-index: 8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+table.tk-matrix-table .sticky-c4 {
+  position: sticky;
+  left: 322px;
+  width: 136px;
+  min-width: 136px;
+  max-width: 136px;
+  text-align: left;
+  color: var(--text-secondary);
+  background: #ffffff;
+  z-index: 8;
+  border-right: 2px solid #cbd5e1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+table.tk-matrix-table thead th.sticky-c1,
+table.tk-matrix-table thead th.sticky-c2,
+table.tk-matrix-table thead th.sticky-c3,
+table.tk-matrix-table thead th.sticky-c4 {
+  z-index: 22;
+  background: #f1f5f9;
+}
+table.tk-matrix-table tbody tr:hover td {
+  background: #f9fafb;
+}
+table.tk-matrix-table tbody tr:hover td.sun-col {
+  background: #fef7e6;
+}
+
+.tk-day-cell {
+  min-width: 86px;
+  text-align: center;
+  padding: 4px 5px !important;
+}
+.tk-cell-box {
+  background: #f4f9fd;
+  border: 1px solid #dbeafe;
+  border-radius: 5px;
+  padding: 3px 5px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 38px;
+}
+.tk-cell-box.incomplete {
+  background: #f9fafb;
+  border-color: #e5e7eb;
+}
+.tk-cell-hours {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #0f766e;
+  line-height: 1.15;
+}
+.tk-cell-box.incomplete .tk-cell-hours {
+  color: #6b7280;
+}
+.tk-cell-times {
+  font-size: 10.5px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: #334155;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+table.tk-matrix-table tfoot td {
+  position: sticky;
+  bottom: 0;
+  z-index: 14;
+  background: #f1f5f9;
+  border-top: 2px solid #cbd5e1;
+  font-weight: 700;
+  text-align: center;
+}
+table.tk-matrix-table tfoot td.sticky-foot-label {
+  position: sticky;
+  left: 0;
+  z-index: 20;
+  background: #e2e8f0;
+  text-align: right;
+  padding-right: 16px;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--jet);
+  border-right: 2px solid #cbd5e1;
+}

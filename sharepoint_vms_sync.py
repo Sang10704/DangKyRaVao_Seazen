@@ -371,25 +371,71 @@ def _dpapi_decrypt(raw_bytes: bytes) -> bytes:
     return raw_bytes
 
 
+def _dpapi_encrypt(plain_bytes: bytes) -> bytes:
+    """Encrypts token_cache JSON bytes with Windows DPAPI prefixed by b'DPAPI:' (matching SeaZen Portal)."""
+    if not plain_bytes:
+        return b""
+    try:
+        crypt32 = ctypes.windll.crypt32
+        kernel32 = ctypes.windll.kernel32
+        buf = ctypes.cast(ctypes.create_string_buffer(plain_bytes), ctypes.POINTER(ctypes.c_char))
+        blob_in = _DATA_BLOB(len(plain_bytes), buf)
+        blob_out = _DATA_BLOB()
+        if crypt32.CryptProtectData(ctypes.byref(blob_in), None, None, None, None, 0, ctypes.byref(blob_out)):
+            enc = ctypes.string_at(blob_out.pbData, blob_out.cbData)
+            kernel32.LocalFree(blob_out.pbData)
+            return b"DPAPI:" + enc
+    except Exception as e:
+        logger.debug("DPAPI encrypt fallback: %s", e)
+    return plain_bytes
+
+
+def _save_token_cache_dpapi(serialized_json: str) -> str:
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    target_dir = os.path.join(base_dir, "data", ".cache")
+    os.makedirs(target_dir, exist_ok=True)
+    target_path = os.path.join(target_dir, "token_cache.bin")
+    enc_bytes = _dpapi_encrypt(serialized_json.encode("utf-8"))
+    with open(target_path, "wb") as f:
+        f.write(enc_bytes)
+    return target_path
+
+
 def _find_token_cache_paths() -> List[str]:
     base_dir = os.path.dirname(os.path.abspath(__file__))
+    parent_dir = os.path.dirname(base_dir)
     local_appdata = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~\\AppData\\Local")
     candidates = [
         os.path.join(base_dir, "data", ".cache", "token_cache.bin"),
         os.path.join(base_dir, "token_cache.bin"),
         os.path.join(local_appdata, "SeaZen_HR_Portal", "data", ".cache", "token_cache.bin"),
+        os.path.join(local_appdata, "SeaZenPortal", "data", ".cache", "token_cache.bin"),
+        os.path.join(parent_dir, "SEAZEN_HR_PORTAL_APP", "data", ".cache", "token_cache.bin"),
         r"D:\SeaZen APP\SEAZEN_HR_PORTAL_APP\data\.cache\token_cache.bin",
         r"D:\SeaZen APP\Compress Attachment Sharepoint\token_cache.bin",
     ]
-    return [p for p in candidates if os.path.isfile(p)]
+    seen = set()
+    out = []
+    for p in candidates:
+        norm_p = os.path.normcase(os.path.abspath(p))
+        if norm_p not in seen and os.path.isfile(p):
+            seen.add(norm_p)
+            out.append(p)
+    return out
 
 
-def get_sharepoint_tokens() -> Dict[str, Any]:
+def get_sharepoint_tokens(allow_interactive: bool = False) -> Dict[str, Any]:
     """
     Acquires both Graph API and SharePoint Online REST API OAuth2 Bearer tokens
-    silently using SEAZENHR-PORTAL (0390280b-12b8-49c4-adbf-a9c2b8bccfb5).
+    using SEAZENHR-PORTAL (0390280b-12b8-49c4-adbf-a9c2b8bccfb5).
+    - Automatically discovers token_cache.bin from local VMS or SeaZen Portal App.
+    - Replicates & persists refreshed DPAPI token_cache.bin locally so silent refresh runs 24/7.
+    - When allow_interactive=True (e.g. moving to a new server PC), launches MSAL interactive browser sign-in.
     """
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    local_cache_file = os.path.join(base_dir, "data", ".cache", "token_cache.bin")
     cache_paths = _find_token_cache_paths()
+
     for path in cache_paths:
         try:
             with open(path, "rb") as f:
@@ -411,15 +457,44 @@ def get_sharepoint_tokens() -> Dict[str, Any]:
             sp_res = app.acquire_token_silent(SP_SCOPES, account=acc)
             graph_res = app.acquire_token_silent(GRAPH_SCOPES, account=acc)
             if sp_res and "access_token" in sp_res:
+                if cache.has_state_changed or not os.path.isfile(local_cache_file):
+                    try:
+                        _save_token_cache_dpapi(cache.serialize())
+                    except Exception:
+                        pass
                 return {
                     "ok": True,
                     "account": acc.get("username"),
-                    "cache_path": path,
+                    "cache_path": local_cache_file if os.path.isfile(local_cache_file) else path,
                     "sp_token": sp_res["access_token"],
                     "graph_token": graph_res.get("access_token") if graph_res else None
                 }
         except Exception as e:
             logger.debug("Token cache %s error: %s", path, e)
+
+    if allow_interactive:
+        try:
+            cache = msal.SerializableTokenCache()
+            app = msal.PublicClientApplication(
+                CLIENT_ID,
+                authority=f"https://login.microsoftonline.com/{TENANT_ID}",
+                token_cache=cache
+            )
+            sp_res = app.acquire_token_interactive(scopes=SP_SCOPES, prompt="select_account")
+            if sp_res and "access_token" in sp_res:
+                saved_path = _save_token_cache_dpapi(cache.serialize())
+                accounts = app.get_accounts()
+                acc_name = accounts[0].get("username") if accounts else "Microsoft365"
+                graph_res = app.acquire_token_silent(GRAPH_SCOPES, account=accounts[0]) if accounts else None
+                return {
+                    "ok": True,
+                    "account": acc_name,
+                    "cache_path": saved_path,
+                    "sp_token": sp_res["access_token"],
+                    "graph_token": graph_res.get("access_token") if graph_res else None
+                }
+        except Exception as ie:
+            logger.warning("Interactive MSAL sign-in error: %s", ie)
 
     return {
         "ok": False,

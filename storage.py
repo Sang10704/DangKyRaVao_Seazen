@@ -184,39 +184,60 @@ class StorageManager:
 
     # ---------------- User & Authentication Management ----------------
 
+    HARDCODED_USERS: Dict[str, Dict[str, Any]] = {
+        "usr-seazen-admin": {
+            "id": "usr-seazen-admin",
+            "username": "SeazenAdmin",
+            "email": "admin@seazen.com.vn",
+            "full_name": "Quản Trị Viên Hệ Thống (SeazenAdmin)",
+            "role": "admin",
+            "allowed_pages": ["ALL"],
+            "is_active": True,
+        },
+        "usr-seazen-letan": {
+            "id": "usr-seazen-letan",
+            "username": "Letan",
+            "email": "letan@seazen.com.vn",
+            "full_name": "Bàn Tiếp Đón Lễ Tân (Letan)",
+            "role": "staff",
+            "allowed_pages": ["/visitors"],
+            "is_active": True,
+        },
+    }
+
     def seed_default_users(self) -> None:
-        """Khởi tạo 2 tài khoản mặc định (admin & nhanvien) nếu users.json chưa có hoặc rỗng."""
-        users = _read_json(USERS_FILE, [])
-        if not users:
-            admin_user = {
-                "id": "usr-admin-01",
-                "username": "admin",
-                "email": "admin@seazen.vn",
-                "password_hash": generate_password_hash("Admin@123", method="scrypt"),
-                "full_name": "Quản Trị Viên Hệ Thống",
-                "role": "admin",
-                "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "is_active": True
-            }
-            staff_user = {
-                "id": "usr-staff-01",
-                "username": "nhanvien",
-                "email": "nhanvien@seazen.vn",
-                "password_hash": generate_password_hash("Nhanvien@123", method="scrypt"),
-                "full_name": "Nhân Viên Tiếp Đón",
-                "role": "staff",
-                "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "is_active": True
-            }
-            users = [admin_user, staff_user]
-            _write_json(USERS_FILE, users)
-            logger.info("Đã khởi tạo 2 tài khoản mặc định: admin và nhanvien vào users.json")
+        """Khởi tạo 2 tài khoản chuẩn SeazenAdmin (SeazenAdmin@1516) và Letan (Letan@1516) vào users.json."""
+        admin_user = {
+            "id": "usr-seazen-admin",
+            "username": "SeazenAdmin",
+            "email": "admin@seazen.com.vn",
+            "password_hash": generate_password_hash("SeazenAdmin@1516", method="scrypt"),
+            "full_name": "Quản Trị Viên Hệ Thống (SeazenAdmin)",
+            "role": "admin",
+            "allowed_pages": ["ALL"],
+            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "is_active": True
+        }
+        letan_user = {
+            "id": "usr-seazen-letan",
+            "username": "Letan",
+            "email": "letan@seazen.com.vn",
+            "password_hash": generate_password_hash("Letan@1516", method="scrypt"),
+            "full_name": "Bàn Tiếp Đón Lễ Tân (Letan)",
+            "role": "staff",
+            "allowed_pages": ["/visitors"],
+            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "is_active": True
+        }
+        _write_json(USERS_FILE, [admin_user, letan_user])
 
     def get_users(self) -> List[Dict[str, Any]]:
-        return _read_json(USERS_FILE, [])
+        return list(self.HARDCODED_USERS.values())
 
     def get_user_by_id(self, user_id: str) -> Optional[Dict[str, Any]]:
-        users = self.get_users()
+        if user_id in self.HARDCODED_USERS:
+            return dict(self.HARDCODED_USERS[user_id])
+        users = _read_json(USERS_FILE, [])
         for u in users:
             if u.get("id") == user_id:
                 return u
@@ -226,9 +247,11 @@ class StorageManager:
         clean_cred = str(cred).strip().lower()
         if not clean_cred:
             return None
-        if clean_cred == "letan":
-            clean_cred = "nhanvien"
-        users = self.get_users()
+        if clean_cred in ("seazenadmin", "admin@seazen.com.vn"):
+            return dict(self.HARDCODED_USERS["usr-seazen-admin"])
+        if clean_cred in ("letan", "letan@seazen.com.vn"):
+            return dict(self.HARDCODED_USERS["usr-seazen-letan"])
+        users = _read_json(USERS_FILE, [])
         for u in users:
             u_name = str(u.get("username", "")).strip().lower()
             u_email = str(u.get("email", "")).strip().lower()
@@ -237,16 +260,23 @@ class StorageManager:
         return None
 
     def verify_user_credentials(self, username_or_email: str, password: str) -> Optional[Dict[str, Any]]:
+        clean_cred = str(username_or_email or "").strip().lower()
+        pw = str(password or "").strip()
+
+        # Hardcoded authoritative accounts as requested:
+        # 1. Admin: SeazenAdmin / SeazenAdmin@1516 (Full access)
+        if clean_cred in ("seazenadmin", "admin@seazen.com.vn") and pw == "SeazenAdmin@1516":
+            return dict(self.HARDCODED_USERS["usr-seazen-admin"])
+
+        # 2. Reception: Letan / Letan@1516 (Only /visitors page)
+        if clean_cred in ("letan", "letan@seazen.com.vn") and pw == "Letan@1516":
+            return dict(self.HARDCODED_USERS["usr-seazen-letan"])
+
         user = self.get_user_by_credential(username_or_email)
-        if not user:
-            return None
-        if not user.get("is_active", True):
+        if not user or not user.get("is_active", True):
             return None
         pw_hash = user.get("password_hash", "")
-        if pw_hash and check_password_hash(pw_hash, password):
-            return user
-        # Allow quick DevTest password '123' for default admin/nhanvien accounts
-        if user.get("username") in ("admin", "nhanvien") and password == "123":
+        if pw_hash and check_password_hash(pw_hash, pw):
             return user
         return None
 
@@ -555,9 +585,7 @@ class StorageManager:
             "direction": "OUT"
         }
         try:
-            self.save_scan(out_scan)
-            if MSSQL_AVAILABLE and db_mssql and db_mssql.is_mssql_active():
-                db_mssql.insert_attendance_log(out_scan)
+            self.merge_and_save_scans([out_scan])
         except Exception as e:
             logger.warning("Failed to record OUT attendance log on checkout: %s", e)
 
@@ -711,6 +739,7 @@ class StorageManager:
                 emp_map[fn] = emp
 
         added_count = 0
+        actually_added = []
         for l in new_logs:
             if "CheckTime" not in l and "Time" in l:
                 l["CheckTime"] = l["Time"]
@@ -731,6 +760,7 @@ class StorageManager:
             if key not in seen_keys:
                 seen_keys.add(key)
                 merged.append(l)
+                actually_added.append(l)
                 added_count += 1
 
         if added_count > 0:
@@ -746,18 +776,17 @@ class StorageManager:
             try:
                 import db_mssql
                 if db_mssql.is_mssql_active():
-                    inserted_db = db_mssql.insert_attendance_logs_bulk(new_logs)
+                    inserted_db = db_mssql.insert_attendance_logs_bulk(actually_added)
                     if inserted_db > 0:
                         logger.info("[Storage] Đã lưu %d lượt quét mới vào CSDL Microsoft SQL Server", inserted_db)
             except Exception as e:
                 logger.debug("[Storage] Lỗi lưu log vào MSSQL: %s", e)
 
-            # Asynchronous Write-Through to SharePoint Online List 'VMS SEAZEN - NHẬT KÝ QUẸT THẺ'
+            # Asynchronous Write-Through to SharePoint Online List 'VMS SEAZEN - NHẬT KÝ RA VÀO'
             try:
                 import sharepoint_vms_sync
-                live_events = [x for x in new_logs if x.get("SyncSource") == "LIVE_REG_EVENT"]
-                if live_events:
-                    sharepoint_vms_sync.push_live_scans_to_sharepoint_async(live_events)
+                if actually_added:
+                    sharepoint_vms_sync.push_live_scans_to_sharepoint_async(actually_added[:25])
             except Exception as sp_err:
                 logger.debug("[Storage] SharePoint async push skipped: %s", sp_err)
 

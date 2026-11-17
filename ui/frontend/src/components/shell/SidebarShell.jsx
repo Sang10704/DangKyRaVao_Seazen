@@ -89,6 +89,11 @@ export default function SidebarShell({
     },
   ];
 
+  const isAdmin = user?.role === 'admin';
+  const visibleNavItems = isAdmin
+    ? navItems
+    : navItems.filter((item) => item.path === ROUTES.VISITORS);
+
   return (
     <aside className="tino-sidebar">
       <div>
@@ -103,7 +108,7 @@ export default function SidebarShell({
         </div>
 
         <nav className="tino-nav-list">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const active = currentPath === item.path;
             return (
               <a

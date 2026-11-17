@@ -376,10 +376,10 @@ def insert_attendance_logs_bulk(scans: List[Dict[str, Any]]) -> int:
                                         WorkDate, EmployeeATID, EmployeeCode, FullName, DepartmentName,
                                         ShiftCode, FirstInTime, LastOutTime, TotalScans, LateMinutes, EarlyLeaveMinutes, TotalHours, AttendanceStatus
                                     ) VALUES (
-                                        ?, ?, ?, ?, ?, 'HC_0800_1730', ?, NULL, 1,
-                                        CASE WHEN (? * 60 + ?) > (8 * 60 + 5) THEN (? * 60 + ?) - (8 * 60) ELSE 0 END,
+                                        ?, ?, ?, ?, ?, 'HC_0745_1645', ?, NULL, 1,
+                                        CASE WHEN (? * 60 + ?) > (7 * 60 + 45) THEN (? * 60 + ?) - (7 * 60 + 45) ELSE 0 END,
                                         0, 0,
-                                        CASE WHEN (? * 60 + ?) > (8 * 60 + 5) THEN 'LATE' ELSE 'MISSING_OUT' END
+                                        CASE WHEN (? * 60 + ?) > (7 * 60 + 45) THEN 'LATE' ELSE 'MISSING_OUT' END
                                     )
                                 END
                                 ELSE

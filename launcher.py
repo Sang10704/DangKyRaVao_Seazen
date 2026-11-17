@@ -1,10 +1,10 @@
 """
 SeaZen VMS Smart Access Control - Instant Launcher
 - Automatically frees any stale process on port 6868
+- Opens Windows Firewall port 6868 for LAN multi-machine access
+- Acquires / refreshes Microsoft 365 SharePoint OAuth2 Bearer Token (auto interactive on new server PC)
 - Verifies Vietnam Standard Time (NTP UTC+7) on startup
 - Starts the 24/7 Waitress server + 4 ZKTeco TCP 4370 live_capture threads
-- Opens the application window directly into /live without asking questions
-- Keeps the console alive 24/7 so it never closes by itself
 """
 
 import os
@@ -24,6 +24,35 @@ if sys.platform == "win32":
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, BASE_DIR)
+
+
+def get_lan_ip() -> str:
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("172.16.56.139", 4370))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
+
+def ensure_lan_firewall_port(port: int = 6868) -> None:
+    """Ensures Windows Firewall allows inbound TCP connections on port 6868 from LAN machines."""
+    if sys.platform != "win32":
+        return
+    try:
+        subprocess.run(
+            [
+                "netsh", "advfirewall", "firewall", "add", "rule",
+                f"name=SeaZen_VMS_Port_{port}",
+                "dir=in", "action=allow", "protocol=TCP", f"localport={port}"
+            ],
+            timeout=4,
+            capture_output=True
+        )
+    except Exception:
+        pass
 
 
 def is_port_open(host: str, port: int) -> bool:
@@ -80,37 +109,51 @@ def launch_webview_app_window(url: str) -> bool:
 def main():
     devtest_mode = "--devtest" in sys.argv or "-d" in sys.argv
     port = 6868
-    url = f"http://127.0.0.1:{port}/live"
+    lan_ip = get_lan_ip()
+    url = f"http://127.0.0.1:{port}"
+    lan_url = f"http://{lan_ip}:{port}"
 
     print("=" * 78)
     print("  SEAZEN VMS v2.0 - HE THONG KIEM SOAT RA VAO & SINH TRAC HOC")
     print("=" * 78)
 
-    # 1. Cleanly free any old background instance on port 6868
+    # 1. Cleanly free any old background instance & open LAN firewall port 6868
     free_stale_port(port)
+    ensure_lan_firewall_port(port)
 
-    # 2. Import app (starts 4 ZKTeco TCP 4370 live_capture threads) & check Vietnam NTP Clock
+    # 2. Verify / Acquire Microsoft 365 SharePoint Token (auto interactive if moved to new server PC)
+    try:
+        import sharepoint_vms_sync
+        sp_tok = sharepoint_vms_sync.get_sharepoint_tokens(allow_interactive=True)
+        if sp_tok.get("ok"):
+            print(f"  [SHAREPOINT] Da ket noi Microsoft 365 ({sp_tok.get('account')}) -> Dong bo SharePoint VMS")
+        else:
+            print(f"  [SHAREPOINT] Canh bao token: {sp_tok.get('error')}")
+    except Exception as sp_e:
+        print(f"  [SHAREPOINT] Kiem tra token: {sp_e}")
+
+    # 3. Import app (starts 4 ZKTeco TCP 4370 live_capture threads) & check Vietnam NTP Clock
     from app import app, zk_client
     try:
         audit = zk_client.audit_all_clocks()
-        print(f"  [NTP UTC+7] Gio chuan Viet Nam : {audit.get('vietnam_ntp_time')}")
-        print(f"  [LOCAL PC ] Gio may tinh cuc bo: {audit.get('local_pc_time')} (Lech: {audit.get('pc_drift_sec')}s)")
+        print(f"  [NTP UTC+7 ] Gio chuan Viet Nam : {audit.get('vietnam_ntp_time')}")
+        print(f"  [LOCAL PC  ] Gio may tinh cuc bo: {audit.get('local_pc_time')} (Lech: {audit.get('pc_drift_sec')}s)")
         if not audit.get("pc_clock_valid", True):
             print("  " + "!" * 72)
             print("  [CANH BAO DO] GIO MAY TINH CUC BO DANG LECH SO VOI GIO CHUAN VIET NAM!")
             print("  -> He thong DA KHOA tu dong ghi de gio de bao ve 4 may quet mat ZKTeco.")
             print("  " + "!" * 72)
         else:
-            print("  [AN TOAN  ] Dong ho may tinh khop chuan Gio Viet Nam (Sai so <= 30s).")
+            print("  [AN TOAN   ] Dong ho may tinh khop chuan Gio Viet Nam (Sai so <= 30s).")
     except Exception as e:
         print(f"  [Clock Guard] Kiem tra gio ban dau: {e}")
 
-    # 3. Start Waitress Server on port 6868
+    # 4. Start Waitress Server on 0.0.0.0:6868 (Accessible across all LAN computers)
     if not is_port_open("127.0.0.1", port):
         from waitress import serve
 
         def _run_server():
-            serve(app, host="0.0.0.0", port=port, threads=16, channel_timeout=60)
+            serve(app, host="0.0.0.0", port=port, threads=24, channel_timeout=60)
 
         t = threading.Thread(target=_run_server, daemon=True)
         t.start()
@@ -120,19 +163,22 @@ def main():
                 break
             time.sleep(0.2)
 
-    print(f"  [SERVER   ] May chu SeaZen VMS dang hoat dong tai: {url}")
+    print("-" * 78)
+    print(f"  [1] Truy cap tai MAY SERVER NAY : {url}")
+    print(f"  [2] Truy cap tu MAY LE TAN (LAN): {lan_url}")
+    print(f"  [3] Tai khoan Toan Quyen (Admin): SeazenAdmin  | Mat khau: SeazenAdmin@1516")
+    print(f"  [4] Tai khoan Ban Le Tan        : Letan        | Mat khau: Letan@1516 (Chi trang Dang ky Khach)")
+    print("-" * 78)
 
-    # 4. Open application window directly into /live
+    # 5. Open application window
     if devtest_mode:
-        print(f"  [BROWSER  ] Dang mo trinh duyet tai {url} ...")
         webbrowser.open(url)
     else:
-        print(f"  [APP      ] Dang mo giao dien he thong tai {url} ...")
         if not launch_webview_app_window(url):
             webbrowser.open(url)
 
-    print("\n  >>> HE THONG DANG LANG NGHE TRUC TIEP 4 MAY CUA ZKTECO 24/7 <<<")
-    print("  (Giu cua so nay mo de nhan su kien quet mat/the tuc thoi. Nhan Ctrl+C de dung)\n")
+    print("\n  >>> HE THONG DANG CHAY 24/7 & DONG BO SHAREPOINT TRUC TUYEN <<<")
+    print("  (Giu cua so nay mo de cac may trong mang LAN truy cap. Nhan Ctrl+C de dung)\n")
     try:
         while True:
             time.sleep(2)

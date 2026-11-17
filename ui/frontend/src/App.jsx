@@ -51,21 +51,27 @@ export default function App() {
     }, 4200);
   }, []);
 
-  const handleNavigate = useCallback((path) => {
-    setCurrentPath(path);
-    window.history.pushState({}, '', path);
-  }, []);
+  const handleNavigate = useCallback(
+    (path) => {
+      const target = user && user.role !== 'admin' ? ROUTES.VISITORS : path;
+      setCurrentPath(target);
+      window.history.pushState({}, '', target);
+    },
+    [user]
+  );
 
   useEffect(() => {
     const onPopState = () => {
       const p = window.location.pathname;
-      if (Object.values(ROUTES).includes(p)) {
+      if (user && user.role !== 'admin') {
+        setCurrentPath(ROUTES.VISITORS);
+      } else if (Object.values(ROUTES).includes(p)) {
         setCurrentPath(p);
       }
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
-  }, []);
+  }, [user]);
 
   const fetchClockAudit = useCallback(async () => {
     const { ok, data } = await apiFetch('/api/clock/audit');
@@ -118,6 +124,10 @@ export default function App() {
       const { ok, data } = await apiFetch('/api/auth/me');
       if (ok && data.authenticated) {
         setUser(data.user);
+        if (data.user.role !== 'admin') {
+          setCurrentPath(ROUTES.VISITORS);
+          window.history.replaceState({}, '', ROUTES.VISITORS);
+        }
       }
       setGateReady(true);
     })();
@@ -184,6 +194,7 @@ export default function App() {
   };
 
   const pcClockInvalid = clockAudit && clockAudit.pc_clock_valid === false;
+  const effectivePath = user && user.role !== 'admin' ? ROUTES.VISITORS : currentPath;
 
   return (
     <>
@@ -207,6 +218,9 @@ export default function App() {
           clockAudit={clockAudit}
           onLoginSuccess={(loggedInUser) => {
             setUser(loggedInUser);
+            const initRoute = loggedInUser.role !== 'admin' ? ROUTES.VISITORS : ROUTES.LIVE;
+            setCurrentPath(initRoute);
+            window.history.replaceState({}, '', initRoute);
             notify(`Xin chào ${loggedInUser.full_name}`, 'success');
           }}
         />
@@ -215,7 +229,7 @@ export default function App() {
       {gateReady && user && (
         <div id="appWorkspace">
           <SidebarShell
-            currentPath={currentPath}
+            currentPath={effectivePath}
             onNavigate={handleNavigate}
             user={user}
             onLogout={handleLogout}
@@ -250,7 +264,7 @@ export default function App() {
               </div>
             )}
 
-            {currentPath === ROUTES.LIVE && (
+            {effectivePath === ROUTES.LIVE && (
               <LiveCommandPage
                 user={user}
                 clockAudit={clockAudit}
@@ -273,11 +287,11 @@ export default function App() {
               />
             )}
 
-            {currentPath === ROUTES.HISTORY && (
+            {effectivePath === ROUTES.HISTORY && (
               <AccessHistoryPage notify={notify} />
             )}
 
-            {currentPath === ROUTES.VISITORS && (
+            {effectivePath === ROUTES.VISITORS && (
               <VisitorManagementPage
                 departments={departments}
                 employees={employees}
@@ -292,7 +306,7 @@ export default function App() {
               />
             )}
 
-            {currentPath === ROUTES.CARDS && (
+            {effectivePath === ROUTES.CARDS && (
               <CardManagementPage
                 customerCards={customerCards}
                 activeVisitors={activeVisitors}
@@ -304,9 +318,9 @@ export default function App() {
               />
             )}
 
-            {(currentPath === ROUTES.HRM || currentPath === ROUTES.BIOMETRICS) && (
+            {(effectivePath === ROUTES.HRM || effectivePath === ROUTES.BIOMETRICS) && (
               <HrmBiometricsPage
-                mode={currentPath === ROUTES.BIOMETRICS ? 'biometrics' : 'hrm'}
+                mode={effectivePath === ROUTES.BIOMETRICS ? 'biometrics' : 'hrm'}
                 departments={departments}
                 employees={employees}
                 empTotal={empTotal}
@@ -319,7 +333,7 @@ export default function App() {
               />
             )}
 
-            {currentPath === ROUTES.TIMEKEEPING && (
+            {effectivePath === ROUTES.TIMEKEEPING && (
               <TimekeepingPage departments={departments} />
             )}
           </div>

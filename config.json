@@ -42,13 +42,13 @@
     }
   ],
   "sharepoint": {
-    "enabled": false,
+    "enabled": true,
     "tenant_id": "29101901-3778-4339-827c-7d2b50914db0",
     "client_id": "0390280b-12b8-49c4-adbf-a9c2b8bccfb5",
     "site_url": "https://seazenvn.sharepoint.com/sites/ONESEAZEN",
     "site_id": "",
-    "visitor_list_name": "ACCESS_CONTROL_VISITORS",
-    "log_list_name": "ACCESS_CONTROL_LOGS"
+    "visitor_list_name": "VMS SEAZEN - KHÁCH RA VÀO",
+    "log_list_name": "VMS SEAZEN - NHẬT KÝ RA VÀO"
   },
   "database": {
     "enabled": true,
