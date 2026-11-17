@@ -28,6 +28,7 @@ export default function TimekeepingPage({ departments }) {
   const [employees, setEmployees] = useState([]);
   const [dailyTotals, setDailyTotals] = useState({});
   const [loading, setLoading] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
   const exportMenuRef = React.useRef(null);
   useEffect(() => {
@@ -74,8 +75,6 @@ export default function TimekeepingPage({ departments }) {
       setToDate(bounds.to);
     }
   };
-
-  const [showExportMenu, setShowExportMenu] = React.useState(false);
 
   const buildParams = () => {
     const params = new URLSearchParams();

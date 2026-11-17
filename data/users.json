@@ -3,26 +3,26 @@
     "id": "usr-seazen-admin",
     "username": "SeazenAdmin",
     "email": "admin@seazen.com.vn",
-    "password_hash": "scrypt:32768:8:1$n042gWBiB1rZvNcR$ca83f830ce6fed159afe392ebfe1a205c74afb9d70025e42c7220b7d368caada7522c2a38068469169759e6b89f9eef9cfeeddc4408b859727a9088ad5d02a6f",
+    "password_hash": "scrypt:32768:8:1$tYQXnXMRU6EHKGwy$c45925728f3bdca91125781dcc158ee8923c2e1ea5d4358ce94ebd89d9e65645cd376ca156d1932694e7b49f5df7c4a6cea6e1b9a0df2779559be69fca0f6b29",
     "full_name": "Quản Trị Viên Hệ Thống (SeazenAdmin)",
     "role": "admin",
     "allowed_pages": [
       "ALL"
     ],
-    "created_at": "2026-11-17 15:44:59",
+    "created_at": "2026-11-17 16:16:33",
     "is_active": true
   },
   {
     "id": "usr-seazen-letan",
     "username": "Letan",
     "email": "letan@seazen.com.vn",
-    "password_hash": "scrypt:32768:8:1$jZRHoYwJVD4mazbC$503d0db6f2b6d3dfebdac911e1b7f9827fcf069a0ba88c361e3328b9b2c5644a92d7826270074067aa811ee6a546d6ea730c1cd5ce27f426e940a94a2d014771",
+    "password_hash": "scrypt:32768:8:1$5VIlTx9A5VlciMof$f0db03e211b202e34319184413fcb533f34d07d92aab7fd8c4b00b8f68de5bd93e048527f1dcb7e8660b876133244187af34a0e1588685792f8e10eba9e91666",
     "full_name": "Bàn Tiếp Đón Lễ Tân (Letan)",
     "role": "staff",
     "allowed_pages": [
       "/visitors"
     ],
-    "created_at": "2026-11-17 15:44:59",
+    "created_at": "2026-11-17 16:16:33",
     "is_active": true
   }
 ]
