@@ -4,5571 +4,2915 @@
     "code": "1",
     "fullname": "Đỗ Văn Toàn",
     "department": "BGĐ SeaZen",
-    "department_index": 141
+    "department_index": 141,
+    "position": "Nhân Viên",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00000004",
     "code": "0001",
     "fullname": "Đỗ Văn Toàn",
     "department": "BGĐ SeaZen",
-    "department_index": 141
+    "department_index": 141,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": "Nam"
   },
   {
     "atid": "00001441",
     "code": "1441",
     "fullname": "Đỗ Xuân Thắng",
     "department": "SeaZen Tech",
-    "department_index": 148
+    "department_index": 148,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00001939",
     "code": "1939",
     "fullname": "Lê Thanh Sử",
-    "department": "",
-    "department_index": 0
+    "department": "Chỉ Huy Đội",
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": "Nam"
   },
   {
     "atid": "00002005",
     "code": "2005",
     "fullname": "Nguyễn Hoàng Thanh Uyên",
     "department": "Marketing",
-    "department_index": 145
+    "department_index": 145,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": "Nữ"
   },
   {
     "atid": "00002825",
     "code": "2825",
     "fullname": "Nguyễn Văn Sáu",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00003044",
     "code": "3044",
     "fullname": "Trần Văn Út",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00003206",
     "code": "3206",
     "fullname": "Dương Văn Nam",
     "department": "Vận hành",
-    "department_index": 144
-  },
-  {
-    "atid": "00003588",
-    "code": "3588",
-    "fullname": "Tống Văn Hiếu",
-    "department": "",
-    "department_index": 0
+    "department_index": 144,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00004583",
     "code": "4583",
     "fullname": "Ngô Quốc Định",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00005011",
     "code": "5011",
     "fullname": "Ngô Quốc Khang",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00005058",
     "code": "5058",
     "fullname": "Đỗ Thị Hương",
     "department": "HC QTNS",
-    "department_index": 142
+    "department_index": 142,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00005240",
     "code": "5240",
     "fullname": "Phan Quốc Nam",
-    "department": "",
-    "department_index": 0
+    "department": "Chỉ Huy Đội",
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00005355",
     "code": "5355",
     "fullname": "Lê Minh Vui",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00006385",
     "code": "6385",
     "fullname": "Lê Phan Tấn Phương",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00006509",
     "code": "6509",
     "fullname": "Đặng Thành Trung",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00006781",
     "code": "6781",
     "fullname": "Lê Hoài Thảo",
     "department": "Kế Toán",
-    "department_index": 143
+    "department_index": 143,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00007183",
     "code": "7183",
     "fullname": "Trịnh Thái Thuận",
     "department": "SeaZen Tech",
-    "department_index": 148
+    "department_index": 148,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00007583",
     "code": "7583",
     "fullname": "Nguyễn Thị Tâm",
     "department": "HC QTNS",
-    "department_index": 142
+    "department_index": 142,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00007843",
     "code": "7843",
     "fullname": "Vũ Thị Hồng Mai",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00008394",
     "code": "8394",
     "fullname": "Nguyễn Văn Đê",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00008531",
     "code": "8531",
     "fullname": "Phạm Văn Khang",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00008568",
     "code": "8568",
     "fullname": "Bùi Xuân Quý",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00008907",
     "code": "8907",
     "fullname": "Nguyễn Tường Duy",
-    "department": "",
-    "department_index": 0
+    "department": "Chỉ Huy Đội",
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00009169",
     "code": "9169",
     "fullname": "Khương Văn Minh",
     "department": "Kinh doanh",
-    "department_index": 146
+    "department_index": 146,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00009507",
     "code": "9507",
     "fullname": "Phan Minh Tài",
     "department": "SeaZen Tech",
-    "department_index": 148
+    "department_index": 148,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00009613",
     "code": "9613",
     "fullname": "Nguyễn Văn Thanh",
-    "department": "",
-    "department_index": 0
+    "department": "Vận hành",
+    "department_index": 144,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00009729",
     "code": "9729",
     "fullname": "Nguyễn Văn Toàn",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00009973",
     "code": "9973",
     "fullname": "Lưu Thanh Điền",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00010085",
     "code": "10085",
     "fullname": "Hứa Kim Tài",
     "department": "Vận hành",
-    "department_index": 144
+    "department_index": 144,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00010089",
     "code": "10089",
     "fullname": "Trần Trung Tín",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00010189",
     "code": "10189",
     "fullname": "Nguyễn Thị Phương Thúy",
     "department": "BGĐ SeaZen",
-    "department_index": 141
+    "department_index": 141,
+    "position": "Nhân Viên",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00010403",
     "code": "10403",
     "fullname": "Dương Văn Sóng",
-    "department": "",
-    "department_index": 0
+    "department": "Chỉ Huy Đội",
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00010407",
     "code": "10407",
     "fullname": "Hoàng Hữu Phúc",
-    "department": "",
-    "department_index": 0
+    "department": "HC QTNS",
+    "department_index": 142,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00010875",
     "code": "10875",
     "fullname": "Tạ Thị Thu Niềm",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00010903",
     "code": "10903",
     "fullname": "Nguyễn Thị Lan Anh",
     "department": "HC QTNS",
-    "department_index": 142
+    "department_index": 142,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00011519",
     "code": "11519",
     "fullname": "Trần Gia Khiêm",
     "department": "Marketing",
-    "department_index": 145
+    "department_index": 145,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00011529",
     "code": "11529",
     "fullname": "Hà Ngọc Quý",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
-  },
-  {
-    "atid": "00011543",
-    "code": "11543",
-    "fullname": "Nguyễn Thị Nhũ - P&G BC",
-    "department": "",
-    "department_index": 0
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00011678",
     "code": "11678",
     "fullname": "Nguyễn Hồng Đức",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
-  },
-  {
-    "atid": "00011721",
-    "code": "11721",
-    "fullname": "Nguyễn Phương - BRVT2",
-    "department": "",
-    "department_index": 0
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00011820",
     "code": "11820",
     "fullname": "Lê Trung Hải",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00011865",
     "code": "11865",
     "fullname": "Đỗ Trần Mạnh Thiện",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00012008",
     "code": "12008",
     "fullname": "Bùi Văn Hợp",
-    "department": "",
-    "department_index": 0
+    "department": "Chỉ Huy Đội",
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00012123",
     "code": "12123",
     "fullname": "Nguyễn Văn Phi",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00012175",
     "code": "12175",
     "fullname": "Nguyễn Văn Tuấn",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00012318",
     "code": "12318",
     "fullname": "Lê Nguyễn Bảo Long",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "00012357",
+    "code": "12357",
+    "fullname": "Phạm Thị Chùm",
+    "department": "HC QTNS",
+    "department_index": 142,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": "Nữ"
   },
   {
     "atid": "00012579",
     "code": "12579",
     "fullname": "Đặng Thành Nguyên",
     "department": "Vận hành",
-    "department_index": 144
+    "department_index": 144,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00012742",
     "code": "12742",
     "fullname": "Huỳnh Ngọc Châu",
     "department": "Pháp Lý",
-    "department_index": 150
+    "department_index": 150,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00012851",
     "code": "12851",
     "fullname": "Nguyễn Trần Hoàng Mạnh",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00012866",
     "code": "12866",
     "fullname": "Ngô Quốc Thu",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00012886",
     "code": "12886",
     "fullname": "Dư Thục Uyên",
     "department": "Kế Toán",
-    "department_index": 143
+    "department_index": 143,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00012898",
     "code": "12898",
     "fullname": "Bùi Trọng Nghĩa",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00012928",
     "code": "12928",
     "fullname": "Trịnh Hoàng Thám",
     "department": "Vận hành",
-    "department_index": 144
+    "department_index": 144,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00013008",
     "code": "13008",
     "fullname": "Nguyễn Đình Hoàng",
     "department": "HC QTNS",
-    "department_index": 142
+    "department_index": 142,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00013087",
     "code": "13087",
     "fullname": "Nguyễn Văn Thương",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00013132",
     "code": "13132",
     "fullname": "Lê Hùng Tráng",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00013177",
     "code": "13177",
     "fullname": "Phùng Thị Thạnh",
     "department": "HC QTNS",
-    "department_index": 142
-  },
-  {
-    "atid": "00013251",
-    "code": "13251",
-    "fullname": "Nguyễn Văn Mai",
-    "department": "",
-    "department_index": 0
+    "department_index": 142,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00013260",
     "code": "13260",
     "fullname": "Nguyễn Bảo Thuận",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00013277",
     "code": "13277",
     "fullname": "Phạm Thành Hùng",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
-  },
-  {
-    "atid": "00013319",
-    "code": "13319",
-    "fullname": "Nguyễn Tấn Lộc",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "00013347",
-    "code": "13347",
-    "fullname": "Lê Tuấn Tú",
-    "department": "",
-    "department_index": 0
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00013414",
     "code": "13414",
     "fullname": "Đào Thị Thanh Bình",
     "department": "BGĐ SeaZen",
-    "department_index": 141
+    "department_index": 141,
+    "position": "Nhân Viên",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00013520",
     "code": "13520",
     "fullname": "Lâm Hữu Phước",
     "department": "Marketing",
-    "department_index": 145
+    "department_index": 145,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00013583",
     "code": "13583",
     "fullname": "Lê Nguyễn Xuân Bình",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00013600",
     "code": "13600",
     "fullname": "Vân Thanh Hương",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00013612",
     "code": "13612",
     "fullname": "Nguyễn Trương Minh Anh",
     "department": "Kinh doanh",
-    "department_index": 146
+    "department_index": 146,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00013617",
-    "code": "",
+    "code": "00013617",
     "fullname": "Khuyên",
-    "department": "",
-    "department_index": 0
+    "department": "HC QTNS",
+    "department_index": 142,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00013618",
     "code": "13618",
     "fullname": "Nguyễn Thị Bính",
-    "department": "",
-    "department_index": 0
+    "department": "HC QTNS",
+    "department_index": 142,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00013723",
     "code": "13723",
     "fullname": "Nguyễn Minh Quân",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00013794",
     "code": "13794",
     "fullname": "Hà Quang Hiệu",
     "department": "Vận hành",
-    "department_index": 144
+    "department_index": 144,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00013895",
     "code": "13895",
     "fullname": "Nguyễn Văn Hùng",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00014038",
     "code": "14038",
     "fullname": "Nguyễn Thành Thảo",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00014105",
     "code": "14105",
     "fullname": "Võ Nguyễn Trường Giang",
     "department": "SeaZen Tech",
-    "department_index": 148
+    "department_index": 148,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00014114",
     "code": "14114",
     "fullname": "Phạm Văn Luân",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00014207",
     "code": "14207",
     "fullname": "Văn Thanh Cường",
     "department": "Vận hành",
-    "department_index": 144
+    "department_index": 144,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00014224",
     "code": "14224",
     "fullname": "Nguyễn Hải Minh",
     "department": "QA",
-    "department_index": 152
+    "department_index": 152,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00014243",
     "code": "14243",
     "fullname": "Lê Quốc Huy",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00014272",
     "code": "14272",
     "fullname": "Huỳnh Thanh Huy",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00014303",
     "code": "14303",
     "fullname": "Lê Bằng Phi",
-    "department": "",
-    "department_index": 0
+    "department": "HC QTNS",
+    "department_index": 142,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": "Nam"
   },
   {
     "atid": "00014316",
     "code": "14316",
     "fullname": "Nguyễn Trần Trung Tín",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00014366",
     "code": "14366",
     "fullname": "Nguyễn Thị Cẩm Hạnh",
     "department": "Kế Toán",
-    "department_index": 143
+    "department_index": 143,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00014381",
     "code": "14381",
     "fullname": "Nguyễn Văn Ngọc",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00014383",
     "code": "14383",
     "fullname": "Nguyễn Thanh Hùng",
-    "department": "",
-    "department_index": 0
+    "department": "Chỉ Huy Đội",
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00014429",
     "code": "14429",
     "fullname": "Nguyễn Hoàng Thanh Uyên",
     "department": "Marketing",
-    "department_index": 145
+    "department_index": 145,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00014430",
     "code": "14430",
     "fullname": "Trương Thị Mỹ Dung",
     "department": "Kinh doanh",
-    "department_index": 146
+    "department_index": 146,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00014502",
     "code": "14502",
     "fullname": "Nguyễn Thị Ngân Hà",
     "department": "SeaZen Edu",
-    "department_index": 149
+    "department_index": 149,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "00014614",
     "code": "14614",
     "fullname": "Âu Thanh Hoàng",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
+    "department_index": 147,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": "Nam"
   },
   {
     "atid": "00014638",
     "code": "14638",
     "fullname": "Trần Thị Phương Thảo",
     "department": "HC QTNS",
-    "department_index": 142
+    "department_index": 142,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": "Nữ"
   },
   {
     "atid": "00014639",
     "code": "14639",
     "fullname": "Nguyễn Võ Thu Hà",
     "department": "Vận hành",
-    "department_index": 144
+    "department_index": 144,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": "Nữ"
   },
   {
     "atid": "00014640",
     "code": "14640",
     "fullname": "Hoàng Thanh Hải",
-    "department": "",
-    "department_index": 0
+    "department": "HC QTNS",
+    "department_index": 142,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": "Nam"
   },
   {
     "atid": "00014647",
     "code": "14647",
     "fullname": "Nguyễn Thị Ngọc Minh",
     "department": "Kinh doanh",
-    "department_index": 146
+    "department_index": 146,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": "Nữ"
   },
   {
     "atid": "00014703",
     "code": "14703",
     "fullname": "Nguyễn Huỳnh Văn Sang",
     "department": "SeaZen Tech",
-    "department_index": 148
+    "department_index": 148,
+    "position": "Nhân Viên",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": "Nam"
   },
   {
     "atid": "00014704",
     "code": "14704",
     "fullname": "Hồ Hoàng Sang",
-    "department": "",
-    "department_index": 0
+    "department": "SeaZen Tech",
+    "department_index": 148,
+    "position": "Nhân Viên",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": "Nam"
   },
   {
     "atid": "00014750",
     "code": "14750",
     "fullname": "Luu Thi Bich Tuyen",
-    "department": "",
-    "department_index": 0
+    "department": "HC QTNS",
+    "department_index": 142,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": "Nữ"
   },
   {
     "atid": "00014757",
     "code": "14757",
-    "fullname": "Nguyen Dinh Tien Anh",
+    "fullname": "Nguyễn Đình Tiến Anh",
     "department": "Vận hành",
-    "department_index": 144
+    "department_index": 144,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": "Nam"
   },
   {
     "atid": "00014770",
     "code": "14770",
     "fullname": "Huỳnh Phú Sang",
     "department": "Vận hành",
-    "department_index": 144
+    "department_index": 144,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": "Nam"
   },
   {
     "atid": "00014805",
     "code": "14805",
     "fullname": "Trần Thị Thanh Phương",
-    "department": "",
-    "department_index": 0
+    "department": "HC QTNS",
+    "department_index": 142,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": "Nữ"
   },
   {
     "atid": "00014824",
     "code": "14824",
     "fullname": "Đỗ Nguyễn Hạnh Dung",
     "department": "Kinh doanh",
-    "department_index": 146
+    "department_index": 146,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": "Nữ"
   },
   {
     "atid": "00014827",
     "code": "14827",
     "fullname": "Huỳnh Phan Tiến Đạt",
     "department": "SeaZen Edu",
-    "department_index": 149
+    "department_index": 149,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": "Nam"
   },
   {
     "atid": "00014848",
     "code": "14848",
     "fullname": "Huỳnh Ngọc Chinh",
     "department": "Pháp Lý",
-    "department_index": 150
+    "department_index": 150,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": "Nữ"
   },
   {
     "atid": "00014857",
     "code": "14857",
     "fullname": "Nguyễn Thị Bích Như",
     "department": "HC QTNS",
-    "department_index": 142
+    "department_index": 142,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": "Nữ"
   },
   {
     "atid": "00014859",
     "code": "14859",
     "fullname": "Nguyễn Lê Anh Tuấn",
     "department": "HC QTNS",
-    "department_index": 142
+    "department_index": 142,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": "Nam"
   },
   {
     "atid": "00014864",
     "code": "14864",
     "fullname": "Nguyễn Đức Toàn",
     "department": "HC QTNS",
-    "department_index": 142
+    "department_index": 142,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": "Nam"
   },
   {
     "atid": "00014865",
     "code": "14865",
     "fullname": "Nguyễn Thị Quỳnh Nha",
     "department": "Marketing",
-    "department_index": 145
+    "department_index": 145,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": "Nữ"
   },
   {
     "atid": "00014868",
     "code": "14868",
     "fullname": "Nguyễn Thị Cẩm Tiên",
     "department": "HC QTNS",
-    "department_index": 142
+    "department_index": 142,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": "Nữ"
   },
   {
     "atid": "00014892",
     "code": "14892",
     "fullname": "Lê Văn Hồng",
     "department": "HC QTNS",
-    "department_index": 142
+    "department_index": 142,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": "Nam"
   },
   {
     "atid": "00014936",
     "code": "14936",
     "fullname": "Lê Thị Mỹ Duyên",
     "department": "HC QTNS",
-    "department_index": 142
-  },
-  {
-    "atid": "00014945",
-    "code": "",
-    "fullname": "My Linh Edu",
-    "department": "",
-    "department_index": 0
+    "department_index": 142,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": "Nữ"
   },
   {
     "atid": "00014947",
     "code": "14947",
     "fullname": "Hà Hoàng Xuân Nga",
     "department": "HC QTNS",
-    "department_index": 142
+    "department_index": 142,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": "Nam"
   },
   {
     "atid": "00014950",
     "code": "14950",
     "fullname": "Nguyễn Thanh Ngọc Linh",
     "department": "HC QTNS",
-    "department_index": 142
+    "department_index": 142,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": "Nữ"
+  },
+  {
+    "atid": "00015007",
+    "code": "15007",
+    "fullname": "Lê Hoàng Phúc",
+    "department": "Marketing",
+    "department_index": 145,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": "Nam"
   },
   {
     "atid": "00015009",
     "code": "15009",
     "fullname": "Võ Quang Đại (TaiXe)",
     "department": "HC QTNS",
-    "department_index": 142
+    "department_index": 142,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": "Nam"
+  },
+  {
+    "atid": "00015023",
+    "code": "15023",
+    "fullname": "Huỳnh Thị Thanh Phương",
+    "department": "Marketing",
+    "department_index": 145,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": "Nữ"
+  },
+  {
+    "atid": "00015025",
+    "code": "15025",
+    "fullname": "Phạm Thị Minh Thư",
+    "department": "Marketing",
+    "department_index": 145,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": "Nữ"
+  },
+  {
+    "atid": "00015063",
+    "code": "15063",
+    "fullname": "Trần Thị May",
+    "department": "HC QTNS",
+    "department_index": 142,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": "Nữ"
+  },
+  {
+    "atid": "00015085",
+    "code": "15085",
+    "fullname": "Nguyễn Thị Hoàng Liên",
+    "department": "Kinh doanh",
+    "department_index": 146,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": "Nữ"
+  },
+  {
+    "atid": "00015090",
+    "code": "15090",
+    "fullname": "Trương Nguyễn Hồng Nhung",
+    "department": "HC QTNS",
+    "department_index": 142,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": "Nữ"
   },
   {
     "atid": "00025682",
     "code": "25682",
     "fullname": "Nguyễn Thị Phương Thúy",
     "department": "BGĐ SeaZen",
-    "department_index": 141
+    "department_index": 141,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": "Nữ"
   },
   {
     "atid": "00056235",
     "code": "56235",
     "fullname": "Khach 1",
     "department": "Chỉ Huy Đội",
-    "department_index": 147
-  },
-  {
-    "atid": "80000000",
-    "code": "",
-    "fullname": "Võ Phi Sơn",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000001",
-    "code": "",
-    "fullname": "Phan Minh Ti",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000002",
-    "code": "",
-    "fullname": "Lê Văn An",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000003",
-    "code": "",
-    "fullname": "Phan Minh Tài",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000004",
-    "code": "",
-    "fullname": "Bi Vn Thnh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000005",
-    "code": "",
-    "fullname": "Đỗ Xuân Thắng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000006",
-    "code": "",
-    "fullname": "Nguyn Vn Quang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000007",
-    "code": "",
-    "fullname": "Đỗ Xuân Thắng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000008",
-    "code": "",
-    "fullname": "Nguyn Th Hi",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000009",
-    "code": "",
-    "fullname": "L Vn Quang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000010",
-    "code": "",
-    "fullname": "Nguyn Trn Ngc Tu",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000011",
-    "code": "",
-    "fullname": "Trn Vn Dng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000012",
-    "code": "",
-    "fullname": "Nguyn Ngc Tm",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000013",
-    "code": "",
-    "fullname": "Vo Ngoc Tuan",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000014",
-    "code": "",
-    "fullname": "Trn L Duy Khang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000015",
-    "code": "",
-    "fullname": "Ta Linh Da",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000016",
-    "code": "",
-    "fullname": "Phan Vn Danh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000017",
-    "code": "",
-    "fullname": "L Th Yn Nga",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000018",
-    "code": "",
-    "fullname": "Bi Thanh Son",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000019",
-    "code": "",
-    "fullname": "V Th Kim Ninh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000020",
-    "code": "",
-    "fullname": "Trng Vn Khi",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000021",
-    "code": "",
-    "fullname": "L Thanh Thy",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000022",
-    "code": "",
-    "fullname": "Phan Th Kim Thoa",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000023",
-    "code": "",
-    "fullname": "Cao Tr",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000024",
-    "code": "",
-    "fullname": "Trn Vn By",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000025",
-    "code": "",
-    "fullname": "Phan Thanh Tng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000026",
-    "code": "",
-    "fullname": "L Trung Tn",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000027",
-    "code": "",
-    "fullname": "L Linh Thoi",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000028",
-    "code": "",
-    "fullname": "L Th Hng Vn",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000029",
-    "code": "",
-    "fullname": "Nguyn Vn Tho",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000030",
-    "code": "",
-    "fullname": "H Vn Qu",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000031",
-    "code": "",
-    "fullname": "Thái Trường Vũ",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000032",
-    "code": "",
-    "fullname": "Nguyễn Văn Phát",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000033",
-    "code": "",
-    "fullname": "Nguyen Vuong Gia Phat",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000034",
-    "code": "",
-    "fullname": "Hong Vn Khnh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000035",
-    "code": "",
-    "fullname": "Nguyễn Đình Tuấn",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000036",
-    "code": "",
-    "fullname": "Nguyn Xun Ngc",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000037",
-    "code": "",
-    "fullname": "Nguyn S Ha",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000038",
-    "code": "",
-    "fullname": "Trần Minh Nhiên",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000039",
-    "code": "",
-    "fullname": "Dương Thị Diễm",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000040",
-    "code": "",
-    "fullname": "tHÁI hOÀI âN",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000041",
-    "code": "",
-    "fullname": "Nguyễn Thị Như Quỳnh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000042",
-    "code": "",
-    "fullname": "Phím Vn Hùng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000043",
-    "code": "",
-    "fullname": "V°¡ng Thu¡t",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000044",
-    "code": "",
-    "fullname": "Phím Vn Hùng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000045",
-    "code": "",
-    "fullname": "Nguyen Võ Thu Hà",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000046",
-    "code": "",
-    "fullname": "Trần Anh Tuấn",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000047",
-    "code": "",
-    "fullname": "Nguyễn Văn Quang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000048",
-    "code": "",
-    "fullname": "Nguyễn Văn Khanh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000049",
-    "code": "",
-    "fullname": "Trần Hữu Sang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000050",
-    "code": "",
-    "fullname": "Phùng Tiến Đạt",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000051",
-    "code": "",
-    "fullname": "Âu Thanh Hoàng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000052",
-    "code": "",
-    "fullname": "Nguyen Van Khanh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000053",
-    "code": "",
-    "fullname": "Châu Chanh Níck",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000054",
-    "code": "",
-    "fullname": "Hu¾nh L┘c M¨",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000055",
-    "code": "",
-    "fullname": "Nguy┼n Kh°¡ng Duy",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000056",
-    "code": "",
-    "fullname": "Bùi Quang Huy",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000057",
-    "code": "",
-    "fullname": "Nguyễn Phúc Hậu",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000058",
-    "code": "",
-    "fullname": "Nguyễn Thị Việt Trinh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000059",
-    "code": "",
-    "fullname": "Bùi Thị Đông",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000060",
-    "code": "",
-    "fullname": "Mai Hùng Cường",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000061",
-    "code": "",
-    "fullname": "Đinh Vũ Trọn",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000062",
-    "code": "",
-    "fullname": "Nguy┼n Ph°¡ng Thúo",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000063",
-    "code": "",
-    "fullname": "Nguy┼n Úc Tuy┴n",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000064",
-    "code": "",
-    "fullname": "Nguyễn Thị Mỹ Duyên",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000065",
-    "code": "",
-    "fullname": "Phan Hoài Phong",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000066",
-    "code": "",
-    "fullname": "Phan Thanh Ríng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000067",
-    "code": "",
-    "fullname": "Nguyễn Chúc Diên",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000068",
-    "code": "",
-    "fullname": "Trần Tấn Tài",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000069",
-    "code": "",
-    "fullname": "Nguyễn Thị Thủy Tiên",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000070",
-    "code": "",
-    "fullname": "Đỗ Thế Trường",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000071",
-    "code": "",
-    "fullname": "Pham Huy Bình",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000072",
-    "code": "",
-    "fullname": "Nguyễn Y Tài",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000073",
-    "code": "",
-    "fullname": "Lâm Ngọc Anh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000074",
-    "code": "",
-    "fullname": "Nguyen Van Quang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000075",
-    "code": "",
-    "fullname": "Nguyen Minh Quân",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000076",
-    "code": "",
-    "fullname": "Dao Van Phong",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000077",
-    "code": "",
-    "fullname": "Duong Xuan6 Khai",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000078",
-    "code": "",
-    "fullname": "Nguyễn Hoài Thương",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000079",
-    "code": "",
-    "fullname": "Antony Charles Wilson Saad",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000080",
-    "code": "",
-    "fullname": "Verina Nagy Kamel Girgs",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000081",
-    "code": "",
-    "fullname": "Nguyen Phuong Thao",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000082",
-    "code": "",
-    "fullname": "Tran Thieu ky",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000083",
-    "code": "",
-    "fullname": "Nguyễn Y Tài",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000084",
-    "code": "",
-    "fullname": "Nguyen Xuam Hop",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000085",
-    "code": "",
-    "fullname": "Khâu Hoàng Khúi",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000086",
-    "code": "",
-    "fullname": "Nguyễn Thị Thủy Tiên",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000087",
-    "code": "",
-    "fullname": "Nguyễn Võ Thu Hà",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000088",
-    "code": "",
-    "fullname": "Trần Phúc Thành",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000089",
-    "code": "",
-    "fullname": "Trần Anh Tuấn",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000090",
-    "code": "",
-    "fullname": "Nguy┼n Vn Bãn",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000091",
-    "code": "",
-    "fullname": "HỒ KHANH VŨ",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000092",
-    "code": "",
-    "fullname": "Trinh Công Thanh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000093",
-    "code": "",
-    "fullname": "Lê Thị Cẩm Thu",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000094",
-    "code": "",
-    "fullname": "Nguyễn Thành Tân",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000095",
-    "code": "",
-    "fullname": "Trịnh Hồng Dự",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000096",
-    "code": "",
-    "fullname": "Lê Linh Thợi",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000097",
-    "code": "",
-    "fullname": "Trần Thị Phương Thảo",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000098",
-    "code": "",
-    "fullname": "Mã Gi Dũng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000099",
-    "code": "",
-    "fullname": "Hoàng Thanh Hải",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000100",
-    "code": "",
-    "fullname": "Triệu Văn Thang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000101",
-    "code": "",
-    "fullname": "Ho Cuong Tu",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000102",
-    "code": "",
-    "fullname": "Đỗ Phi Khanh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000103",
-    "code": "",
-    "fullname": "Nguyen Thi Kim Huong",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000104",
-    "code": "",
-    "fullname": "Nguyen Van Phuong",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000105",
-    "code": "",
-    "fullname": "Nguyen Ngoc Hoang Tram",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000106",
-    "code": "",
-    "fullname": "Hoàng Thanh Hải",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000107",
-    "code": "",
-    "fullname": "Trần Thị Phương Thảo",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000108",
-    "code": "",
-    "fullname": "Nguyễn Võ Thu Hà",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000109",
-    "code": "",
-    "fullname": "Đỗ Phi Khanh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000110",
-    "code": "",
-    "fullname": "Nguyễn Thanh Tân",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000111",
-    "code": "",
-    "fullname": "Đỗ Phi Khanh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000112",
-    "code": "",
-    "fullname": "Nguyen Minh Quang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000113",
-    "code": "",
-    "fullname": "Lâm Chí Hùng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000114",
-    "code": "",
-    "fullname": "Huỳnh Thanh Xuân",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000115",
-    "code": "",
-    "fullname": "Nguyễn Minh Thành",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000116",
-    "code": "",
-    "fullname": "Nguyễn Duy Anh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000117",
-    "code": "",
-    "fullname": "Trần Anh Tuấn",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000118",
-    "code": "",
-    "fullname": "Nguyen Thi Khanh Trang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000119",
-    "code": "",
-    "fullname": "Lâm Chí Hùng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000120",
-    "code": "",
-    "fullname": "Nguyễn Ngọc Giàu",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000121",
-    "code": "",
-    "fullname": "Phím Vn Quang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000122",
-    "code": "",
-    "fullname": "Nguyen Hoàng Anh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000123",
-    "code": "",
-    "fullname": "A Liêng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000124",
-    "code": "",
-    "fullname": "Luu Trinh Quang Luan",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000125",
-    "code": "",
-    "fullname": "Võ Hoàng Kiếm",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000126",
-    "code": "",
-    "fullname": "Nguyen Thi Thu",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000127",
-    "code": "",
-    "fullname": "Lê Trần Huy Hoàng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000128",
-    "code": "",
-    "fullname": "Àng Bá Lu¡n",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000129",
-    "code": "",
-    "fullname": "Lê Hồng Đức",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000130",
-    "code": "",
-    "fullname": "Lê Văn Quang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000131",
-    "code": "",
-    "fullname": "Đỗ Anh Tài",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000132",
-    "code": "",
-    "fullname": "Nguyễn Trung Hậu",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000133",
-    "code": "",
-    "fullname": "Châu Lệ Thanh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000134",
-    "code": "",
-    "fullname": "Võ Hoàng Quân",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000135",
-    "code": "",
-    "fullname": "Nguyễn Thị Khánh Trang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000136",
-    "code": "",
-    "fullname": "Nguyễn Ngọc Hưng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000137",
-    "code": "",
-    "fullname": "Trần Minh Khôi",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000138",
-    "code": "",
-    "fullname": "Phan Nguyen Yen Nhi",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000139",
-    "code": "",
-    "fullname": "Trương Thanh Cường",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000140",
-    "code": "",
-    "fullname": "Nguyễn Hoàng Hiếu",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000141",
-    "code": "",
-    "fullname": "Nguyễn Mi Bình",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000142",
-    "code": "",
-    "fullname": "Thái Hoài Ân",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000143",
-    "code": "",
-    "fullname": "Nguyễn Văn Phát",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000144",
-    "code": "",
-    "fullname": "Nguyễn Khánh Duy",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000145",
-    "code": "",
-    "fullname": "Danh Pha Na",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000146",
-    "code": "",
-    "fullname": "Nguyễn Khanh Phúc Hậu",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000147",
-    "code": "",
-    "fullname": "Võ Quốc Cường",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000148",
-    "code": "",
-    "fullname": "Bùi Hoàng Ngọc Phú",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000149",
-    "code": "",
-    "fullname": "Nguyễn Thanh Hùng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000150",
-    "code": "",
-    "fullname": "Lê Minh Trí",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000151",
-    "code": "",
-    "fullname": "Thiều Văn Nhân",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000152",
-    "code": "",
-    "fullname": "Hồ Thị Kim Hồng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000153",
-    "code": "",
-    "fullname": "Ngô Ngọc Khang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000154",
-    "code": "",
-    "fullname": "Nguyen Hong Trung",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000155",
-    "code": "",
-    "fullname": "Nguyễn Thị Thanh Vân",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000156",
-    "code": "",
-    "fullname": "Nguyễn Xuân Cường",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000157",
-    "code": "",
-    "fullname": "Nguyen Van Chien",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000158",
-    "code": "",
-    "fullname": "Phạm Thế Anh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000159",
-    "code": "",
-    "fullname": "Thái Trường Vũ",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000160",
-    "code": "",
-    "fullname": "Nông Tuấn Hùng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000161",
-    "code": "",
-    "fullname": "Phan Văn Cẩn",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000162",
-    "code": "",
-    "fullname": "Nguyễn Văn Phát",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000163",
-    "code": "",
-    "fullname": "Phạm Văn Lành",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000164",
-    "code": "",
-    "fullname": "Nguyễn Xuân Hợp",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000165",
-    "code": "",
-    "fullname": "Nguyễn Hồng Trung",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000166",
-    "code": "",
-    "fullname": "Tạ Bửu Phúc",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000167",
-    "code": "",
-    "fullname": "Phan Thị Kim Thoa",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000168",
-    "code": "",
-    "fullname": "Nguyễn Ngọc Sơn",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000169",
-    "code": "",
-    "fullname": "Nguyen Van Chien",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000170",
-    "code": "",
-    "fullname": "Hồ Hoàng Sang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000171",
-    "code": "",
-    "fullname": "Từ Ngọc Chiến",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000172",
-    "code": "",
-    "fullname": "Nguyen Huynh Van Sang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000173",
-    "code": "",
-    "fullname": "Nguyễn Đức Toàn",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000174",
-    "code": "",
-    "fullname": "Hồ Minh Khang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000175",
-    "code": "",
-    "fullname": "Trần Văn Dũng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000176",
-    "code": "",
-    "fullname": "Đinh Huy Vũ",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000177",
-    "code": "",
-    "fullname": "Huỳnh Lễ Thành",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000178",
-    "code": "",
-    "fullname": "Nguyễn Thanh Hùng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000179",
-    "code": "",
-    "fullname": "Ngô Phan Phong Nhã",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000180",
-    "code": "",
-    "fullname": "Chau Van Kien",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000181",
-    "code": "",
-    "fullname": "Tran Thi Tai",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000182",
-    "code": "",
-    "fullname": "Nguyen Úc Phi Công",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000183",
-    "code": "",
-    "fullname": "Dinh Ngoc An",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000184",
-    "code": "",
-    "fullname": "Tran Hung Dao",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000185",
-    "code": "",
-    "fullname": "Huỳnh Tấn Phát",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000186",
-    "code": "",
-    "fullname": "oàn Minh Vũ",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000187",
-    "code": "",
-    "fullname": "Hồ Thanh Vũ",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000188",
-    "code": "",
-    "fullname": "Nguyễn Truyền Nhứt Nhựt",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000189",
-    "code": "",
-    "fullname": "Nguyễn Phi Hoàng Sơn",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000190",
-    "code": "",
-    "fullname": "Trần Minh Đức",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000191",
-    "code": "",
-    "fullname": "Mạch Diệu Quyền",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000192",
-    "code": "",
-    "fullname": "Phạm Văn Phương",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000193",
-    "code": "",
-    "fullname": "Trần Anh Tuấn",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000194",
-    "code": "",
-    "fullname": "Lê Đình Phúc",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000195",
-    "code": "",
-    "fullname": "Phạm Thanh Thuận",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000196",
-    "code": "",
-    "fullname": "Phạm Thanh Phúc",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000197",
-    "code": "",
-    "fullname": "Lê Văn Tùng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000198",
-    "code": "",
-    "fullname": "Nguyễn Văn Lượng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000199",
-    "code": "",
-    "fullname": "Cao Văn Tự",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000200",
-    "code": "",
-    "fullname": "Phạm Khắc Bình",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000201",
-    "code": "",
-    "fullname": "Huỳnh Hữu Nhẫn",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000202",
-    "code": "",
-    "fullname": "Nguyễn Văn Anh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000203",
-    "code": "",
-    "fullname": "Phạm Đình Thanh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000204",
-    "code": "",
-    "fullname": "Triệu Văn Thang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000205",
-    "code": "",
-    "fullname": "Trương Văn Khải",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000206",
-    "code": "",
-    "fullname": "Nguyễn Huỳnh Văn Sang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000207",
-    "code": "",
-    "fullname": "Hồ Hoàng Sang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000208",
-    "code": "",
-    "fullname": "Hồ Minh Trí",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000209",
-    "code": "",
-    "fullname": "Nguyen Thi Huong",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000210",
-    "code": "",
-    "fullname": "Dương Xuân Khải",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000211",
-    "code": "",
-    "fullname": "Phan Yến Nhi",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000212",
-    "code": "",
-    "fullname": "Phím Lê ng Khoa",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000213",
-    "code": "",
-    "fullname": "Nguyễn Hưu Anh Tài",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000214",
-    "code": "",
-    "fullname": "Nguyễn Minh Hồng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000215",
-    "code": "",
-    "fullname": "Nguyen Chanh Phu",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000216",
-    "code": "",
-    "fullname": "Nguyễn Tuyết Trang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000217",
-    "code": "",
-    "fullname": "Nguyễn Văn Phát",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000218",
-    "code": "",
-    "fullname": "Võ Thị Thu Hằng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000219",
-    "code": "",
-    "fullname": "Nguyễn Trọng Khiêm",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000220",
-    "code": "",
-    "fullname": "Huynh Tan Phát",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000221",
-    "code": "",
-    "fullname": "Nguyen Xuân HÒp",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000222",
-    "code": "",
-    "fullname": "Phan Thanh Hùng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000223",
-    "code": "",
-    "fullname": "Huỳnh Văn Lộc",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000224",
-    "code": "",
-    "fullname": "Phan Văn Tâm",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000225",
-    "code": "",
-    "fullname": "Nguyễn Văn Phát",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000226",
-    "code": "",
-    "fullname": "Hồ Vũ Khanh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000227",
-    "code": "",
-    "fullname": "Nguyễn Phương Thảo",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000228",
-    "code": "",
-    "fullname": "Ho vu Khanh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000229",
-    "code": "",
-    "fullname": "Phan Thanh Bình An",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000230",
-    "code": "",
-    "fullname": "Lâm Văn Gia Huy",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000231",
-    "code": "",
-    "fullname": "Triệu Văn Thang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000232",
-    "code": "",
-    "fullname": "Lưu Ngọc Điện",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000233",
-    "code": "",
-    "fullname": "Võ Tấn Xuân Lộc",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000234",
-    "code": "",
-    "fullname": "NGUYEN QUOC KIET",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000235",
-    "code": "",
-    "fullname": "Nguyen Huu Chi",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000236",
-    "code": "",
-    "fullname": "Hồ Vũ Khanh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000237",
-    "code": "",
-    "fullname": "Ngô Võ Trung Hiếu",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000238",
-    "code": "",
-    "fullname": "Lưu Mai Trang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000239",
-    "code": "",
-    "fullname": "Trương Tuấn Anh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000240",
-    "code": "",
-    "fullname": "Phan Minh Tuan",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000241",
-    "code": "",
-    "fullname": "Huỳnh Phú Sang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000242",
-    "code": "",
-    "fullname": "Bùi Phạm Thiên Phú",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000243",
-    "code": "",
-    "fullname": "Vo Thi Dinh San",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000244",
-    "code": "",
-    "fullname": "Lê Minh Trí",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000245",
-    "code": "",
-    "fullname": "Võ Tan Phat",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000246",
-    "code": "",
-    "fullname": "Nguyễn Văn Chí",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000247",
-    "code": "",
-    "fullname": "Lưu Minh Quang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000248",
-    "code": "",
-    "fullname": "Phạm Minh Đức",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000249",
-    "code": "",
-    "fullname": "Trần Minh Khoa",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000250",
-    "code": "",
-    "fullname": "Huynh Phuc Huu",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000251",
-    "code": "",
-    "fullname": "Nguyễn Văn Khởi",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000252",
-    "code": "",
-    "fullname": "Nguyen Phuong Thao",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000253",
-    "code": "",
-    "fullname": "Nguyễn Đình Tiến Anh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000254",
-    "code": "",
-    "fullname": "Nguyễn Đức Tiến",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000255",
-    "code": "",
-    "fullname": "Lưu Thị Bích Tuyền",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000256",
-    "code": "",
-    "fullname": "Trần Thuận Thanh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000257",
-    "code": "",
-    "fullname": "Trần Thanh Thăng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000258",
-    "code": "",
-    "fullname": "Nguyen Thi Viet Trinh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000259",
-    "code": "",
-    "fullname": "Nuyen Thi Hong Thu",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000260",
-    "code": "",
-    "fullname": "Huỳnh Phú Quý",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000261",
-    "code": "",
-    "fullname": "Tran Thanh Than",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000262",
-    "code": "",
-    "fullname": "Ho Vu Khanh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000263",
-    "code": "",
-    "fullname": "Nguyễn Đình Tiến Anh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000264",
-    "code": "",
-    "fullname": "Đỗ Tường Minh Thi",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000265",
-    "code": "",
-    "fullname": "Nguyễn Văn Vũ",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000266",
-    "code": "",
-    "fullname": "Cao Văn Dương",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000267",
-    "code": "",
-    "fullname": "Lưu Thị Bích Tuyền",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000268",
-    "code": "",
-    "fullname": "Nguyễn Phương Thảo",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000269",
-    "code": "",
-    "fullname": "Nguyễn Phong Phú",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000270",
-    "code": "",
-    "fullname": "Nguyễn Phạm Hoàng Huy",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000271",
-    "code": "",
-    "fullname": "Nguyễn Chí Linh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000272",
-    "code": "",
-    "fullname": "Nguyn huu Chí",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000273",
-    "code": "",
-    "fullname": "Trần Phạm Khánh Hoàng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000274",
-    "code": "",
-    "fullname": "Nguyễn Vân Hường",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000275",
-    "code": "",
-    "fullname": "Võ Thị Đinh Sang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000276",
-    "code": "",
-    "fullname": "Nguyen Thanh Loi",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000277",
-    "code": "",
-    "fullname": "Ha Thi Cam Huong",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000278",
-    "code": "",
-    "fullname": "Nguyen Thi Cam Tien",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000279",
-    "code": "",
-    "fullname": "Luu Bich Tuyen",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000280",
-    "code": "",
-    "fullname": "Bui Quang Huy",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000281",
-    "code": "",
-    "fullname": "Trºn Anh Khoa",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000282",
-    "code": "",
-    "fullname": "Nguyễn Ngọc Giàu",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000283",
-    "code": "",
-    "fullname": "Nguyen Tuan Khai",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000284",
-    "code": "",
-    "fullname": "Nguyễn Đình Tiến Anh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000285",
-    "code": "",
-    "fullname": "Nuyen Le Thai Son",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000286",
-    "code": "",
-    "fullname": "Le Duy Lam",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000287",
-    "code": "",
-    "fullname": "Nguyễn Văn Tuấn",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000288",
-    "code": "",
-    "fullname": "Lê Van Chinh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000289",
-    "code": "",
-    "fullname": "Nguyen Phuong Thao",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000290",
-    "code": "",
-    "fullname": "Lê Văn Chinh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000291",
-    "code": "",
-    "fullname": "Cao Thanh Phong",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000292",
-    "code": "",
-    "fullname": "Trịnh Hồng Dự",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000293",
-    "code": "",
-    "fullname": "Truong Thi Hong SOn",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000294",
-    "code": "",
-    "fullname": "Nguyen Dinh Tien Anh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000295",
-    "code": "",
-    "fullname": "Nguyễn Thành Lợi",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000296",
-    "code": "",
-    "fullname": "Nguyễn Thương Tính",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000297",
-    "code": "",
-    "fullname": "Hồ Minh Trí",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000298",
-    "code": "",
-    "fullname": "Trần Phạm Khánh Hoàng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000299",
-    "code": "",
-    "fullname": "Trương Trường Hải",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000300",
-    "code": "",
-    "fullname": "Nguyễn Tuấn Khải",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000301",
-    "code": "",
-    "fullname": "Lê Duy Lam",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000302",
-    "code": "",
-    "fullname": "Khương Mạnh Tới",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000303",
-    "code": "",
-    "fullname": "Nguyễn Ngọc Hiệp",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000304",
-    "code": "",
-    "fullname": "Lã Văn Tuấn",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000305",
-    "code": "",
-    "fullname": "Đỗ Nguyễn Hạnh Dung",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000306",
-    "code": "",
-    "fullname": "Pham Viet Cuong",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000307",
-    "code": "",
-    "fullname": "Nguyen Minh Khang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000308",
-    "code": "",
-    "fullname": "Huỳnh Kiện Khang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000309",
-    "code": "",
-    "fullname": "Nguyễn Anh Vũ",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000310",
-    "code": "",
-    "fullname": "Ngô Tuấn Long",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000311",
-    "code": "",
-    "fullname": "Lê Ngọc Tuấn",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000312",
-    "code": "",
-    "fullname": "Huỳnh Phú Sang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000313",
-    "code": "",
-    "fullname": "Bùi Quang Huy",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000314",
-    "code": "",
-    "fullname": "Ngô Văn Phúc",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000315",
-    "code": "",
-    "fullname": "Nguyễn Hoàng Anh Minh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000316",
-    "code": "",
-    "fullname": "Văn Phú Gia Bảo",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000317",
-    "code": "",
-    "fullname": "Huỳnh Phú Sang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000318",
-    "code": "",
-    "fullname": "Lưu Văn Thọ",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000319",
-    "code": "",
-    "fullname": "Trần Minh Khôi",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000320",
-    "code": "",
-    "fullname": "Ngô Văn Phúc",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000321",
-    "code": "",
-    "fullname": "Trần Phạm Khánh Hoàng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000322",
-    "code": "",
-    "fullname": "Pham Hong Son",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000323",
-    "code": "",
-    "fullname": "Trần Bảo Trực",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000324",
-    "code": "",
-    "fullname": "Đoàn Xuân Bảo",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000325",
-    "code": "",
-    "fullname": "Luu Van Tho",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000326",
-    "code": "",
-    "fullname": "Lê Tuấn Anh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000327",
-    "code": "",
-    "fullname": "Nguyễn Quang Quí",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000328",
-    "code": "",
-    "fullname": "Phạm Văn Dụng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000329",
-    "code": "",
-    "fullname": "Nguyễn Xuân Hợp",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000330",
-    "code": "",
-    "fullname": "Võ Hoàng Long",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000331",
-    "code": "",
-    "fullname": "Nguyen Van Dinh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000332",
-    "code": "",
-    "fullname": "Đỗ Anh Tài",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000333",
-    "code": "",
-    "fullname": "Trần Thị Thanh Phương",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000334",
-    "code": "",
-    "fullname": "Cao Hồng Thắng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000335",
-    "code": "",
-    "fullname": "Lê Tố Như",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000336",
-    "code": "",
-    "fullname": "Nguyễn Minh Khoa",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000337",
-    "code": "",
-    "fullname": "Trần Phú Cường",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000338",
-    "code": "",
-    "fullname": "Nguyễn Trường Giang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000339",
-    "code": "",
-    "fullname": "Nguyen Van Dinh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000340",
-    "code": "",
-    "fullname": "Dư Đức Tài",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000341",
-    "code": "",
-    "fullname": "Đõ Nguyễn Hạnh Dung",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000342",
-    "code": "",
-    "fullname": "Phạm Thanh Phúc",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000343",
-    "code": "",
-    "fullname": "Lê Tố Như",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000344",
-    "code": "",
-    "fullname": "Trần Thị Thanh Phương",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000345",
-    "code": "",
-    "fullname": "Dương Văn Thanh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000346",
-    "code": "",
-    "fullname": "Trần Thị Thanh Phương",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000347",
-    "code": "",
-    "fullname": "Lê Văn Trường",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000348",
-    "code": "",
-    "fullname": "Đỗ Nguyễn Hạnh Dung",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000349",
-    "code": "",
-    "fullname": "Trần Xuân Trường",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000350",
-    "code": "",
-    "fullname": "Vương Thanh Long",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000351",
-    "code": "",
-    "fullname": "Trần Thanh Duy",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000352",
-    "code": "",
-    "fullname": "Huỳnh Thị Ngọc Hân",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000353",
-    "code": "",
-    "fullname": "Phan Văn Tâm",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000354",
-    "code": "",
-    "fullname": "Võ Tấn Xuân Lộc",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000355",
-    "code": "",
-    "fullname": "Nguyễn Văn Tuấn",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000356",
-    "code": "",
-    "fullname": "Lê Văn Dũng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000357",
-    "code": "",
-    "fullname": "Nguyễn Thị Thanh Thảo",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000358",
-    "code": "",
-    "fullname": "Đặng Hoàng Tiến",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000359",
-    "code": "",
-    "fullname": "Trịnh Đức Huy",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000360",
-    "code": "",
-    "fullname": "Võ Thị Đinh Sang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000361",
-    "code": "",
-    "fullname": "Đỗ Nguyễn Hạnh Dung",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000362",
-    "code": "",
-    "fullname": "Nguyễn Văn Tuấn",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000363",
-    "code": "",
-    "fullname": "Nguyễn Việt Thùy",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000364",
-    "code": "",
-    "fullname": "Huỳnh Ngọc Thanh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000365",
-    "code": "",
-    "fullname": "Huỳnh Thị Phương Kiều",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000366",
-    "code": "",
-    "fullname": "Nguyễn Văn Sĩ",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000367",
-    "code": "",
-    "fullname": "Đỗ Hoàng Phương Tú",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000368",
-    "code": "",
-    "fullname": "Đỗ Nguyễn Hạnh Dung",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000369",
-    "code": "",
-    "fullname": "Nguyễn Tài Đông",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000370",
-    "code": "",
-    "fullname": "Huỳnh Trọng Hải",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000371",
-    "code": "",
-    "fullname": "Phạm Văn Long",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000372",
-    "code": "",
-    "fullname": "Châu Văn Kiển",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000373",
-    "code": "",
-    "fullname": "Võ Quang Minh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000374",
-    "code": "",
-    "fullname": "Nguyễn Duy Dương",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000375",
-    "code": "",
-    "fullname": "Đỗ Nguyễn Hạnh Dung",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000376",
-    "code": "",
-    "fullname": "Nguyễn Tài Đông",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000377",
-    "code": "",
-    "fullname": "Võ Hiếu Thành",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000378",
-    "code": "",
-    "fullname": "Bui Nhat Luu",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000379",
-    "code": "",
-    "fullname": "Đỗ Nguyễn Hạnh Dung",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000380",
-    "code": "",
-    "fullname": "Phạm Văn Lành",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000381",
-    "code": "",
-    "fullname": "Huỳnh Phan Tiến Đạt",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000382",
-    "code": "",
-    "fullname": "Hoàng Ngọc Hiếu",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000383",
-    "code": "",
-    "fullname": "Trần Minh Thế",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000384",
-    "code": "",
-    "fullname": "Nguyễn Thanh Tòng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000385",
-    "code": "",
-    "fullname": "Võ Bá Minh Tâm",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000386",
-    "code": "",
-    "fullname": "Trương Văn Định",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000387",
-    "code": "",
-    "fullname": "Trần Minh Thế",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000388",
-    "code": "",
-    "fullname": "Đỗ Thế Trường",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000389",
-    "code": "",
-    "fullname": "Bùi Hoàng Ngọc Phú",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000390",
-    "code": "",
-    "fullname": "Đỗ Nguyễn Hạnh Dung",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000391",
-    "code": "",
-    "fullname": "Pham Van Long",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000392",
-    "code": "",
-    "fullname": "Hà Huy Cường",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000393",
-    "code": "",
-    "fullname": "Đoàn Thành Lâm",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000394",
-    "code": "",
-    "fullname": "Nguyễn Lê Anh Tuấn",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000395",
-    "code": "",
-    "fullname": "Triệu Văn Thang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000396",
-    "code": "",
-    "fullname": "Âu Thanh Hoàng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000397",
-    "code": "",
-    "fullname": "Nguyễn Thị Thanh Diệp",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000398",
-    "code": "",
-    "fullname": "Nguyễn Mai Trí Nghĩa",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000399",
-    "code": "",
-    "fullname": "Tran Trong Duong",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000400",
-    "code": "",
-    "fullname": "Mai Huynh Le Quyen",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000401",
-    "code": "",
-    "fullname": "Võ Quoc Bình",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000402",
-    "code": "",
-    "fullname": "Tran Le Ngoc Tram",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000403",
-    "code": "",
-    "fullname": "Lê Công Dinh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000404",
-    "code": "",
-    "fullname": "Lý Kim Phuong",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000405",
-    "code": "",
-    "fullname": "Lê Hai",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000406",
-    "code": "",
-    "fullname": "Pham Dinh Nhan",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000407",
-    "code": "",
-    "fullname": "Dang Hoai Bao",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000408",
-    "code": "",
-    "fullname": "Trần Lê Ngọc Trâm",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000409",
-    "code": "",
-    "fullname": "Huynh Trung Hieu",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000410",
-    "code": "",
-    "fullname": "Huỳnh Ngọc Chinh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000411",
-    "code": "",
-    "fullname": "Trương Thị Thu Huyền",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000412",
-    "code": "",
-    "fullname": "Nguyễn Hoàng Phong",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000413",
-    "code": "",
-    "fullname": "Duong Thanh Phu",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000414",
-    "code": "",
-    "fullname": "oàn Xuân Búo",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000415",
-    "code": "",
-    "fullname": "Pham Thanh Thuan",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000416",
-    "code": "",
-    "fullname": "Võ Chí Nguyen",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000417",
-    "code": "",
-    "fullname": "Cao Hồng Thắng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000418",
-    "code": "",
-    "fullname": "Huynh Trung Hieu",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000419",
-    "code": "",
-    "fullname": "Bùi Duy Lan",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000420",
-    "code": "",
-    "fullname": "Nguyen Thành Trung",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000421",
-    "code": "",
-    "fullname": "Lai Van Son",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000422",
-    "code": "",
-    "fullname": "Do Thiên Ân",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000423",
-    "code": "",
-    "fullname": "Nguyen Thi Anh Hang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000424",
-    "code": "",
-    "fullname": "Trieu Van Cuu",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000425",
-    "code": "",
-    "fullname": "Tran Thi Nhã Trang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000426",
-    "code": "",
-    "fullname": "Lê Thi My  Duyên",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000427",
-    "code": "",
-    "fullname": "Pham Thanh Tân",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000428",
-    "code": "",
-    "fullname": "Nguyen Thi Nhu Y",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000429",
-    "code": "",
-    "fullname": "Kiều Thị Hồng Hạnh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000430",
-    "code": "",
-    "fullname": "Kiều Thị Hồng Hạnh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000431",
-    "code": "",
-    "fullname": "Võ Hoàng Quân",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000432",
-    "code": "",
-    "fullname": "Nguyễn Thị Quỳnh Nha",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000433",
-    "code": "",
-    "fullname": "Nguyen Thi Quynh Nhu",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000434",
-    "code": "",
-    "fullname": "Ung Thi Dieu Hien",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000435",
-    "code": "",
-    "fullname": "Hoàng Thi Minh Thu",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000436",
-    "code": "",
-    "fullname": "Nguyễn Lữ Thanh Ngân",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000437",
-    "code": "",
-    "fullname": "Trương Mỹ Hạnh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000438",
-    "code": "",
-    "fullname": "Nguyen Thi Bich Nhu",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000439",
-    "code": "",
-    "fullname": "Nguyễn Hoàng Tân",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000440",
-    "code": "",
-    "fullname": "Nguyen Thành Long",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000441",
-    "code": "",
-    "fullname": "Đỗ Tường Minh Thi",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000442",
-    "code": "",
-    "fullname": "Nguyễn Văn Vũ",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000443",
-    "code": "",
-    "fullname": "Lê Van Hong",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000444",
-    "code": "",
-    "fullname": "Nguyễn Thị Bích Như",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000445",
-    "code": "",
-    "fullname": "Nguyễn Thị Bích Như",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000446",
-    "code": "",
-    "fullname": "Hồ Vũ Khanh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000447",
-    "code": "",
-    "fullname": "Âu Thanh Hoàng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000448",
-    "code": "",
-    "fullname": "Võ Tiến Đạt",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000449",
-    "code": "",
-    "fullname": "Kiều Thị Hồng Hạnh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000450",
-    "code": "",
-    "fullname": "Đoàn Xuân Bảo",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000451",
-    "code": "",
-    "fullname": "Lương Văn Phát",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000452",
-    "code": "",
-    "fullname": "Võ Đức Huy",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000453",
-    "code": "",
-    "fullname": "Trần Gia Bảo",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000454",
-    "code": "",
-    "fullname": "Nguyễn Lê Anh Tuấn",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000455",
-    "code": "",
-    "fullname": "Nguyễn Thị Bích Như",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000456",
-    "code": "",
-    "fullname": "Nguyễn Hoàng Lâm Khải",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000457",
-    "code": "",
-    "fullname": "võ nguyễn trường giang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000458",
-    "code": "",
-    "fullname": "Nguyễn Hoàng Tân",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000459",
-    "code": "",
-    "fullname": "Nguyễn Thị Cẩm Tiên",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000460",
-    "code": "",
-    "fullname": "Võ Thị Thúy Kiều",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000461",
-    "code": "",
-    "fullname": "Nguyễn Thành Long",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000462",
-    "code": "",
-    "fullname": "Lê Minh Thuận",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000463",
-    "code": "",
-    "fullname": "Lâm Ngọc Ánh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000464",
-    "code": "",
-    "fullname": "Nguyễn Kim Khanh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000465",
-    "code": "",
-    "fullname": "Nguyễn ngọc Hưng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000466",
-    "code": "",
-    "fullname": "Hoàng Văn Minh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000467",
-    "code": "",
-    "fullname": "Trần Gia Bảo",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000468",
-    "code": "",
-    "fullname": "Nguyễn thị cẩm Tiên",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000469",
-    "code": "",
-    "fullname": "Nguyễn thị quỳnh nha",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000470",
-    "code": "",
-    "fullname": "Nguyễn Đình Dự",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000471",
-    "code": "",
-    "fullname": "nguyễn đư`c toàn",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000472",
-    "code": "",
-    "fullname": "Trần quốc Toàn",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000473",
-    "code": "",
-    "fullname": "Lê Văn Hồng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000474",
-    "code": "",
-    "fullname": "võ hoài nhân",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000475",
-    "code": "",
-    "fullname": "Phan Tiến Dũng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000476",
-    "code": "",
-    "fullname": "Nguyễn Việt Phúc",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000477",
-    "code": "",
-    "fullname": "Huỳnh Thanh Huy",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000478",
-    "code": "",
-    "fullname": "Truong Công Trúc",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000479",
-    "code": "",
-    "fullname": "Trần văn tám",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000480",
-    "code": "",
-    "fullname": "nguyễn hoàng hiệp",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000481",
-    "code": "",
-    "fullname": "Nguyễn văn mạnh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000482",
-    "code": "",
-    "fullname": "Lê Anh Tài",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000483",
-    "code": "",
-    "fullname": "Trần văn tám",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000484",
-    "code": "",
-    "fullname": "Nguyễn Hữu Mạnh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000485",
-    "code": "",
-    "fullname": "Nguyễn văn Tuấn",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000486",
-    "code": "",
-    "fullname": "Hoàng Quý",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000487",
-    "code": "",
-    "fullname": "Trần Minh Khoa",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000488",
-    "code": "",
-    "fullname": "Lê Văn Hồng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000489",
-    "code": "",
-    "fullname": "ngô văn hòa",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000490",
-    "code": "",
-    "fullname": "Nguyễn Hữu Mạnh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000491",
-    "code": "",
-    "fullname": "Kiều Thị Hồng Hạnh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000492",
-    "code": "",
-    "fullname": "Võ Hoàng Minh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000493",
-    "code": "",
-    "fullname": "Nguyễn việt khải",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000494",
-    "code": "",
-    "fullname": "Nguyễn khương duy",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000495",
-    "code": "",
-    "fullname": "Nguyen Thi Ngoc Bích",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000496",
-    "code": "",
-    "fullname": "Nguyễn Thanh Bình",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000497",
-    "code": "",
-    "fullname": "Son Tham",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000498",
-    "code": "",
-    "fullname": "phạm đức lợi",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000499",
-    "code": "",
-    "fullname": "Nguyễn việt Khái",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000500",
-    "code": "",
-    "fullname": "Bùi Hoàng Ngọc Phú",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000501",
-    "code": "",
-    "fullname": "Nguyễn Văn Phát",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000502",
-    "code": "",
-    "fullname": "Bui Van Viet",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000503",
-    "code": "",
-    "fullname": "đỗ Cao Bá",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000504",
-    "code": "",
-    "fullname": "Nguyễn Phương Thảo",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000505",
-    "code": "",
-    "fullname": "Trần hồng nhật",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000506",
-    "code": "",
-    "fullname": "Lê Thị đông",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000507",
-    "code": "",
-    "fullname": "Tạ bửu  Phúc",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000508",
-    "code": "",
-    "fullname": "Bành Quang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000509",
-    "code": "",
-    "fullname": "Nguyễn Việt Thùy",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000510",
-    "code": "",
-    "fullname": "Phím Thanh Tân",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000511",
-    "code": "",
-    "fullname": "Phạm Tuấn Anh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000512",
-    "code": "",
-    "fullname": "Đỗ Cao Bá",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000513",
-    "code": "",
-    "fullname": "lê tuấn dũng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000514",
-    "code": "",
-    "fullname": "Võ Hoàng kiêm",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000515",
-    "code": "",
-    "fullname": "Sơn thắm",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000516",
-    "code": "",
-    "fullname": "Tran Quang Pháp",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000517",
-    "code": "",
-    "fullname": "ngô thị hiếu",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000518",
-    "code": "",
-    "fullname": "trang hoàng dung",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000519",
-    "code": "",
-    "fullname": "Nguyễn Minh Hùng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000520",
-    "code": "",
-    "fullname": "Ngô Thị năm",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000521",
-    "code": "",
-    "fullname": "Nguyẽn Quang Minh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000522",
-    "code": "",
-    "fullname": "đặng văn đạt",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000523",
-    "code": "",
-    "fullname": "Dương Bá Huy",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000524",
-    "code": "",
-    "fullname": "Kiều Thị Hồng Hạnh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000525",
-    "code": "",
-    "fullname": "Trần Lê Ngọc Trâm",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000526",
-    "code": "",
-    "fullname": "Võ Hoàng Kiếm",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000527",
-    "code": "",
-    "fullname": "Nguyen Nhat Cuong",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000528",
-    "code": "",
-    "fullname": "Nguyễn Văn Tân",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000529",
-    "code": "",
-    "fullname": "Cao Hữu Kim Long",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000530",
-    "code": "",
-    "fullname": "đỗ thị kim dung",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000531",
-    "code": "",
-    "fullname": "Nguy┼n Vn Ding",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000532",
-    "code": "",
-    "fullname": "Trần Quang Hòa",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000533",
-    "code": "",
-    "fullname": "Dương cường chiều",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000534",
-    "code": "",
-    "fullname": "Lê Tuấn Anh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000535",
-    "code": "",
-    "fullname": "trần nguyễn phú",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000536",
-    "code": "",
-    "fullname": "Phan Việt bằng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000537",
-    "code": "",
-    "fullname": "Trần đại phúc",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000538",
-    "code": "",
-    "fullname": "Nguyễn Mính Hoàng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000539",
-    "code": "",
-    "fullname": "ngô hồng việt",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000540",
-    "code": "",
-    "fullname": "Nguyễn vũ trung",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000541",
-    "code": "",
-    "fullname": "Phan Thanh Hùng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000542",
-    "code": "",
-    "fullname": "Chế Đông Viên",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000543",
-    "code": "",
-    "fullname": "Nguyễn Hoàng Phong",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000544",
-    "code": "",
-    "fullname": "Hoàng Trung Khánh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000545",
-    "code": "",
-    "fullname": "Nguyễn Hoàng Phong",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000546",
-    "code": "",
-    "fullname": "Nguyễn ngọc sơn",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000547",
-    "code": "",
-    "fullname": "Trương quốc ái",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000548",
-    "code": "",
-    "fullname": "Lương văn vân",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000549",
-    "code": "",
-    "fullname": "nguyễn thành đạt",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000550",
-    "code": "",
-    "fullname": "trương hoàng mỹ linh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000551",
-    "code": "",
-    "fullname": "Nguyễn Trung Hậu",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000552",
-    "code": "",
-    "fullname": "võ trường thắng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000553",
-    "code": "",
-    "fullname": "Phạm Thiên Quân",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000554",
-    "code": "",
-    "fullname": "Lê Thị mỹ Duyên",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000555",
-    "code": "",
-    "fullname": "Vũ nguyễn Khánh Nguyên",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000556",
-    "code": "",
-    "fullname": "Bùi Hữu Đan",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000557",
-    "code": "",
-    "fullname": "Nguyễn Lê Hoàng Khang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000558",
-    "code": "",
-    "fullname": "Lê Phong",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000559",
-    "code": "",
-    "fullname": "Trần Trung Hiếu",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000560",
-    "code": "",
-    "fullname": "Nguyễn Phi Hoàng Sơn",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000561",
-    "code": "",
-    "fullname": "Lê Thị Mỹ Duyên",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000562",
-    "code": "",
-    "fullname": "Nguyễn Phi Hoàng Sơn",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000563",
-    "code": "",
-    "fullname": "Hoàng Thị Mỹ Huyền",
-    "department": "",
-    "department_index": 0
+    "department_index": 147,
+    "position": "",
+    "card_number": "8071410",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "00056236",
+    "code": "00056236",
+    "fullname": "NV 00056236",
+    "department": "Chỉ Huy Đội",
+    "department_index": 147,
+    "position": "",
+    "card_number": "3529952",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "00056237",
+    "code": "00056237",
+    "fullname": "NV 00056237",
+    "department": "Chỉ Huy Đội",
+    "department_index": 147,
+    "position": "",
+    "card_number": "9103649",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "00056238",
+    "code": "00056238",
+    "fullname": "NV 00056238",
+    "department": "Chỉ Huy Đội",
+    "department_index": 147,
+    "position": "",
+    "card_number": "2465427",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "00056239",
+    "code": "00056239",
+    "fullname": "NV 00056239",
+    "department": "Chỉ Huy Đội",
+    "department_index": 147,
+    "position": "",
+    "card_number": "4035811",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "00056240",
+    "code": "00056240",
+    "fullname": "NV 00056240",
+    "department": "Chỉ Huy Đội",
+    "department_index": 147,
+    "position": "",
+    "card_number": "7896753",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "00056241",
+    "code": "00056241",
+    "fullname": "NV 00056241",
+    "department": "Chỉ Huy Đội",
+    "department_index": 147,
+    "position": "",
+    "card_number": "2471608",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "00056242",
+    "code": "00056242",
+    "fullname": "NV 00056242",
+    "department": "Chỉ Huy Đội",
+    "department_index": 147,
+    "position": "",
+    "card_number": "8026666",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "00056243",
+    "code": "00056243",
+    "fullname": "NV 00056243",
+    "department": "Chỉ Huy Đội",
+    "department_index": 147,
+    "position": "",
+    "card_number": "14054348",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "00056244",
+    "code": "00056244",
+    "fullname": "NV 00056244",
+    "department": "Chỉ Huy Đội",
+    "department_index": 147,
+    "position": "",
+    "card_number": "7959841",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "00056245",
+    "code": "00056245",
+    "fullname": "NV 00056245",
+    "department": "Chỉ Huy Đội",
+    "department_index": 147,
+    "position": "",
+    "card_number": "7958789",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "00056246",
+    "code": "00056246",
+    "fullname": "NV 00056246",
+    "department": "Chỉ Huy Đội",
+    "department_index": 147,
+    "position": "",
+    "card_number": "8087768",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "00056247",
+    "code": "00056247",
+    "fullname": "NV 00056247",
+    "department": "Chỉ Huy Đội",
+    "department_index": 147,
+    "position": "",
+    "card_number": "7959832",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "00056248",
+    "code": "00056248",
+    "fullname": "NV 00056248",
+    "department": "Chỉ Huy Đội",
+    "department_index": 147,
+    "position": "",
+    "card_number": "8065258",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "00056249",
+    "code": "00056249",
+    "fullname": "NV 00056249",
+    "department": "Chỉ Huy Đội",
+    "department_index": 147,
+    "position": "",
+    "card_number": "14043789",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "00056250",
+    "code": "00056250",
+    "fullname": "NV 00056250",
+    "department": "Chỉ Huy Đội",
+    "department_index": 147,
+    "position": "",
+    "card_number": "8087654",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "00056251",
+    "code": "00056251",
+    "fullname": "NV 00056251",
+    "department": "Chỉ Huy Đội",
+    "department_index": 147,
+    "position": "",
+    "card_number": "14043784",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "00056252",
+    "code": "00056252",
+    "fullname": "NV 00056252",
+    "department": "Chỉ Huy Đội",
+    "department_index": 147,
+    "position": "",
+    "card_number": "8087707",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "00056253",
+    "code": "00056253",
+    "fullname": "NV 00056253",
+    "department": "Chỉ Huy Đội",
+    "department_index": 147,
+    "position": "",
+    "card_number": "7890317",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "00056254",
+    "code": "00056254",
+    "fullname": "NV 00056254",
+    "department": "Chỉ Huy Đội",
+    "department_index": 147,
+    "position": "",
+    "card_number": "8087705",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "10085",
+    "code": "10085",
+    "fullname": "Tai Hua Kim",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "10089",
+    "code": "10089",
+    "fullname": "user",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "10403",
+    "code": "10403",
+    "fullname": "user",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "10407",
+    "code": "10407",
+    "fullname": "Phuc Hoang Huu",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "10875",
+    "code": "10875",
+    "fullname": "user",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "10903",
+    "code": "10903",
+    "fullname": "Lan Anh Nguyen Thi",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "11519",
+    "code": "11519",
+    "fullname": "Khiêm Trần Gia",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "11529",
+    "code": "11529",
+    "fullname": "user",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "11543",
+    "code": "11543",
+    "fullname": "Nhu Nguyen Thi",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "11678",
+    "code": "11678",
+    "fullname": "user",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "11721",
+    "code": "11721",
+    "fullname": "Phương Nguyễn",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "11820",
+    "code": "11820",
+    "fullname": "user",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "11865",
+    "code": "11865",
+    "fullname": "user",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "12008",
+    "code": "12008",
+    "fullname": "user",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "12123",
+    "code": "12123",
+    "fullname": "user",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "12175",
+    "code": "12175",
+    "fullname": "user",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "12318",
+    "code": "12318",
+    "fullname": "user",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "12357",
+    "code": "12357",
+    "fullname": "Chum Pham",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "12579",
+    "code": "12579",
+    "fullname": "Nguyen Dang Thanh",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "12742",
+    "code": "12742",
+    "fullname": "Châu Huỳnh Ngọc",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "12851",
+    "code": "12851",
+    "fullname": "user",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "12866",
+    "code": "12866",
+    "fullname": "user",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "12886",
+    "code": "12886",
+    "fullname": "Uyên Du Thục",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "12898",
+    "code": "12898",
+    "fullname": "user",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "12928",
+    "code": "12928",
+    "fullname": "Tham Trinh Hoang",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "13008",
+    "code": "13008",
+    "fullname": "Hoang Nguyen Dinh",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "13087",
+    "code": "13087",
+    "fullname": "user",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "13132",
+    "code": "13132",
+    "fullname": "user",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "13177",
+    "code": "13177",
+    "fullname": "Thanh Phung Thi",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "13251",
+    "code": "13251",
+    "fullname": "Mai Nguyen Van",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "13260",
+    "code": "13260",
+    "fullname": "user",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "13277",
+    "code": "13277",
+    "fullname": "user",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "13319",
+    "code": "13319",
+    "fullname": "Loc Nguyen Tan",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "13347",
+    "code": "13347",
+    "fullname": "Tú Lê Tuấn",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "13414",
+    "code": "13414",
+    "fullname": "Thanh Bình Đào Thị",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "13520",
+    "code": "13520",
+    "fullname": "Phước Lâm Hữu",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "13583",
+    "code": "13583",
+    "fullname": "user",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "13600",
+    "code": "13600",
+    "fullname": "user",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "13612",
+    "code": "13612",
+    "fullname": "Minh Anh Nguyen Truo",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "13617",
+    "code": "13617",
+    "fullname": "user",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "13618",
+    "code": "13618",
+    "fullname": "Binh Nguyen Thi",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "13723",
+    "code": "13723",
+    "fullname": "user",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "13794",
+    "code": "13794",
+    "fullname": "Hieu Ha Quang",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "13895",
+    "code": "13895",
+    "fullname": "user",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "14038",
+    "code": "14038",
+    "fullname": "user",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "14105",
+    "code": "14105",
+    "fullname": "Truong Giang Vo Nguy",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "14114",
+    "code": "14114",
+    "fullname": "user",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "14207",
+    "code": "14207",
+    "fullname": "Cuong Van Thanh",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "14224",
+    "code": "14224",
+    "fullname": "Minh Nguyễn Hải",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "14243",
+    "code": "14243",
+    "fullname": "user",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "14272",
+    "code": "14272",
+    "fullname": "huyhuynh",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "14303",
+    "code": "14303",
+    "fullname": "Phi Lê Bằng",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "14316",
+    "code": "14316",
+    "fullname": "Tin Nguyen Tran Trun",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "14366",
+    "code": "14366",
+    "fullname": "Cam Hanh Nguyen Thi",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "14381",
+    "code": "14381",
+    "fullname": "user",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "14383",
+    "code": "14383",
+    "fullname": "user",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "14430",
+    "code": "14430",
+    "fullname": "My Dung Truong Thi",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "14502",
+    "code": "14502",
+    "fullname": "Hà Nguyễn Thị Ngân",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "14614",
+    "code": "14614",
+    "fullname": "Hoang Au",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "14638",
+    "code": "14638",
+    "fullname": "PhuongThao",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "14639",
+    "code": "14639",
+    "fullname": "ThuHa",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "14640",
+    "code": "14640",
+    "fullname": "ThanhHai",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "14647",
+    "code": "14647",
+    "fullname": "NgocMinh",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "14703",
+    "code": "14703",
+    "fullname": "Sang Nguyen",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "14704",
+    "code": "14704",
+    "fullname": "Sang Ho",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "14750",
+    "code": "14750",
+    "fullname": "Bich Tuyen",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "14757",
+    "code": "14757",
+    "fullname": "Tien Anh",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "14770",
+    "code": "14770",
+    "fullname": "Huynh Sang",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "14805",
+    "code": "14805",
+    "fullname": "Phuong Tran",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "14824",
+    "code": "14824",
+    "fullname": "Hanh Dung",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "14827",
+    "code": "14827",
+    "fullname": "Dat Huynh",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "14848",
+    "code": "14848",
+    "fullname": "Chinh Huynh",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "14857",
+    "code": "14857",
+    "fullname": "Nhu Nguyen",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "14859",
+    "code": "14859",
+    "fullname": "Tuan Nguyen",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "14864",
+    "code": "14864",
+    "fullname": "Toan Nguyen",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "14865",
+    "code": "14865",
+    "fullname": "Nha Nguyen",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "14868",
+    "code": "14868",
+    "fullname": "Tien Nguyen",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "14892",
+    "code": "14892",
+    "fullname": "Hong Le",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "14936",
+    "code": "14936",
+    "fullname": "Duyen Le",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "14947",
+    "code": "14947",
+    "fullname": "Nga Ha",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "14950",
+    "code": "14950",
+    "fullname": "Linh Nguyen",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "15009",
+    "code": "15009",
+    "fullname": "Dai Vo",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "15023",
+    "code": "15023",
+    "fullname": "Phuong Huynh",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "15025",
+    "code": "15025",
+    "fullname": "Thu Pham",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "15063",
+    "code": "15063",
+    "fullname": "May Tran",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "15085",
+    "code": "15085",
+    "fullname": "Lien Nguyen",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "15090",
+    "code": "15090",
+    "fullname": "Nhung Truong",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "25682",
+    "code": "25682",
+    "fullname": "Thuy Nguyen Thi Phuo",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "56235",
+    "code": "56235",
+    "fullname": "Khach 1",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "8071410",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "56236",
+    "code": "56236",
+    "fullname": "Khach 2",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "3529952",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "56237",
+    "code": "56237",
+    "fullname": "Khach 3",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "9103649",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "56238",
+    "code": "56238",
+    "fullname": "Khach 4",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "2465427",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "56239",
+    "code": "56239",
+    "fullname": "Khach 5",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "4035811",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "56240",
+    "code": "56240",
+    "fullname": "Khach 6",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "7896753",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "56241",
+    "code": "56241",
+    "fullname": "Khach 7",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "2471608",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "56242",
+    "code": "56242",
+    "fullname": "Khach 8",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "8026666",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "56243",
+    "code": "56243",
+    "fullname": "Khach 9",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "14054348",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "56244",
+    "code": "56244",
+    "fullname": "Khach 10",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "7959841",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "56245",
+    "code": "56245",
+    "fullname": "Khach 11",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "7958789",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "56246",
+    "code": "56246",
+    "fullname": "Khach 12",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "8087768",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "56247",
+    "code": "56247",
+    "fullname": "Khach 13",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "7959832",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "56248",
+    "code": "56248",
+    "fullname": "Khach 14",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "8065258",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "56249",
+    "code": "56249",
+    "fullname": "Khach 15",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "14043789",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "56250",
+    "code": "56250",
+    "fullname": "Khach 16",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "8087654",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "56251",
+    "code": "56251",
+    "fullname": "Khach 17",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "14043784",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "56252",
+    "code": "56252",
+    "fullname": "Khach 18",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "8087707",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "56253",
+    "code": "56253",
+    "fullname": "Khach 19",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "7890317",
+    "email": "",
+    "phone": "",
+    "gender": ""
+  },
+  {
+    "atid": "56254",
+    "code": "56254",
+    "fullname": "Khach 20",
+    "department": "Khác",
+    "department_index": null,
+    "position": "",
+    "card_number": "8087705",
+    "email": "",
+    "phone": "",
+    "gender": ""
   },
   {
     "atid": "80000564",
-    "code": "",
-    "fullname": "Phạm thị chùm",
+    "code": "80000564",
+    "fullname": "NV 80000564",
     "department": "HC QTNS",
-    "department_index": 142
-  },
-  {
-    "atid": "80000565",
-    "code": "",
-    "fullname": "Trần Khánh Hưng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000566",
-    "code": "",
-    "fullname": "Vo Thi Dinh San",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000567",
-    "code": "",
-    "fullname": "Phạm Lê Đăng Khoa",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000568",
-    "code": "",
-    "fullname": "Lê Thi My¨ Duyên",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000569",
-    "code": "",
-    "fullname": "Võ Quý Trung Hieu",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000570",
-    "code": "",
-    "fullname": "Đỗ Lê Duy",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000571",
-    "code": "",
-    "fullname": "Nguyen Thanh Ngoc Linh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000572",
-    "code": "",
-    "fullname": "Nguyen Thanh Tòng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000573",
-    "code": "",
-    "fullname": "Nguyen Van Khai",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000574",
-    "code": "",
-    "fullname": "Thân Trong Duy",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000575",
-    "code": "",
-    "fullname": "Tran Thi May",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000576",
-    "code": "",
-    "fullname": "Àng Hoàng Ru",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000577",
-    "code": "",
-    "fullname": "Hà Hoàng Xuân Nga",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000578",
-    "code": "",
-    "fullname": "Tran Le Ngoc Tram",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000579",
-    "code": "",
-    "fullname": "Nguyen Hoang Thach",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000580",
-    "code": "",
-    "fullname": "Dang Minh Hoàng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000581",
-    "code": "",
-    "fullname": "Võ Quý Trung Hiếu",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000582",
-    "code": "",
-    "fullname": "Nguyn Manh Sy",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000583",
-    "code": "",
-    "fullname": "Hu¾nh Thanh Huy",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000584",
-    "code": "",
-    "fullname": "Truong Hoang My Linh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000585",
-    "code": "",
-    "fullname": "Nguyễn Thành Lợi",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000586",
-    "code": "",
-    "fullname": "Nguyen Hieu Thành",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000587",
-    "code": "",
-    "fullname": "Che V Dat",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000588",
-    "code": "",
-    "fullname": "Do Lê Duy",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000589",
-    "code": "",
-    "fullname": "Bùi Thi Ngoc Hai",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000590",
-    "code": "",
-    "fullname": "Lâm Chí Hùng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000591",
-    "code": "",
-    "fullname": "Hà Hoàng Xuân Nga",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000592",
-    "code": "",
-    "fullname": "trương hoàng mỹ linh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000593",
-    "code": "",
-    "fullname": "Trần Minh Khoa",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000594",
-    "code": "",
-    "fullname": "Trần thị hoàng yến",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000595",
-    "code": "",
-    "fullname": "Le Thi Kieu My",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000596",
-    "code": "",
-    "fullname": "Lee Van Chuyen",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000597",
-    "code": "",
-    "fullname": "Nguyen Van Cuong",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000598",
-    "code": "",
-    "fullname": "Nguyen Van Tuan",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000599",
-    "code": "",
-    "fullname": "Nguyen Pham Phuong Dung",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000600",
-    "code": "",
-    "fullname": "Pham Trung Tinh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000601",
-    "code": "",
-    "fullname": "Mai Thi Thanh Chau",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000602",
-    "code": "",
-    "fullname": "Do Thi Kim Dung",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000603",
-    "code": "",
-    "fullname": "Bùi Nhat Luu",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000604",
-    "code": "",
-    "fullname": "Khuu Thanh Quoc",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000605",
-    "code": "",
-    "fullname": "Nguyen Nhat Hào",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000606",
-    "code": "",
-    "fullname": "Nguyen Phuong Thao",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000607",
-    "code": "",
-    "fullname": "Tran Kieu Ánh Vân",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000608",
-    "code": "",
-    "fullname": "Do Quoc Thuong",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000609",
-    "code": "",
-    "fullname": "Tran Dai Phúc",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000610",
-    "code": "",
-    "fullname": "Pham Thi Minh Hong",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000611",
-    "code": "",
-    "fullname": "Lai Thi Tam",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000612",
-    "code": "",
-    "fullname": "Huynh Thi Tuyet Nhung",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000613",
-    "code": "",
-    "fullname": "Nguyen Hoàng Trang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000614",
-    "code": "",
-    "fullname": "Nguyen Van Bình",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000615",
-    "code": "",
-    "fullname": "Tran Lê Trà My",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000616",
-    "code": "",
-    "fullname": "Nguy┼n QuÐc ╔nh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000617",
-    "code": "",
-    "fullname": "Nguyen Duong Anh Tuan",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000618",
-    "code": "",
-    "fullname": "Hoàng Thi My Huyen",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000619",
-    "code": "",
-    "fullname": "Tran Van Hùng",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000620",
-    "code": "",
-    "fullname": "Nguyen Van Tuan",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000621",
-    "code": "",
-    "fullname": "Tran Kim Thuan",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000622",
-    "code": "",
-    "fullname": "Lê Thi Thu Nguyet",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000623",
-    "code": "",
-    "fullname": "Tran Quoc Phuong",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000624",
-    "code": "",
-    "fullname": "Thiên Trang Khuê",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000625",
-    "code": "",
-    "fullname": "Ksor Hoan",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000626",
-    "code": "",
-    "fullname": "Tạ Thanh Phong",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000627",
-    "code": "",
-    "fullname": "Bùi Manh Tuong",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000628",
-    "code": "",
-    "fullname": "Lâm Thành Dat",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000629",
-    "code": "",
-    "fullname": "Truong Nguyen Kiệt",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000630",
-    "code": "",
-    "fullname": "Hoang Thi My Huyen",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000631",
-    "code": "",
-    "fullname": "Võ Tran Thanh Tú",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000632",
-    "code": "",
-    "fullname": "Nguyen Tan Hoang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000633",
-    "code": "",
-    "fullname": "Nguyễn Minh Khoa",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000634",
-    "code": "",
-    "fullname": "Phan Văn Nhã",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000635",
-    "code": "",
-    "fullname": "Nguyễn Nhựt Hào",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000636",
-    "code": "",
-    "fullname": "Võ Quoc Bình",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000637",
-    "code": "",
-    "fullname": "Lê Phương Anh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000638",
-    "code": "",
-    "fullname": "Thiên Trang Khuê",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000639",
-    "code": "",
-    "fullname": "Mai Van Thành",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000640",
-    "code": "",
-    "fullname": "Nguyễn Quốc Huy",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000641",
-    "code": "",
-    "fullname": "Le Mai Ngoc Tram",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000642",
-    "code": "",
-    "fullname": "Nguyễn Ngọc Diệp",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000643",
-    "code": "",
-    "fullname": "Nguyễn Hữu Mạnh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000644",
-    "code": "",
-    "fullname": "Pham Thanh Tân",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000645",
-    "code": "",
-    "fullname": "Nguyễn Hoàng Khanh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000646",
-    "code": "",
-    "fullname": "Nguyễn Quốc Trung",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000647",
-    "code": "",
-    "fullname": "Lâm Thi My Loan",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000648",
-    "code": "",
-    "fullname": "Võ Quang Dai",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000649",
-    "code": "",
-    "fullname": "Nguyen Tuan Phong",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000650",
-    "code": "",
-    "fullname": "Nguyễn Hữu Mạnh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000651",
-    "code": "",
-    "fullname": "Vo Ngoc Tuan",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000652",
-    "code": "",
-    "fullname": "Lý Vi Linh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000653",
-    "code": "",
-    "fullname": "Nguyễn Hữu Lâm",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000654",
-    "code": "",
-    "fullname": "Lê Hoàng Phúc",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000655",
-    "code": "",
-    "fullname": "Phím Van Tuan",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000656",
-    "code": "",
-    "fullname": "Huynh Thi Thi Thanh Phương",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000657",
-    "code": "",
-    "fullname": "Nguyen Xuân bảo Lộc",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000658",
-    "code": "",
-    "fullname": "Nguyen Hữu Hà",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000659",
-    "code": "",
-    "fullname": "Lê Thi Mai",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000660",
-    "code": "",
-    "fullname": "Đinh Lương Thiện",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000661",
-    "code": "",
-    "fullname": "Nguễn Minh Tân",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000662",
-    "code": "",
-    "fullname": "Nguyen Tan Dang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000663",
-    "code": "",
-    "fullname": "Pham Hong Thai",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000664",
-    "code": "",
-    "fullname": "Pham Thanh Tân",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000665",
-    "code": "",
-    "fullname": "Lê Hoàng Phúc",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000666",
-    "code": "",
-    "fullname": "Võ Quang Dai",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000667",
-    "code": "",
-    "fullname": "Văn Thành Long",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000668",
-    "code": "",
-    "fullname": "Nguyen Xuam Hop",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000669",
-    "code": "",
-    "fullname": "Bui Quang Huy",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000670",
-    "code": "",
-    "fullname": "Nguyễn Vĩnh Thọ",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000671",
-    "code": "",
-    "fullname": "Nguyen Huynh Van Sang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000672",
-    "code": "",
-    "fullname": "tuấn",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000674",
-    "code": "",
-    "fullname": "TEST KHACH",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000675",
-    "code": "",
-    "fullname": "Nguyễn Huỳnh Văn Sang",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000680",
-    "code": "",
-    "fullname": "aaaaa",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000681",
-    "code": "",
-    "fullname": "Võ Thị Hương",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000683",
-    "code": "",
-    "fullname": "trần thị bích",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000684",
-    "code": "",
-    "fullname": "Phan Minh Hồng Tấn",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000685",
-    "code": "",
-    "fullname": "Hồ Vũ Khanh",
-    "department": "",
-    "department_index": 0
-  },
-  {
-    "atid": "80000686",
-    "code": "",
-    "fullname": "Lê Hoàng Chỉnh",
-    "department": "",
-    "department_index": 0
+    "department_index": 142,
+    "position": "",
+    "card_number": "7927383",
+    "email": "",
+    "phone": "",
+    "gender": ""
   }
 ]
