@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 
 export default function LoginPage({ onLoginSuccess, clockAudit }) {
-  const [credential, setCredential] = useState('SeazenAdmin');
+  const [credential, setCredential] = useState('');
   const [password, setPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(false);
@@ -127,7 +127,7 @@ export default function LoginPage({ onLoginSuccess, clockAudit }) {
                 style={{ height: 40, borderRadius: 10 }}
                 value={credential}
                 onChange={(e) => setCredential(e.target.value)}
-                placeholder="SeazenAdmin hoặc Letan"
+                placeholder="Nhập tên tài khoản..."
                 required
               />
             </div>
@@ -154,36 +154,6 @@ export default function LoginPage({ onLoginSuccess, clockAudit }) {
               {loading ? 'Đang đăng nhập...' : 'Đăng nhập ngay'}
             </button>
           </form>
-
-          <div style={{ marginTop: 22, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
-            <div style={{ fontSize: 11.5, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 8 }}>
-              Chọn nhanh tài khoản vận hành:
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <button
-                type="button"
-                className="btn btn-sm"
-                onClick={() => {
-                  setCredential('SeazenAdmin');
-                  setPassword('SeazenAdmin@1516');
-                  performLogin('SeazenAdmin', 'SeazenAdmin@1516');
-                }}
-              >
-                Admin (SeazenAdmin)
-              </button>
-              <button
-                type="button"
-                className="btn btn-sm"
-                onClick={() => {
-                  setCredential('Letan');
-                  setPassword('Letan@1516');
-                  performLogin('Letan', 'Letan@1516');
-                }}
-              >
-                Lễ tân (Letan)
-              </button>
-            </div>
-          </div>
         </div>
       </div>
     </div>
