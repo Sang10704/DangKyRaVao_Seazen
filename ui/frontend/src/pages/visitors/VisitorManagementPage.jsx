@@ -1,5 +1,52 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { apiFetch } from '../../services/apiClient';
+
+function foldVn(str) {
+  return String(str || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase()
+    .trim();
+}
+
+/**
+ * Smart dd/MM/yyyy formatter:
+ * - Typing "10072004" automatically formats into "10/07/2004" (inserts '/' after dd and MM).
+ * - Pressing Backspace at a '/' boundary deletes the preceding digit cleanly without trapping the cursor.
+ */
+function formatDobSmart(nextVal, prevVal = '') {
+  const nextStr = String(nextVal || '');
+  const prevStr = String(prevVal || '');
+  const isDeleting = nextStr.length < prevStr.length;
+  let digits = nextStr.replace(/\D/g, '').slice(0, 8);
+
+  if (isDeleting && prevStr.endsWith('/') && !nextStr.endsWith('/')) {
+    digits = digits.slice(0, -1);
+  }
+
+  if (digits.length === 0) return '';
+  if (digits.length < 2) return digits;
+  if (digits.length === 2) return isDeleting ? digits : `${digits}/`;
+  if (digits.length < 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  if (digits.length === 4) {
+    return isDeleting
+      ? `${digits.slice(0, 2)}/${digits.slice(2)}`
+      : `${digits.slice(0, 2)}/${digits.slice(2)}/`;
+  }
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+}
+
+function normalizeStoredDob(raw) {
+  const s = String(raw || '').trim();
+  if (!s || s.startsWith('0001')) return '';
+  const isoMatch = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) return `${isoMatch[3]}/${isoMatch[2]}/${isoMatch[1]}`;
+  const digits = s.replace(/\D/g, '');
+  if (digits.length === 8) return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+  return s;
+}
 
 export default function VisitorManagementPage({
   departments,
@@ -17,6 +64,11 @@ export default function VisitorManagementPage({
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [listTab, setListTab] = useState('ACTIVE'); // ACTIVE | HISTORY
   const [visitorSearch, setVisitorSearch] = useState('');
+
+  // Frequent / returning visitor directory for subtle autocomplete
+  const [frequentVisitors, setFrequentVisitors] = useState([]);
+  const [focusedField, setFocusedField] = useState(null); // 'main_name' | 'main_cccd' | 'comp_name' | 'comp_cccd' | null
+  const [activeSuggestIdx, setActiveSuggestIdx] = useState(0);
 
   const mainQrInputRef = useRef(null);
   const compQrInputRef = useRef(null);
@@ -59,6 +111,180 @@ export default function VisitorManagementPage({
   const [companions, setCompanions] = useState([]);
   const [selectedCompIdx, setSelectedCompIdx] = useState([]);
 
+  const loadFrequentVisitors = useCallback(async () => {
+    const { ok, data } = await apiFetch('/api/visitors/frequent');
+    if (ok && data?.visitors) {
+      setFrequentVisitors(data.visitors);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadFrequentVisitors();
+  }, [loadFrequentVisitors, visitorHistory.length, activeVisitors.length]);
+
+  // Unified returning-guest pool (combines /api/visitors/frequent + local visitorHistory/activeVisitors)
+  const returningGuestsPool = useMemo(() => {
+    const map = new Map();
+    const cleanVal = (v) => {
+      const s = String(v || '').trim();
+      return ['0', '--', '---', 'None', 'null', 'NoDepartment'].includes(s) ? '' : s;
+    };
+
+    for (const item of frequentVisitors) {
+      const fn = cleanVal(item.full_name);
+      const cccd = cleanVal(item.cccd_number);
+      if (!fn && !cccd) continue;
+      const key = cccd ? cccd.toUpperCase() : foldVn(fn);
+      map.set(key, {
+        full_name: fn,
+        cccd_number: cccd,
+        birth_date: normalizeStoredDob(item.birth_date),
+        phone: cleanVal(item.phone),
+        company: cleanVal(item.company),
+        department: cleanVal(item.department),
+        host_person: cleanVal(item.host_person),
+        host_phone: cleanVal(item.host_phone),
+        visit_count: Number(item.visit_count || 1),
+      });
+    }
+
+    for (const raw of [...visitorHistory, ...activeVisitors]) {
+      const fn = cleanVal(raw.FullName || raw.full_name);
+      const cccd = cleanVal(raw.CCCDNumber || raw.cccd_number);
+      if (!fn && !cccd) continue;
+      if (fn.startsWith('NV 000') || fn.startsWith('Khách thẻ')) continue;
+      const key = cccd ? cccd.toUpperCase() : foldVn(fn);
+      if (!map.has(key)) {
+        map.set(key, {
+          full_name: fn,
+          cccd_number: cccd,
+          birth_date: normalizeStoredDob(raw.BirthDate || raw.birth_date),
+          phone: cleanVal(raw.Phone || raw.phone),
+          company: cleanVal(raw.Company || raw.company),
+          department: cleanVal(raw.HostDepartment || raw.Department || raw.department),
+          host_person: cleanVal(raw.HostPerson || raw.host_person),
+          host_phone: cleanVal(raw.host_phone),
+          visit_count: 1,
+        });
+      }
+    }
+
+    return Array.from(map.values());
+  }, [frequentVisitors, visitorHistory, activeVisitors]);
+
+  const matchReturningGuests = useCallback(
+    (query, mode = 'name') => {
+      const qRaw = String(query || '').trim();
+      if (!qRaw) return [];
+      const qFold = foldVn(qRaw);
+      if (mode === 'name' && qFold.length < 1) return [];
+      if (mode === 'cccd' && qRaw.length < 2) return [];
+
+      const scored = [];
+      for (const g of returningGuestsPool) {
+        if (mode === 'name') {
+          if (!g.full_name) continue;
+          const fnFold = foldVn(g.full_name);
+          // Hide if already an exact match on both name and cccd
+          if (fnFold === qFold && g.cccd_number && g.cccd_number === form.cccd_number) continue;
+          if (fnFold.startsWith(qFold)) {
+            scored.push({ g, score: 300 + g.visit_count });
+          } else if (fnFold.split(/\s+/).some((w) => w.startsWith(qFold))) {
+            scored.push({ g, score: 200 + g.visit_count });
+          } else if (fnFold.includes(qFold)) {
+            scored.push({ g, score: 100 + g.visit_count });
+          }
+        } else {
+          if (!g.cccd_number) continue;
+          const cLower = g.cccd_number.toLowerCase();
+          const qLower = qRaw.toLowerCase();
+          if (cLower === qLower && g.full_name && g.full_name === form.full_name) continue;
+          if (cLower.startsWith(qLower)) {
+            scored.push({ g, score: 300 + g.visit_count });
+          } else if (cLower.includes(qLower)) {
+            scored.push({ g, score: 150 + g.visit_count });
+          }
+        }
+      }
+
+      scored.sort((a, b) => b.score - a.score);
+      return scored.slice(0, 6).map((s) => s.g);
+    },
+    [returningGuestsPool, form.cccd_number, form.full_name]
+  );
+
+  const mainNameSuggestions = useMemo(
+    () => (focusedField === 'main_name' ? matchReturningGuests(form.full_name, 'name') : []),
+    [focusedField, form.full_name, matchReturningGuests]
+  );
+
+  const mainCccdSuggestions = useMemo(
+    () => (focusedField === 'main_cccd' ? matchReturningGuests(form.cccd_number, 'cccd') : []),
+    [focusedField, form.cccd_number, matchReturningGuests]
+  );
+
+  const compNameSuggestions = useMemo(
+    () => (focusedField === 'comp_name' ? matchReturningGuests(compForm.full_name, 'name') : []),
+    [focusedField, compForm.full_name, matchReturningGuests]
+  );
+
+  const compCccdSuggestions = useMemo(
+    () => (focusedField === 'comp_cccd' ? matchReturningGuests(compForm.cccd_number, 'cccd') : []),
+    [focusedField, compForm.cccd_number, matchReturningGuests]
+  );
+
+  const applyGuestToMainForm = (guest) => {
+    if (!guest) return;
+    const validDept = departments.some((d) => d.DepartmentName === guest.department)
+      ? guest.department
+      : null;
+
+    setForm((prev) => ({
+      ...prev,
+      full_name: guest.full_name || prev.full_name,
+      cccd_number: guest.cccd_number || prev.cccd_number,
+      birth_date: guest.birth_date || prev.birth_date,
+      phone: guest.phone || prev.phone,
+      company: guest.company || prev.company,
+      department: validDept || prev.department,
+      host_person: guest.host_person || prev.host_person,
+      host_phone: guest.host_phone || prev.host_phone,
+    }));
+    setFocusedField(null);
+    setActiveSuggestIdx(0);
+  };
+
+  const applyGuestToCompForm = (guest) => {
+    if (!guest) return;
+    setCompForm((prev) => ({
+      ...prev,
+      full_name: guest.full_name || prev.full_name,
+      cccd_number: guest.cccd_number || prev.cccd_number,
+      birth_date: guest.birth_date || prev.birth_date,
+    }));
+    setFocusedField(null);
+    setActiveSuggestIdx(0);
+  };
+
+  const handleSuggestKeyDown = (e, list, onSelect) => {
+    if (!list || list.length === 0) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveSuggestIdx((i) => (i + 1) % list.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveSuggestIdx((i) => (i - 1 + list.length) % list.length);
+    } else if (e.key === 'Enter') {
+      const target = list[activeSuggestIdx] || list[0];
+      if (target) {
+        e.preventDefault();
+        onSelect(target);
+      }
+    } else if (e.key === 'Escape') {
+      setFocusedField(null);
+    }
+  };
+
   // Filter employees belonging to the selected contact department for fast selection
   const deptEmployees = employees.filter((e) => {
     const dName = e.department || e.DepartmentName || '';
@@ -78,7 +304,7 @@ export default function VisitorManagementPage({
         ...prev,
         full_name: p.full_name || prev.full_name,
         cccd_number: p.cccd_number || prev.cccd_number,
-        birth_date: p.birth_date || prev.birth_date,
+        birth_date: normalizeStoredDob(p.birth_date) || prev.birth_date,
       }));
       setShowMainQrBox(false);
       setMainQrRaw('');
@@ -99,7 +325,7 @@ export default function VisitorManagementPage({
         ...prev,
         full_name: p.full_name || prev.full_name,
         cccd_number: p.cccd_number || prev.cccd_number,
-        birth_date: p.birth_date || prev.birth_date,
+        birth_date: normalizeStoredDob(p.birth_date) || prev.birth_date,
       }));
       setShowCompQrBox(false);
       setCompQrRaw('');
@@ -155,6 +381,7 @@ export default function VisitorManagementPage({
     });
     setCompanions([]);
     setSelectedCompIdx([]);
+    setFocusedField(null);
   };
 
   const handleSubmitRegistration = async (e) => {
@@ -173,6 +400,7 @@ export default function VisitorManagementPage({
       handleResetForm();
       setIsFormOpen(false);
       onRefreshData();
+      loadFrequentVisitors();
     } else {
       notify(data.error || 'Không thể đăng ký khách.', 'error');
     }
@@ -213,6 +441,48 @@ export default function VisitorManagementPage({
         .includes(q)
     );
   }, [visitorHistory, visitorSearch]);
+
+  const renderSuggestPopover = (list, onSelect) => {
+    if (!list || list.length === 0) return null;
+    return (
+      <div className="guest-suggest-popover">
+        <div className="guest-suggest-head">
+          <span>Khách quen đã lưu</span>
+          <span>Chọn để điền nhanh</span>
+        </div>
+        <div className="guest-suggest-list">
+          {list.map((g, idx) => {
+            const metaParts = [];
+            if (g.cccd_number) metaParts.push(`CCCD: ${g.cccd_number}`);
+            if (g.birth_date) metaParts.push(`NS: ${g.birth_date}`);
+            if (g.company) metaParts.push(g.company);
+            else if (g.department) metaParts.push(g.department);
+            return (
+              <div
+                key={`${g.cccd_number || g.full_name}-${idx}`}
+                className={`guest-suggest-item ${idx === activeSuggestIdx ? 'active' : ''}`}
+                onMouseEnter={() => setActiveSuggestIdx(idx)}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  onSelect(g);
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <div className="guest-suggest-name">{g.full_name || 'Khách'}</div>
+                  <div className="guest-suggest-meta">
+                    {metaParts.join(' · ') || 'Hồ sơ khách trước đây'}
+                  </div>
+                </div>
+                <span className="guest-suggest-pill">
+                  {g.visit_count > 1 ? `${g.visit_count} lần đến` : 'Khách quen'}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="tino-body">
@@ -360,10 +630,23 @@ export default function VisitorManagementPage({
                   <input
                     type="text"
                     className="v-input"
+                    autoComplete="off"
+                    placeholder="Gõ tên khách (tự động gợi ý nếu khách quen)..."
                     value={form.full_name}
-                    onChange={(e) => setForm({ ...form, full_name: e.target.value })}
+                    onFocus={() => {
+                      setFocusedField('main_name');
+                      setActiveSuggestIdx(0);
+                    }}
+                    onBlur={() => setTimeout(() => setFocusedField((f) => (f === 'main_name' ? null : f)), 140)}
+                    onChange={(e) => {
+                      setForm({ ...form, full_name: e.target.value });
+                      setFocusedField('main_name');
+                      setActiveSuggestIdx(0);
+                    }}
+                    onKeyDown={(e) => handleSuggestKeyDown(e, mainNameSuggestions, applyGuestToMainForm)}
                     required
                   />
+                  {renderSuggestPopover(mainNameSuggestions, applyGuestToMainForm)}
                 </div>
 
                 <div className="v-field">
@@ -372,10 +655,17 @@ export default function VisitorManagementPage({
                   </label>
                   <input
                     type="text"
+                    inputMode="numeric"
+                    maxLength={10}
                     className="v-input"
-                    placeholder="dd/MM/yyyy"
+                    placeholder="dd/MM/yyyy (gõ nhanh VD: 10072004)"
                     value={form.birth_date}
-                    onChange={(e) => setForm({ ...form, birth_date: e.target.value })}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        birth_date: formatDobSmart(e.target.value, prev.birth_date),
+                      }))
+                    }
                   />
                 </div>
 
@@ -439,10 +729,23 @@ export default function VisitorManagementPage({
                   <input
                     type="text"
                     className="v-input"
+                    autoComplete="off"
+                    placeholder="Gõ số CCCD/Passport (tự động gợi ý khách quen)..."
                     value={form.cccd_number}
-                    onChange={(e) => setForm({ ...form, cccd_number: e.target.value })}
+                    onFocus={() => {
+                      setFocusedField('main_cccd');
+                      setActiveSuggestIdx(0);
+                    }}
+                    onBlur={() => setTimeout(() => setFocusedField((f) => (f === 'main_cccd' ? null : f)), 140)}
+                    onChange={(e) => {
+                      setForm({ ...form, cccd_number: e.target.value });
+                      setFocusedField('main_cccd');
+                      setActiveSuggestIdx(0);
+                    }}
+                    onKeyDown={(e) => handleSuggestKeyDown(e, mainCccdSuggestions, applyGuestToMainForm)}
                     required
                   />
+                  {renderSuggestPopover(mainCccdSuggestions, applyGuestToMainForm)}
                 </div>
 
                 <div className="v-field">
@@ -658,9 +961,21 @@ export default function VisitorManagementPage({
                   <input
                     type="text"
                     className="v-input"
+                    autoComplete="off"
                     value={compForm.full_name}
-                    onChange={(e) => setCompForm({ ...compForm, full_name: e.target.value })}
+                    onFocus={() => {
+                      setFocusedField('comp_name');
+                      setActiveSuggestIdx(0);
+                    }}
+                    onBlur={() => setTimeout(() => setFocusedField((f) => (f === 'comp_name' ? null : f)), 140)}
+                    onChange={(e) => {
+                      setCompForm({ ...compForm, full_name: e.target.value });
+                      setFocusedField('comp_name');
+                      setActiveSuggestIdx(0);
+                    }}
+                    onKeyDown={(e) => handleSuggestKeyDown(e, compNameSuggestions, applyGuestToCompForm)}
                   />
+                  {renderSuggestPopover(compNameSuggestions, applyGuestToCompForm)}
                 </div>
 
                 <div className="v-field">
@@ -669,10 +984,17 @@ export default function VisitorManagementPage({
                   </label>
                   <input
                     type="text"
+                    inputMode="numeric"
+                    maxLength={10}
                     className="v-input"
                     placeholder="dd/MM/yyyy"
                     value={compForm.birth_date}
-                    onChange={(e) => setCompForm({ ...compForm, birth_date: e.target.value })}
+                    onChange={(e) =>
+                      setCompForm((prev) => ({
+                        ...prev,
+                        birth_date: formatDobSmart(e.target.value, prev.birth_date),
+                      }))
+                    }
                   />
                 </div>
 
@@ -683,9 +1005,21 @@ export default function VisitorManagementPage({
                   <input
                     type="text"
                     className="v-input"
+                    autoComplete="off"
                     value={compForm.cccd_number}
-                    onChange={(e) => setCompForm({ ...compForm, cccd_number: e.target.value })}
+                    onFocus={() => {
+                      setFocusedField('comp_cccd');
+                      setActiveSuggestIdx(0);
+                    }}
+                    onBlur={() => setTimeout(() => setFocusedField((f) => (f === 'comp_cccd' ? null : f)), 140)}
+                    onChange={(e) => {
+                      setCompForm({ ...compForm, cccd_number: e.target.value });
+                      setFocusedField('comp_cccd');
+                      setActiveSuggestIdx(0);
+                    }}
+                    onKeyDown={(e) => handleSuggestKeyDown(e, compCccdSuggestions, applyGuestToCompForm)}
                   />
+                  {renderSuggestPopover(compCccdSuggestions, applyGuestToCompForm)}
                 </div>
 
                 <div className="v-field">

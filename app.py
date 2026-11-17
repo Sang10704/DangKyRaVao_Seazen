@@ -699,6 +699,110 @@ def parse_cccd_endpoint():
     return jsonify({"success": True, "data": parsed})
 
 
+@app.route("/api/visitors/frequent", methods=["GET"])
+@app.route("/api/visitor/frequent", methods=["GET"])
+@require_role(["admin", "staff"])
+def get_frequent_visitors_endpoint():
+    """
+    Returns deduplicated directory of returning/frequent visitors (by CCCD or FullName)
+    for instant subtle autocomplete on FullName and CCCD inputs.
+    """
+    import re
+    freq_path = os.path.join(BASE_DIR, "data", "frequent_visitors.json")
+    profiles: Dict[str, Dict[str, Any]] = {}
+
+    def _clean(val: Any) -> str:
+        s = str(val or "").strip()
+        return "" if s in ("0", "--", "---", "None", "null", "NoDepartment") else s
+
+    def _norm_dob(raw: Any) -> str:
+        s = str(raw or "").strip()
+        if not s or s.startswith("0001") or s == "1995-01-01":
+            return ""
+        if "T" in s:
+            s = s.split("T")[0]
+        m = re.match(r"^(\d{4})-(\d{2})-(\d{2})$", s)
+        if m:
+            return f"{m.group(3)}/{m.group(2)}/{m.group(1)}"
+        digits = re.sub(r"\D", "", s)
+        if len(digits) == 8:
+            return f"{digits[:2]}/{digits[2:4]}/{digits[4:]}"
+        if re.match(r"^\d{2}/\d{2}/\d{4}$", s):
+            return s
+        return ""
+
+    if os.path.exists(freq_path):
+        try:
+            with open(freq_path, "r", encoding="utf-8") as f:
+                seed_items = json.load(f) or []
+            for it in seed_items:
+                k = (_clean(it.get("cccd_number")).upper() or _clean(it.get("full_name")).lower())
+                if k:
+                    profiles[k] = dict(it)
+        except Exception:
+            pass
+
+    recent_list = storage.get_visitor_history(limit=300) + storage.get_active_visitors()
+    for v in recent_list:
+        fn = _clean(v.get("full_name") or v.get("FullName"))
+        cccd = _clean(v.get("cccd_number") or v.get("CCCDNumber"))
+        if not fn and not cccd:
+            continue
+        if fn.startswith("NV 000") or fn.startswith("Khách thẻ"):
+            continue
+        k = cccd.upper() if cccd else fn.lower()
+        dob = _norm_dob(v.get("birth_date") or v.get("BirthDate"))
+        ph = _clean(v.get("phone") or v.get("Phone"))
+        comp = _clean(v.get("company") or v.get("Company"))
+        dept = _clean(v.get("department") or v.get("Department") or v.get("HostDepartment"))
+        host = _clean(v.get("host_person") or v.get("HostPerson"))
+        if "(" in host:
+            host = host.split("(")[0].strip()
+        h_ph = _clean(v.get("host_phone"))
+        ts = str(v.get("checkin_time") or v.get("CheckinTime") or "")[:19]
+
+        cur = profiles.get(k)
+        if not cur:
+            profiles[k] = {
+                "full_name": fn,
+                "cccd_number": cccd,
+                "birth_date": dob,
+                "phone": ph,
+                "company": comp,
+                "department": dept,
+                "host_person": host,
+                "host_phone": h_ph,
+                "visit_count": 1,
+                "last_visit": ts,
+            }
+        else:
+            if fn and len(fn) >= len(cur.get("full_name") or ""):
+                cur["full_name"] = fn
+            if cccd and not cur.get("cccd_number"):
+                cur["cccd_number"] = cccd
+            if dob:
+                cur["birth_date"] = dob
+            if ph:
+                cur["phone"] = ph
+            if comp and comp.lower() != "khach":
+                cur["company"] = comp
+            if dept:
+                cur["department"] = dept
+            if host:
+                cur["host_person"] = host
+            if h_ph:
+                cur["host_phone"] = h_ph
+            if ts and ts > str(cur.get("last_visit") or ""):
+                cur["last_visit"] = ts
+
+    out = sorted(
+        profiles.values(),
+        key=lambda x: (int(x.get("visit_count") or 1), str(x.get("last_visit") or "")),
+        reverse=True,
+    )
+    return jsonify({"success": True, "count": len(out), "visitors": out})
+
+
 @app.route("/api/visitor/register", methods=["POST"])
 @require_role(["admin", "staff"])
 def register_visitor():

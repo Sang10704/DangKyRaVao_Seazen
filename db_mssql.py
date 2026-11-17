@@ -562,14 +562,16 @@ def insert_visitor_db(v: Dict[str, Any]) -> bool:
                 BEGIN
                     INSERT INTO tbl_Visitors (
                         VisitorID, FullName, CCCDNumber, CardNumber, Company, Department,
-                        HostPerson, Purpose, CheckinTime, ExpectedCheckoutTime, Status, Operator
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?)
+                        HostPerson, Purpose, CheckinTime, ExpectedCheckoutTime, Status, Operator, Phone, BirthDate
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?, ?)
                 END
                 ELSE
                 BEGIN
                     UPDATE tbl_Visitors
                     SET FullName = ?, CCCDNumber = ?, CardNumber = ?, Company = ?, Department = ?,
-                        HostPerson = ?, Purpose = ?, CheckinTime = ?, ExpectedCheckoutTime = ?, Status = 'ACTIVE'
+                        HostPerson = ?, Purpose = ?, CheckinTime = ?, ExpectedCheckoutTime = ?, Status = 'ACTIVE',
+                        Phone = COALESCE(NULLIF(?, ''), Phone),
+                        BirthDate = COALESCE(NULLIF(?, ''), BirthDate)
                     WHERE VisitorID = ?
                 END
             """, (
@@ -577,10 +579,11 @@ def insert_visitor_db(v: Dict[str, Any]) -> bool:
                 v_id, v.get("full_name") or "Khách", v.get("cccd_number") or "",
                 v.get("card_number") or "", v.get("company") or "", v.get("department") or "",
                 v.get("host_person") or "", v.get("purpose") or "", cin_dt, exp_dt,
-                v.get("operator") or "Bảo vệ",
+                v.get("operator") or "Bảo vệ", v.get("phone") or "", v.get("birth_date") or "",
                 v.get("full_name") or "Khách", v.get("cccd_number") or "",
                 v.get("card_number") or "", v.get("company") or "", v.get("department") or "",
                 v.get("host_person") or "", v.get("purpose") or "", cin_dt, exp_dt,
+                v.get("phone") or "", v.get("birth_date") or "",
                 v_id
             ))
             conn.commit()
@@ -628,7 +631,7 @@ def get_visitor_history_db(limit: int = 200) -> List[Dict[str, Any]]:
             cursor.execute(f"""
                 SELECT TOP ({limit}) VisitorID, FullName, CCCDNumber, CardNumber, Company, Department,
                        HostPerson, Purpose, CheckinTime, ExpectedCheckoutTime, CheckoutTime,
-                       DurationMinutes, Status, Operator
+                       DurationMinutes, Status, Operator, Phone, BirthDate
                 FROM tbl_Visitors
                 ORDER BY CheckinTime DESC
             """)
@@ -650,6 +653,8 @@ def get_visitor_history_db(limit: int = 200) -> List[Dict[str, Any]]:
                     "id": d["VisitorID"],
                     "full_name": d["FullName"] or "Khách",
                     "cccd_number": d["CCCDNumber"] or "",
+                    "birth_date": d.get("BirthDate") or "",
+                    "phone": d.get("Phone") or "",
                     "card_number": d["CardNumber"] or "",
                     "company": d["Company"] or "",
                     "department": d["Department"] or "",
