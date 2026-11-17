@@ -8,7 +8,8 @@ import LiveCommandPage from './pages/live/LiveCommandPage';
 import AccessHistoryPage from './pages/history/AccessHistoryPage';
 import VisitorManagementPage from './pages/visitors/VisitorManagementPage';
 import CardManagementPage from './pages/cards/CardManagementPage';
-import HrmBiometricsPage from './pages/hrm/HrmBiometricsPage';
+import HrmDirectoryPage from './pages/hrm/HrmDirectoryPage';
+import BiometricsPage from './pages/biometrics/BiometricsPage';
 import TimekeepingPage from './pages/attendance/TimekeepingPage';
 
 export default function App() {
@@ -99,23 +100,23 @@ export default function App() {
   const fetchCoreDirectory = useCallback(async () => {
     if (!user) return;
     const [deptRes, empRes, cardsRes, histRes] = await Promise.all([
-      apiFetch('/api/sql/table/tbl_Departments?limit=100'),
+      apiFetch('/api/departments'),
       apiFetch(
         `/api/employees?q=${encodeURIComponent(empSearch)}&department=${encodeURIComponent(
           empDeptFilter
-        )}&page=1&limit=120`
+        )}&page=1&limit=300`
       ),
-      apiFetch('/api/sql/table/tbl_CustomerCards?limit=200'),
-      apiFetch('/api/sql/table/tbl_Visitors?limit=200'),
+      apiFetch('/api/sql/table/tbl_CustomerCards?limit=300'),
+      apiFetch('/api/visitors/history?limit=250'),
     ]);
 
-    if (deptRes.ok && deptRes.data.rows) setDepartments(deptRes.data.rows);
+    if (deptRes.ok && deptRes.data.departments) setDepartments(deptRes.data.departments);
     if (empRes.ok && empRes.data.employees) {
       setEmployees(empRes.data.employees);
       setEmpTotal(empRes.data.total || empRes.data.employees.length);
     }
     if (cardsRes.ok && cardsRes.data.rows) setCustomerCards(cardsRes.data.rows);
-    if (histRes.ok && histRes.data.rows) setVisitorHistory(histRes.data.rows);
+    if (histRes.ok && histRes.data.history) setVisitorHistory(histRes.data.history);
   }, [user, empSearch, empDeptFilter]);
 
   useEffect(() => {
@@ -318,12 +319,23 @@ export default function App() {
               />
             )}
 
-            {(effectivePath === ROUTES.HRM || effectivePath === ROUTES.BIOMETRICS) && (
-              <HrmBiometricsPage
-                mode={effectivePath === ROUTES.BIOMETRICS ? 'biometrics' : 'hrm'}
+            {effectivePath === ROUTES.HRM && (
+              <HrmDirectoryPage
                 departments={departments}
                 employees={employees}
                 empTotal={empTotal}
+                empSearch={empSearch}
+                setEmpSearch={setEmpSearch}
+                empDeptFilter={empDeptFilter}
+                setEmpDeptFilter={setEmpDeptFilter}
+                onRefreshData={fetchCoreDirectory}
+                notify={notify}
+              />
+            )}
+
+            {effectivePath === ROUTES.BIOMETRICS && (
+              <BiometricsPage
+                departments={departments}
                 empSearch={empSearch}
                 setEmpSearch={setEmpSearch}
                 empDeptFilter={empDeptFilter}

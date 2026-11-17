@@ -371,8 +371,183 @@ class StorageManager:
             logger.warning("Error fetching inside visitors from door scans: %s", e)
 
         result = list(active_map.values())
+        result = self._enrich_visitor_gate_timeline(result, is_history=False)
         result.sort(key=lambda x: str(x.get("checkin_time") or ""), reverse=True)
         return result
+
+    @staticmethod
+    def _parse_dt_flex(raw_str: Any) -> Optional[datetime]:
+        s = str(raw_str or "").replace("T", " ").strip()
+        if not s:
+            return None
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(s[:len(fmt) + 2].strip(), fmt)
+            except Exception:
+                continue
+        if len(s) >= 19:
+            try:
+                return datetime.strptime(s[:19], "%Y-%m-%d %H:%M:%S")
+            except Exception:
+                pass
+        return None
+
+    @staticmethod
+    def _format_duration_vi(total_minutes: int) -> str:
+        mins = max(0, int(total_minutes))
+        days, rem_h = divmod(mins, 1440)
+        hours, rmins = divmod(rem_h, 60)
+        if days > 0:
+            return f"{days} ngày {hours}g {rmins}p" if hours > 0 else f"{days} ngày {rmins}p"
+        if hours > 0:
+            return f"{hours}g {rmins:02d}p"
+        return f"{rmins} phút"
+
+    def _enrich_visitor_gate_timeline(self, visitors: List[Dict[str, Any]], is_history: bool = False) -> List[Dict[str, Any]]:
+        """
+        Enriches each visitor with:
+        - Live or total duration inside the company (elapsed_minutes, elapsed_label)
+        - Actual turnstile IN/OUT scan timestamps (gate_first_in_time, gate_last_out_time, in_scan_count, out_scan_count)
+        - >15-minute Overdue / Unreturned-Card-After-Exit Alerts (overdue_alert, overdue_reason, overdue_minutes, alert_message)
+        """
+        if not visitors:
+            return visitors
+
+        now = datetime.now()
+        dates_needed = {now.strftime("%Y-%m-%d")}
+        for v in visitors:
+            cin_s = str(v.get("checkin_time") or "")
+            if len(cin_s) >= 10 and cin_s[4] == "-":
+                dates_needed.add(cin_s[:10])
+
+        # Load relevant scan logs across dates (prefer fast per-date files)
+        all_scans: List[Dict[str, Any]] = []
+        for d_iso in sorted(dates_needed):
+            try:
+                all_scans.extend(self.get_saved_scans(d_iso))
+            except Exception:
+                pass
+
+        # Index visitor-related scan events by normalized ATID, card, and visitor name
+        scans_by_key: Dict[str, List[Dict[str, Any]]] = {}
+        for l in all_scans:
+            ptype = determine_scan_person_type(l)
+            if ptype.get("is_staff", False):
+                continue
+            chk = str(l.get("CheckTime") or l.get("Time") or "").replace("T", " ").strip()
+            dt = self._parse_dt_flex(chk)
+            if not dt:
+                continue
+            direction = determine_scan_direction(l)
+            ev = {
+                "dt": dt,
+                "time_str": dt.strftime("%Y-%m-%d %H:%M:%S"),
+                "direction": direction,
+                "device_name": str(l.get("DeviceName") or "--"),
+            }
+            keys = set()
+            for raw_k in (l.get("EmployeeATID"), l.get("CardNumber")):
+                ks = str(raw_k or "").strip()
+                if ks:
+                    keys.add(ks)
+                    if ks.isdigit():
+                        keys.add(ks.lstrip("0") or "0")
+            fn_k = str(l.get("FullName") or "").strip().lower()
+            if fn_k and not fn_k.startswith("nv ") and not fn_k.startswith("khách đến"):
+                keys.add(f"name:{fn_k}")
+            for k in keys:
+                scans_by_key.setdefault(k, []).append(ev)
+
+        from datetime import timedelta
+        for v in visitors:
+            cin_dt = self._parse_dt_flex(v.get("checkin_time")) or now
+            cout_dt = self._parse_dt_flex(v.get("checkout_time")) if is_history or v.get("checkout_time") else None
+            exp_dt = self._parse_dt_flex(v.get("expected_checkout_time"))
+
+            end_ref = cout_dt if cout_dt else now
+            elapsed_mins = max(0, int((end_ref - cin_dt).total_seconds() // 60))
+            v["elapsed_minutes"] = elapsed_mins
+            v["elapsed_label"] = self._format_duration_vi(elapsed_mins)
+            if not v.get("duration_str") and cout_dt:
+                v["duration_str"] = v["elapsed_label"]
+
+            # Match door scan events belonging to this visit window
+            cand_keys = set()
+            for raw_k in (v.get("card_number"), v.get("epad_atid"), v.get("id")):
+                ks = str(raw_k or "").strip()
+                if ks:
+                    if ks.startswith("vis_"):
+                        ks = ks[4:]
+                    cand_keys.add(ks)
+                    if ks.isdigit():
+                        cand_keys.add(ks.lstrip("0") or "0")
+            fn_lower = str(v.get("full_name") or "").strip().lower()
+            if fn_lower and not fn_lower.startswith("nv "):
+                cand_keys.add(f"name:{fn_lower}")
+
+            matched_events: List[Dict[str, Any]] = []
+            seen_ev = set()
+            win_start = cin_dt - timedelta(minutes=2)
+            win_end = (cout_dt + timedelta(minutes=2)) if cout_dt else (now + timedelta(minutes=2))
+            for k in cand_keys:
+                for ev in scans_by_key.get(k, []):
+                    if win_start <= ev["dt"] <= win_end:
+                        sig = (ev["time_str"], ev["direction"], ev["device_name"])
+                        if sig not in seen_ev:
+                            seen_ev.add(sig)
+                            matched_events.append(ev)
+
+            matched_events.sort(key=lambda e: e["dt"])
+            in_evs = [e for e in matched_events if e["direction"] == "IN"]
+            out_evs = [e for e in matched_events if e["direction"] == "OUT"]
+
+            v["in_scan_count"] = len(in_evs)
+            v["out_scan_count"] = len(out_evs)
+            v["gate_first_in_time"] = in_evs[0]["time_str"] if in_evs else ""
+            v["gate_first_in_device"] = in_evs[0]["device_name"] if in_evs else ""
+            v["gate_last_out_time"] = out_evs[-1]["time_str"] if out_evs else ""
+            v["gate_last_out_device"] = out_evs[-1]["device_name"] if out_evs else ""
+            v["gate_last_scan_time"] = matched_events[-1]["time_str"] if matched_events else ""
+            v["gate_last_scan_direction"] = matched_events[-1]["direction"] if matched_events else ""
+            v["gate_last_scan_device"] = matched_events[-1]["device_name"] if matched_events else ""
+
+            # Compute >15-minute unreturned-card / overstay alert for ACTIVE visitors
+            v["overdue_alert"] = False
+            v["overdue_reason"] = None
+            v["overdue_minutes"] = 0
+            v["alert_message"] = ""
+            v["gate_out_recent_minutes"] = None
+
+            if not is_history and str(v.get("status") or "ACTIVE").upper() == "ACTIVE":
+                if out_evs and v["gate_last_scan_direction"] == "OUT":
+                    mins_since_out = max(0, int((now - out_evs[-1]["dt"]).total_seconds() // 60))
+                    if mins_since_out >= 15:
+                        v["overdue_alert"] = True
+                        v["overdue_reason"] = "GATE_OUT_NO_CARD_RETURN"
+                        v["overdue_minutes"] = mins_since_out
+                        v["alert_message"] = (
+                            f"Đã quét {out_evs[-1]['device_name']} lúc {out_evs[-1]['dt'].strftime('%H:%M')} "
+                            f"({mins_since_out} phút trước) nhưng chưa trả thẻ — Yêu cầu Check-out!"
+                        )
+                    else:
+                        v["gate_out_recent_minutes"] = mins_since_out
+                elif exp_dt and now > (exp_dt + timedelta(minutes=15)):
+                    mins_past = int((now - exp_dt).total_seconds() // 60)
+                    v["overdue_alert"] = True
+                    v["overdue_reason"] = "PAST_EXPECTED_TIME"
+                    v["overdue_minutes"] = mins_past
+                    v["alert_message"] = (
+                        f"Đã quá giờ dự kiến ra ({exp_dt.strftime('%H:%M')}) {mins_past} phút chưa trả thẻ — Yêu cầu Check-out!"
+                    )
+                elif cin_dt.date() < now.date() and elapsed_mins >= 15:
+                    v["overdue_alert"] = True
+                    v["overdue_reason"] = "PREVIOUS_DAY_UNRETURNED"
+                    v["overdue_minutes"] = elapsed_mins
+                    v["alert_message"] = (
+                        f"Khách vào từ {cin_dt.strftime('%d/%m %H:%M')} chưa trả thẻ — Yêu cầu Check-out!"
+                    )
+
+        return visitors
 
     def get_visitor_history(self, limit: int = 500) -> List[Dict[str, Any]]:
         history = _read_json(VISITOR_HISTORY_FILE, [])
@@ -388,7 +563,8 @@ class StorageManager:
             except Exception as e:
                 logger.warning("Error fetching visitor history from MSSQL: %s", e)
 
-        return sorted(history, key=lambda x: x.get("checkin_time", ""), reverse=True)[:limit]
+        sorted_hist = sorted(history, key=lambda x: x.get("checkin_time", ""), reverse=True)[:limit]
+        return self._enrich_visitor_gate_timeline(sorted_hist, is_history=True)
 
     def add_visitor(self, visitor_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -451,6 +627,8 @@ class StorageManager:
             "id": str(visitor_data.get("id") or visitor_data.get("epad_atid") or str(uuid.uuid4())[:8]),
             "epad_atid": str(visitor_data.get("epad_atid") or ""),
             "sp_item_id": visitor_data.get("sp_item_id"),
+            "parent_visitor_id": str(visitor_data.get("parent_visitor_id") or ""),
+            "parent_visitor_name": str(visitor_data.get("parent_visitor_name") or ""),
             "cccd_number": cccd_num,
             "full_name": visitor_data.get("full_name", "").strip(),
             "birth_date": dob,
@@ -538,15 +716,24 @@ class StorageManager:
         matched["checkout_time"] = now_str
         matched["status"] = "COMPLETED"
 
-        # Calculate duration
+        # Calculate duration accurately even if HH:MM without seconds
         try:
-            t1 = datetime.strptime(matched["checkin_time"], "%Y-%m-%d %H:%M:%S")
-            t2 = datetime.strptime(now_str, "%Y-%m-%d %H:%M:%S")
-            mins = int((t2 - t1).total_seconds() / 60)
-            hours, remainder_mins = divmod(mins, 60)
-            matched["duration_str"] = f"{hours}h {remainder_mins}m" if hours > 0 else f"{remainder_mins} phút"
+            t1 = self._parse_dt_flex(matched.get("checkin_time"))
+            t2 = now
+            if t1:
+                mins = int((t2 - t1).total_seconds() / 60)
+                matched["duration_str"] = self._format_duration_vi(mins)
+            else:
+                matched["duration_str"] = "N/A"
         except Exception:
             matched["duration_str"] = "N/A"
+
+        # Strip transient alert flags before persisting
+        for r_item in remaining:
+            for k_tmp in ("overdue_alert", "overdue_reason", "overdue_minutes", "alert_message", "gate_out_recent_minutes"):
+                r_item.pop(k_tmp, None)
+        for k_tmp in ("overdue_alert", "overdue_reason", "overdue_minutes", "alert_message", "gate_out_recent_minutes"):
+            matched.pop(k_tmp, None)
 
         _write_json(ACTIVE_VISITORS_FILE, remaining)
 
@@ -595,6 +782,32 @@ class StorageManager:
 
         return matched
 
+    def checkout_visitor_group(self, query_key: str) -> List[Dict[str, Any]]:
+        """
+        Checks out a primary visitor along with all active companions linked via parent_visitor_id.
+        Returns list of all checked-out visitor records.
+        """
+        first_rec = self.checkout_visitor(query_key)
+        if not first_rec:
+            return []
+        checked_out = [first_rec]
+        parent_id = str(first_rec.get("id") or "").strip()
+        if not parent_id:
+            return checked_out
+
+        active_left = self.get_active_visitors()
+        companion_ids = [
+            str(item.get("id") or "").strip()
+            for item in active_left
+            if str(item.get("parent_visitor_id") or "").strip() == parent_id
+        ]
+        for cid in companion_ids:
+            if cid:
+                c_rec = self.checkout_visitor(cid)
+                if c_rec:
+                    checked_out.append(c_rec)
+        return checked_out
+
     # ---------------- Department & Personnel Cache ----------------
 
     def set_department_tree(self, tree: List[Dict[str, Any]]) -> None:
@@ -635,7 +848,16 @@ class StorageManager:
                             "id": d["DepartmentID"],
                             "name": d["DepartmentName"],
                             "code": d.get("DepartmentCode") or "",
-                            "level": d.get("Level", 1)
+                            "level": d.get("Level", 1),
+                            "location": d.get("Location") or "",
+                            "description": d.get("Description") or "",
+                            "staff_count": int(d.get("StaffCount") or 0),
+                            "DepartmentID": d["DepartmentID"],
+                            "DepartmentName": d["DepartmentName"],
+                            "DepartmentCode": d.get("DepartmentCode") or "",
+                            "Location": d.get("Location") or "",
+                            "Description": d.get("Description") or "",
+                            "StaffCount": int(d.get("StaffCount") or 0),
                         }
                         for d in sql_depts
                     ]
@@ -660,12 +882,12 @@ class StorageManager:
         if cleaned:
             _write_json(EMPLOYEES_FILE, cleaned)
 
-    def get_employees(self, department: Optional[str] = None) -> List[Dict[str, Any]]:
+    def get_employees(self, department: Optional[str] = None, include_inactive: bool = False) -> List[Dict[str, Any]]:
         """Returns employees, querying Microsoft SQL Server first with seamless local fallback."""
         try:
             import db_mssql
             if db_mssql.is_mssql_active():
-                sql_res = db_mssql.get_employees(department=department or "", limit=2000)
+                sql_res = db_mssql.get_employees(department=department or "", limit=2000, include_inactive=include_inactive)
                 if sql_res and sql_res.get("items"):
                     return [
                         {
@@ -674,9 +896,21 @@ class StorageManager:
                             "fullname": e["FullName"],
                             "department": e["DepartmentName"],
                             "department_index": e.get("DepartmentID"),
+                            "position": e.get("Position", ""),
+                            "privilege": e.get("Privilege", 0),
+                            "gender": e.get("Gender", ""),
+                            "email": e.get("Email", ""),
+                            "phone": e.get("Phone", ""),
+                            "joined_date": e.get("JoinedDate", ""),
+                            "is_active": e.get("IsActive", True),
                             "has_face": e.get("HasFace", False),
                             "has_card": e.get("HasCard", False),
                             "has_finger": e.get("HasFinger", False),
+                            "finger_count": e.get("FingerCount", 0),
+                            "face_version": e.get("FaceVersion", ""),
+                            "last_synced": e.get("LastSyncedToDevices", ""),
+                            "last_scan_time": e.get("LastScanTime", ""),
+                            "last_verify_mode": e.get("LastVerifyMode", ""),
                             "card_number": e.get("CardNumber", ""),
                             "face_photo": e.get("FaceImageBase64")
                         }

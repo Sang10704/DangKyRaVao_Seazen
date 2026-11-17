@@ -177,6 +177,24 @@ def is_mssql_active() -> bool:
     return cfg.get("enabled", False) and PYODBC_AVAILABLE
 
 
+def ensure_extended_schema() -> None:
+    """Idempotently ensures optional columns (ParentVisitorID, ParentVisitorName) exist without data loss."""
+    if not is_mssql_active():
+        return
+    try:
+        with pyodbc.connect(get_connection_string(), timeout=4) as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                IF COL_LENGTH('tbl_Visitors', 'ParentVisitorID') IS NULL
+                    ALTER TABLE tbl_Visitors ADD ParentVisitorID NVARCHAR(50) NULL;
+                IF COL_LENGTH('tbl_Visitors', 'ParentVisitorName') IS NULL
+                    ALTER TABLE tbl_Visitors ADD ParentVisitorName NVARCHAR(255) NULL;
+            """)
+            conn.commit()
+    except Exception as e:
+        logger.debug("ensure_extended_schema warning: %s", e)
+
+
 def get_departments() -> List[Dict[str, Any]]:
     if not is_mssql_active():
         return []
@@ -185,10 +203,17 @@ def get_departments() -> List[Dict[str, Any]]:
         with pyodbc.connect(conn_str, timeout=4) as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT DepartmentID, DepartmentCode, DepartmentName, ParentID, Level, Description, IsActive
-                FROM tbl_Departments
-                WHERE IsActive = 1
-                ORDER BY Level ASC, DepartmentName ASC
+                SELECT d.DepartmentID, d.DepartmentCode, d.DepartmentName, d.ParentID, d.Level,
+                       d.Location, d.Description, d.IsActive,
+                       (
+                           SELECT COUNT(*)
+                           FROM tbl_Employees e
+                           WHERE e.IsStaff = 1 AND e.IsActive = 1
+                             AND (e.DepartmentID = d.DepartmentID OR e.DepartmentName = d.DepartmentName)
+                       ) AS StaffCount
+                FROM tbl_Departments d
+                WHERE d.IsActive = 1
+                ORDER BY d.Level ASC, d.DepartmentName ASC
             """)
             columns = [col[0] for col in cursor.description]
             results = []
@@ -200,7 +225,7 @@ def get_departments() -> List[Dict[str, Any]]:
         return []
 
 
-def get_employees(q: str = "", department: str = "", page: int = 1, limit: int = 50) -> Dict[str, Any]:
+def get_employees(q: str = "", department: str = "", page: int = 1, limit: int = 50, include_inactive: bool = False) -> Dict[str, Any]:
     if not is_mssql_active():
         return {"items": [], "total": 0, "page": page, "limit": limit}
 
@@ -209,18 +234,19 @@ def get_employees(q: str = "", department: str = "", page: int = 1, limit: int =
         with pyodbc.connect(conn_str, timeout=5) as conn:
             cursor = conn.cursor()
             where_clauses = [
-                "e.IsActive = 1",
                 "e.IsStaff = 1",
                 "e.DepartmentName IS NOT NULL",
                 "e.DepartmentName <> ''",
                 "e.DepartmentName <> N'Khác'"
             ]
+            if not include_inactive:
+                where_clauses.append("e.IsActive = 1")
             params: List[Any] = []
 
             if q:
                 search_term = f"%{q.strip()}%"
-                where_clauses.append("(e.EmployeeATID LIKE ? OR e.EmployeeCode LIKE ? OR e.FullName LIKE ? OR e.CardNumber LIKE ? OR e.Phone LIKE ?)")
-                params.extend([search_term, search_term, search_term, search_term, search_term])
+                where_clauses.append("(e.EmployeeATID LIKE ? OR e.EmployeeCode LIKE ? OR e.FullName LIKE ? OR e.CardNumber LIKE ? OR e.Phone LIKE ? OR e.Email LIKE ? OR e.Position LIKE ?)")
+                params.extend([search_term, search_term, search_term, search_term, search_term, search_term, search_term])
 
             if department:
                 where_clauses.append("(e.DepartmentName = ? OR d.DepartmentName = ?)")
@@ -240,13 +266,21 @@ def get_employees(q: str = "", department: str = "", page: int = 1, limit: int =
                 SELECT 
                     e.EmployeeID, e.EmployeeATID, e.EmployeeCode, e.FullName,
                     e.DepartmentID, e.DepartmentName, e.Position, e.CardNumber,
-                    e.Email, e.Phone, e.IsStaff, e.IsActive,
-                    b.HasFace, b.HasCard, b.HasFinger, b.FacePhotoBase64
+                    e.Privilege, e.Gender, e.Email, e.Phone, e.JoinedDate, e.IsStaff, e.IsActive,
+                    b.HasFace, b.HasCard, b.HasFinger, b.FingerCount, b.FaceVersion,
+                    b.LastSyncedToDevices, b.FacePhotoBase64,
+                    logs.LastScanTime, logs.LastVerifyMode
                 FROM tbl_Employees e
                 LEFT JOIN tbl_Departments d ON e.DepartmentID = d.DepartmentID
                 LEFT JOIN tbl_EmployeeBiometrics b ON e.EmployeeATID = b.EmployeeATID
+                OUTER APPLY (
+                    SELECT TOP 1 CheckTime AS LastScanTime, VerifyMode AS LastVerifyMode
+                    FROM tbl_AttendanceLogs al
+                    WHERE al.EmployeeATID = e.EmployeeATID
+                    ORDER BY al.CheckTime DESC
+                ) logs
                 WHERE {where_sql}
-                ORDER BY e.FullName ASC
+                ORDER BY e.IsActive DESC, e.FullName ASC
                 OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
             """
             cursor.execute(query_sql, paged_params)
@@ -254,6 +288,9 @@ def get_employees(q: str = "", department: str = "", page: int = 1, limit: int =
             items = []
             for row in cursor.fetchall():
                 row_dict = dict(zip(columns, row))
+                last_scan = row_dict.get("LastScanTime")
+                last_synced = row_dict.get("LastSyncedToDevices")
+                joined = row_dict.get("JoinedDate")
                 items.append({
                     "EmployeeID": row_dict["EmployeeID"],
                     "EmployeeATID": row_dict["EmployeeATID"],
@@ -263,12 +300,21 @@ def get_employees(q: str = "", department: str = "", page: int = 1, limit: int =
                     "DepartmentID": row_dict["DepartmentID"],
                     "Position": row_dict["Position"] or "",
                     "CardNumber": row_dict["CardNumber"] or "",
+                    "Privilege": int(row_dict.get("Privilege") or 0),
+                    "Gender": row_dict.get("Gender") or "",
                     "Email": row_dict["Email"] or "",
                     "Phone": row_dict["Phone"] or "",
+                    "JoinedDate": joined.strftime("%Y-%m-%d") if joined else "",
                     "IsStaff": bool(row_dict["IsStaff"]),
+                    "IsActive": bool(row_dict["IsActive"]),
                     "HasFace": bool(row_dict["HasFace"]),
                     "HasCard": bool(row_dict["CardNumber"] or row_dict["HasCard"]),
                     "HasFinger": bool(row_dict["HasFinger"]),
+                    "FingerCount": int(row_dict.get("FingerCount") or 0),
+                    "FaceVersion": row_dict.get("FaceVersion") or "ZKTeco_VisibleLight_v58.12",
+                    "LastSyncedToDevices": last_synced.strftime("%Y-%m-%d %H:%M:%S") if last_synced else "",
+                    "LastScanTime": last_scan.strftime("%Y-%m-%d %H:%M:%S") if last_scan else "",
+                    "LastVerifyMode": row_dict.get("LastVerifyMode") or "",
                     "FaceImageBase64": row_dict["FacePhotoBase64"] if row_dict.get("FacePhotoBase64") else None
                 })
 
@@ -500,13 +546,15 @@ def get_active_visitors_db() -> List[Dict[str, Any]]:
     if not is_mssql_active():
         return []
     try:
+        ensure_extended_schema()
         conn_str = get_connection_string()
         with pyodbc.connect(conn_str, timeout=4) as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT VisitorID, FullName, CCCDNumber, CardNumber, Company, Department,
                        HostPerson, Purpose, CheckinTime, ExpectedCheckoutTime, CheckoutTime,
-                       DurationMinutes, Status, Operator
+                       DurationMinutes, Status, Operator, Phone, BirthDate,
+                       ParentVisitorID, ParentVisitorName
                 FROM tbl_Visitors
                 WHERE Status = 'ACTIVE'
                 ORDER BY CheckinTime DESC
@@ -521,6 +569,8 @@ def get_active_visitors_db() -> List[Dict[str, Any]]:
                     "id": d["VisitorID"],
                     "full_name": d["FullName"] or "Khách",
                     "cccd_number": d["CCCDNumber"] or "",
+                    "birth_date": d.get("BirthDate") or "",
+                    "phone": d.get("Phone") or "",
                     "card_number": d["CardNumber"] or "",
                     "company": d["Company"] or "",
                     "department": d["Department"] or "",
@@ -529,7 +579,9 @@ def get_active_visitors_db() -> List[Dict[str, Any]]:
                     "checkin_time": cin_time,
                     "expected_checkout_time": exp_time,
                     "status": "ACTIVE",
-                    "operator": d["Operator"] or "Bảo vệ"
+                    "operator": d["Operator"] or "Bảo vệ",
+                    "parent_visitor_id": d.get("ParentVisitorID") or "",
+                    "parent_visitor_name": d.get("ParentVisitorName") or ""
                 })
             return items
     except Exception as e:
@@ -541,6 +593,7 @@ def insert_visitor_db(v: Dict[str, Any]) -> bool:
     if not is_mssql_active():
         return False
     try:
+        ensure_extended_schema()
         conn_str = get_connection_string()
         with pyodbc.connect(conn_str, timeout=4) as conn:
             cursor = conn.cursor()
@@ -557,13 +610,17 @@ def insert_visitor_db(v: Dict[str, Any]) -> bool:
             except Exception:
                 exp_dt = None
 
+            parent_id = str(v.get("parent_visitor_id") or "")[:50] or None
+            parent_name = str(v.get("parent_visitor_name") or "")[:255] or None
+
             cursor.execute("""
                 IF NOT EXISTS (SELECT 1 FROM tbl_Visitors WHERE VisitorID = ?)
                 BEGIN
                     INSERT INTO tbl_Visitors (
                         VisitorID, FullName, CCCDNumber, CardNumber, Company, Department,
-                        HostPerson, Purpose, CheckinTime, ExpectedCheckoutTime, Status, Operator, Phone, BirthDate
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?, ?)
+                        HostPerson, Purpose, CheckinTime, ExpectedCheckoutTime, Status, Operator, Phone, BirthDate,
+                        ParentVisitorID, ParentVisitorName
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?, ?, ?, ?)
                 END
                 ELSE
                 BEGIN
@@ -571,7 +628,9 @@ def insert_visitor_db(v: Dict[str, Any]) -> bool:
                     SET FullName = ?, CCCDNumber = ?, CardNumber = ?, Company = ?, Department = ?,
                         HostPerson = ?, Purpose = ?, CheckinTime = ?, ExpectedCheckoutTime = ?, Status = 'ACTIVE',
                         Phone = COALESCE(NULLIF(?, ''), Phone),
-                        BirthDate = COALESCE(NULLIF(?, ''), BirthDate)
+                        BirthDate = COALESCE(NULLIF(?, ''), BirthDate),
+                        ParentVisitorID = COALESCE(?, ParentVisitorID),
+                        ParentVisitorName = COALESCE(?, ParentVisitorName)
                     WHERE VisitorID = ?
                 END
             """, (
@@ -580,10 +639,12 @@ def insert_visitor_db(v: Dict[str, Any]) -> bool:
                 v.get("card_number") or "", v.get("company") or "", v.get("department") or "",
                 v.get("host_person") or "", v.get("purpose") or "", cin_dt, exp_dt,
                 v.get("operator") or "Bảo vệ", v.get("phone") or "", v.get("birth_date") or "",
+                parent_id, parent_name,
                 v.get("full_name") or "Khách", v.get("cccd_number") or "",
                 v.get("card_number") or "", v.get("company") or "", v.get("department") or "",
                 v.get("host_person") or "", v.get("purpose") or "", cin_dt, exp_dt,
                 v.get("phone") or "", v.get("birth_date") or "",
+                parent_id, parent_name,
                 v_id
             ))
             conn.commit()
@@ -625,13 +686,15 @@ def get_visitor_history_db(limit: int = 200) -> List[Dict[str, Any]]:
     if not is_mssql_active():
         return []
     try:
+        ensure_extended_schema()
         conn_str = get_connection_string()
         with pyodbc.connect(conn_str, timeout=4) as conn:
             cursor = conn.cursor()
             cursor.execute(f"""
                 SELECT TOP ({limit}) VisitorID, FullName, CCCDNumber, CardNumber, Company, Department,
                        HostPerson, Purpose, CheckinTime, ExpectedCheckoutTime, CheckoutTime,
-                       DurationMinutes, Status, Operator, Phone, BirthDate
+                       DurationMinutes, Status, Operator, Phone, BirthDate,
+                       ParentVisitorID, ParentVisitorName
                 FROM tbl_Visitors
                 ORDER BY CheckinTime DESC
             """)
@@ -640,6 +703,7 @@ def get_visitor_history_db(limit: int = 200) -> List[Dict[str, Any]]:
             for row in cursor.fetchall():
                 d = dict(zip(cols, row))
                 cin_time = d["CheckinTime"].strftime("%Y-%m-%d %H:%M:%S") if d.get("CheckinTime") else ""
+                exp_time = d["ExpectedCheckoutTime"].strftime("%Y-%m-%d %H:%M:%S") if d.get("ExpectedCheckoutTime") else ""
                 cout_time = d["CheckoutTime"].strftime("%Y-%m-%d %H:%M:%S") if d.get("CheckoutTime") else ""
                 
                 # Duration string
@@ -647,7 +711,7 @@ def get_visitor_history_db(limit: int = 200) -> List[Dict[str, Any]]:
                 if d.get("CheckinTime") and d.get("CheckoutTime"):
                     mins = int((d["CheckoutTime"] - d["CheckinTime"]).total_seconds() / 60)
                     hrs, rm = divmod(max(0, mins), 60)
-                    duration_str = f"{hrs}h {rm}m" if hrs > 0 else f"{rm} phút"
+                    duration_str = f"{hrs}g {rm}p" if hrs > 0 else f"{rm} phút"
 
                 items.append({
                     "id": d["VisitorID"],
@@ -661,10 +725,13 @@ def get_visitor_history_db(limit: int = 200) -> List[Dict[str, Any]]:
                     "host_person": d["HostPerson"] or "",
                     "purpose": d["Purpose"] or "",
                     "checkin_time": cin_time,
+                    "expected_checkout_time": exp_time,
                     "checkout_time": cout_time,
                     "duration_str": duration_str,
                     "status": d["Status"] or "CHECKED_OUT",
-                    "operator": d["Operator"] or "Bảo vệ"
+                    "operator": d["Operator"] or "Bảo vệ",
+                    "parent_visitor_id": d.get("ParentVisitorID") or "",
+                    "parent_visitor_name": d.get("ParentVisitorName") or ""
                 })
             return items
     except Exception as e:
@@ -804,13 +871,24 @@ def upsert_employee_and_biometrics_db(data: Dict[str, Any]) -> Dict[str, Any]:
     if not atid or not full_name:
         return {"success": False, "error": "Vui lòng nhập Mã chấm công ATID và Họ tên nhân sự."}
 
+    update_scope = str(data.get("update_scope") or "full").strip().lower()
     emp_code = str(data.get("EmployeeCode") or data.get("code") or atid).strip()
     dept_name = str(data.get("DepartmentName") or data.get("department") or "HC QTNS").strip()
     position = str(data.get("Position") or data.get("position") or "").strip()
     card_num = str(data.get("CardNumber") or data.get("card_number") or "").strip() or None
     privilege = int(data.get("Privilege") or 0)
+    gender = str(data.get("Gender") or data.get("gender") or "").strip()
     email = str(data.get("Email") or data.get("email") or "").strip()
     phone = str(data.get("Phone") or data.get("phone") or "").strip()
+    joined_raw = str(data.get("JoinedDate") or data.get("joined_date") or "").strip()
+    joined_dt = None
+    if joined_raw:
+        try:
+            joined_dt = datetime.strptime(joined_raw[:10], "%Y-%m-%d")
+        except Exception:
+            joined_dt = None
+
+    is_active = 1 if data.get("IsActive", True) else 0
     face_b64 = data.get("FacePhotoBase64") or data.get("face_photo_base64") or None
     face_biodata = data.get("FaceTemplateBIODATA") or None
     has_face = 1 if (data.get("HasFace") or face_b64 or face_biodata) else 0
@@ -826,43 +904,119 @@ def upsert_employee_and_biometrics_db(data: Dict[str, Any]) -> Dict[str, Any]:
 
             cur.execute("SELECT EmployeeID FROM tbl_Employees WHERE EmployeeATID = ?", (atid,))
             if cur.fetchone():
-                cur.execute("""
-                    UPDATE tbl_Employees
-                    SET EmployeeCode = ?, FullName = ?, DepartmentID = ?, DepartmentName = ?,
-                        Position = ?, CardNumber = ?, Privilege = ?, Email = ?, Phone = ?, IsStaff = 1, IsActive = 1, UpdatedAt = GETDATE()
-                    WHERE EmployeeATID = ?
-                """, (emp_code, full_name, dept_id, dept_name, position, card_num, privilege, email, phone, atid))
+                if update_scope == "hrm":
+                    cur.execute("""
+                        UPDATE tbl_Employees
+                        SET EmployeeCode = ?, FullName = ?, DepartmentID = ?, DepartmentName = ?,
+                            Position = ?, Gender = ?, Email = ?, Phone = ?,
+                            JoinedDate = COALESCE(?, JoinedDate),
+                            IsStaff = 1, IsActive = ?, UpdatedAt = GETDATE()
+                        WHERE EmployeeATID = ?
+                    """, (emp_code, full_name, dept_id, dept_name, position, gender, email, phone, joined_dt, is_active, atid))
+                else:
+                    cur.execute("""
+                        UPDATE tbl_Employees
+                        SET EmployeeCode = ?, FullName = ?, DepartmentID = ?, DepartmentName = ?,
+                            Position = ?, CardNumber = ?, Privilege = ?, Gender = COALESCE(NULLIF(?, ''), Gender),
+                            Email = ?, Phone = ?, IsStaff = 1, IsActive = ?, UpdatedAt = GETDATE()
+                        WHERE EmployeeATID = ?
+                    """, (emp_code, full_name, dept_id, dept_name, position, card_num, privilege, gender, email, phone, is_active, atid))
             else:
                 cur.execute("""
                     INSERT INTO tbl_Employees (
                         EmployeeID, EmployeeATID, EmployeeCode, FullName, DepartmentID, DepartmentName,
-                        Position, CardNumber, Privilege, Email, Phone, IsStaff, IsActive
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1)
-                """, (f"SZ-{atid}", atid, emp_code, full_name, dept_id, dept_name, position, card_num, privilege, email, phone))
+                        Position, CardNumber, Privilege, Gender, Email, Phone, JoinedDate, IsStaff, IsActive
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+                """, (f"SZ-{atid}", atid, emp_code, full_name, dept_id, dept_name, position, card_num, privilege, gender, email, phone, joined_dt, is_active))
 
-            cur.execute("SELECT BiometricID FROM tbl_EmployeeBiometrics WHERE EmployeeATID = ?", (atid,))
-            if cur.fetchone():
-                cur.execute("""
-                    UPDATE tbl_EmployeeBiometrics
-                    SET FacePhotoBase64 = COALESCE(?, FacePhotoBase64),
-                        FaceTemplateBIODATA = COALESCE(?, FaceTemplateBIODATA),
-                        HasFace = CASE WHEN ? = 1 THEN 1 ELSE HasFace END,
-                        HasCard = ?,
-                        HasFinger = CASE WHEN ? = 1 THEN 1 ELSE HasFinger END,
-                        UpdatedAt = GETDATE()
-                    WHERE EmployeeATID = ?
-                """, (face_b64, face_biodata, has_face, has_card, has_finger, atid))
-            else:
-                cur.execute("""
-                    INSERT INTO tbl_EmployeeBiometrics (
-                        EmployeeATID, FacePhotoBase64, FaceTemplateBIODATA, HasFace, HasCard, HasFinger
-                    ) VALUES (?, ?, ?, ?, ?, ?)
-                """, (atid, face_b64, face_biodata, has_face, has_card, has_finger))
+            if update_scope != "hrm":
+                cur.execute("SELECT BiometricID FROM tbl_EmployeeBiometrics WHERE EmployeeATID = ?", (atid,))
+                if cur.fetchone():
+                    cur.execute("""
+                        UPDATE tbl_EmployeeBiometrics
+                        SET FacePhotoBase64 = COALESCE(?, FacePhotoBase64),
+                            FaceTemplateBIODATA = COALESCE(?, FaceTemplateBIODATA),
+                            HasFace = CASE WHEN ? = 1 THEN 1 ELSE HasFace END,
+                            HasCard = ?,
+                            HasFinger = CASE WHEN ? = 1 THEN 1 ELSE HasFinger END,
+                            LastSyncedToDevices = CASE WHEN ? = 1 THEN GETDATE() ELSE LastSyncedToDevices END,
+                            UpdatedAt = GETDATE()
+                        WHERE EmployeeATID = ?
+                    """, (face_b64, face_biodata, has_face, has_card, has_finger, 1 if data.get("sync_to_hardware") else 0, atid))
+                else:
+                    cur.execute("""
+                        INSERT INTO tbl_EmployeeBiometrics (
+                            EmployeeATID, FacePhotoBase64, FaceTemplateBIODATA, HasFace, HasCard, HasFinger,
+                            LastSyncedToDevices
+                        ) VALUES (?, ?, ?, ?, ?, ?, CASE WHEN ? = 1 THEN GETDATE() ELSE NULL END)
+                    """, (atid, face_b64, face_biodata, has_face, has_card, has_finger, 1 if data.get("sync_to_hardware") else 0))
 
             conn.commit()
-            return {"success": True, "message": f"Đã cập nhật hồ sơ nhân sự & sinh trắc học cho {full_name} (ATID: {atid})."}
+            return {"success": True, "message": f"Đã cập nhật hồ sơ cho {full_name} (ATID: {atid})."}
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+
+def toggle_employee_status_db(atid: str, is_active: bool) -> Dict[str, Any]:
+    clean_atid = str(atid or "").strip()
+    if not clean_atid:
+        return {"success": False, "error": "Thiếu Mã ATID nhân viên."}
+    try:
+        with pyodbc.connect(get_connection_string(), timeout=4) as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                UPDATE tbl_Employees
+                SET IsActive = ?, UpdatedAt = GETDATE()
+                WHERE EmployeeATID = ?
+            """, (1 if is_active else 0, clean_atid))
+            conn.commit()
+            if cur.rowcount == 0:
+                return {"success": False, "error": f"Không tìm thấy nhân viên ATID {clean_atid}."}
+            return {
+                "success": True,
+                "atid": clean_atid,
+                "is_active": bool(is_active),
+                "message": f"Đã {'kích hoạt lại' if is_active else 'tạm khóa'} hồ sơ nhân viên {clean_atid}."
+            }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def mark_employee_hardware_synced_db(atid: str, card_num: Optional[str] = None, privilege: Optional[int] = None) -> None:
+    if not is_mssql_active():
+        return
+    clean_atid = str(atid or "").strip()
+    if not clean_atid:
+        return
+    try:
+        with pyodbc.connect(get_connection_string(), timeout=4) as conn:
+            cur = conn.cursor()
+            if card_num:
+                cur.execute("""
+                    UPDATE tbl_Employees
+                    SET CardNumber = COALESCE(NULLIF(CardNumber, ''), ?),
+                        Privilege = COALESCE(?, Privilege),
+                        UpdatedAt = GETDATE()
+                    WHERE EmployeeATID = ?
+                """, (str(card_num), privilege, clean_atid))
+            cur.execute("""
+                IF EXISTS (SELECT 1 FROM tbl_EmployeeBiometrics WHERE EmployeeATID = ?)
+                BEGIN
+                    UPDATE tbl_EmployeeBiometrics
+                    SET LastSyncedToDevices = GETDATE(),
+                        HasCard = CASE WHEN ? IS NOT NULL AND ? <> '' THEN 1 ELSE HasCard END,
+                        UpdatedAt = GETDATE()
+                    WHERE EmployeeATID = ?
+                END
+                ELSE
+                BEGIN
+                    INSERT INTO tbl_EmployeeBiometrics (EmployeeATID, HasFace, HasCard, HasFinger, LastSyncedToDevices)
+                    VALUES (?, 0, CASE WHEN ? IS NOT NULL AND ? <> '' THEN 1 ELSE 0 END, 0, GETDATE())
+                END
+            """, (clean_atid, card_num, card_num, clean_atid, clean_atid, card_num, card_num))
+            conn.commit()
+    except Exception as e:
+        logger.debug("mark_employee_hardware_synced_db warning: %s", e)
 
 
 def upsert_customer_card_db(data: Dict[str, Any]) -> Dict[str, Any]:

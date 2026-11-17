@@ -59,6 +59,7 @@ class ZkDirectClient:
         self._live_online_devices: Dict[str, bool] = {}
         self._live_uid_to_user: Dict[str, Dict[int, Any]] = {}
         self._live_userid_to_user: Dict[str, Dict[str, Any]] = {}
+        self._device_capacities: Dict[str, Dict[str, Any]] = {}
 
         self._load_person_cache()
         logger.info("Initialized ZkDirectClient with %d terminals across %d doors (person cache: %d keys)",
@@ -780,6 +781,187 @@ class ZkDirectClient:
             "message": f"Đã thu hồi thẻ {clean_card} trực tiếp trên {deleted_count} thiết bị cửa"
         }
 
+    # ---------------- Staff Biometric Hardware Matrix & Provisioning ----------------
+
+    def upsert_employee_on_hardware(
+        self,
+        atid: str,
+        full_name: str,
+        card_number: str = "",
+        privilege: int = 0
+    ) -> Dict[str, Any]:
+        """
+        Safely provisions or updates a regular SeaZen employee on all 4 SenseFace 4A terminals
+        under their own EmployeeATID (NEVER into 562xx guest slots) with explicit TZ1=1.
+        """
+        raw_atid = str(atid or "").strip()
+        if not raw_atid:
+            return {"success": False, "error": "Thiếu Mã chấm công ATID nhân viên."}
+        norm_atid = str(int(raw_atid)) if raw_atid.isdigit() else raw_atid
+        padded_atid = raw_atid.zfill(8) if raw_atid.isdigit() else raw_atid
+        clean_name = str(full_name or "").strip()[:24]
+
+        try:
+            clean_digits = "".join(filter(str.isdigit, str(card_number or "")))
+            card_int = int(clean_digits) if clean_digits else 0
+        except Exception:
+            card_int = 0
+
+        success_count = 0
+        per_device = {}
+        for dev in self.devices:
+            ip = dev.get("ip")
+            name = dev.get("name", ip)
+            lock = self._locks.get(ip)
+            if not ip:
+                continue
+
+            lock_acquired = lock.acquire(timeout=4) if lock else True
+            if not lock_acquired:
+                per_device[ip] = {"ok": False, "name": name, "error": "Device busy"}
+                continue
+
+            try:
+                zk = self._get_device_connection(ip, dev.get("port", 4370))
+                conn = zk.connect()
+                users = conn.get_users()
+                existing_u = None
+                max_staff_uid = 100
+                for u in users:
+                    u_uid = int(u.uid)
+                    u_id = str(u.user_id).strip()
+                    u_norm = str(int(u_id)) if u_id.isdigit() else u_id
+                    if u_uid < 50000 and u_uid > max_staff_uid:
+                        max_staff_uid = u_uid
+                    if u_id == raw_atid or u_norm == norm_atid or u_id == padded_atid:
+                        existing_u = u
+
+                target_uid = int(existing_u.uid) if existing_u else (max_staff_uid + 1)
+                target_user_id = str(existing_u.user_id).strip() if existing_u else padded_atid
+                final_card = card_int if str(card_number or "").strip() else (int(existing_u.card or 0) if existing_u else 0)
+                final_pw = str(existing_u.password or "") if existing_u else ""
+
+                self._set_access_user_tz(
+                    conn=conn,
+                    uid=target_uid,
+                    name=clean_name or str(existing_u.name if existing_u else target_user_id),
+                    user_id=target_user_id,
+                    card=final_card,
+                    privilege=int(privilege or 0),
+                    password=final_pw,
+                    tz1=1
+                )
+                conn.disconnect()
+                success_count += 1
+                per_device[ip] = {"ok": True, "name": name, "uid": target_uid, "user_id": target_user_id}
+
+                class _DynStaffObj:
+                    def __init__(self, u_id, u_uid, u_name, u_card, u_priv):
+                        self.user_id = u_id
+                        self.uid = u_uid
+                        self.name = u_name
+                        self.card = u_card
+                        self.privilege = u_priv
+
+                d_u = _DynStaffObj(target_user_id, target_uid, clean_name, final_card, int(privilege or 0))
+                self._live_uid_to_user.setdefault(ip, {})[target_uid] = d_u
+                self._live_userid_to_user.setdefault(ip, {})[target_user_id] = d_u
+            except Exception as ex:
+                per_device[ip] = {"ok": False, "name": name, "error": str(ex)}
+            finally:
+                if lock and lock_acquired:
+                    lock.release()
+
+        return {
+            "success": success_count > 0,
+            "synced_count": success_count,
+            "total_devices": len(self.devices),
+            "per_device": per_device,
+            "message": f"Đã nạp hồ sơ {full_name} ({raw_atid}) xuống {success_count}/{len(self.devices)} máy ZKTeco (TZ1=1)."
+        }
+
+    def get_hardware_biometric_matrix(self, refresh: bool = False) -> Dict[str, Any]:
+        """
+        Returns per-device health counts + normalized map of users present on each of the 4 terminals.
+        Uses zero-cost cached _live_userid_to_user unless refresh=True is requested.
+        """
+        device_summaries = []
+        norm_user_matrix: Dict[str, Dict[str, Dict[str, Any]]] = {}
+
+        for dev in self.devices:
+            ip = dev.get("ip")
+            name = dev.get("name", ip)
+            sn = dev.get("sn", "")
+            door_id = dev.get("door_id")
+            if not ip:
+                continue
+
+            if refresh or not self._live_userid_to_user.get(ip):
+                lock = self._locks.get(ip)
+                acquired = lock.acquire(timeout=3) if lock else True
+                if acquired:
+                    try:
+                        zk = self._get_device_connection(ip, dev.get("port", 4370))
+                        conn = zk.connect()
+                        dev_users = conn.get_users()
+                        try:
+                            conn.read_sizes()
+                        except Exception:
+                            pass
+                        uid_map = {}
+                        userid_map = {}
+                        for u in dev_users:
+                            uid_map[int(u.uid)] = u
+                            userid_map[str(u.user_id).strip()] = u
+                        self._live_uid_to_user[ip] = uid_map
+                        self._live_userid_to_user[ip] = userid_map
+                        self._device_capacities[ip] = {
+                            "users": getattr(conn, "users", len(dev_users)) or len(dev_users),
+                            "faces": getattr(conn, "faces", 0) or 0,
+                            "fingers": getattr(conn, "fingers", 0) or 0,
+                            "records": getattr(conn, "records", 0) or 0,
+                            "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        }
+                        self._live_online_devices[ip] = True
+                        conn.disconnect()
+                    except Exception as ex:
+                        logger.debug("[BioMatrix] Refresh %s failed: %s", ip, ex)
+                    finally:
+                        if lock:
+                            lock.release()
+
+            u_map = self._live_userid_to_user.get(ip, {})
+            cap = self._device_capacities.get(ip, {})
+            device_summaries.append({
+                "ip": ip,
+                "short_ip": ip.split(".")[-1],
+                "name": name,
+                "sn": sn,
+                "door_id": door_id,
+                "online": bool(self._live_online_devices.get(ip, len(u_map) > 0)),
+                "user_count": cap.get("users") or len(u_map),
+                "face_count": cap.get("faces") or 0,
+                "finger_count": cap.get("fingers") or 0,
+            })
+
+            for uid_str, u_obj in u_map.items():
+                norm_k = str(int(uid_str)) if str(uid_str).isdigit() else str(uid_str).strip()
+                card_val = str(getattr(u_obj, "card", "") or "").strip()
+                if card_val == "0":
+                    card_val = ""
+                norm_user_matrix.setdefault(norm_k, {})[ip] = {
+                    "uid": int(getattr(u_obj, "uid", 0) or 0),
+                    "user_id": uid_str,
+                    "name": str(getattr(u_obj, "name", "") or "").strip(),
+                    "card": card_val,
+                    "privilege": int(getattr(u_obj, "privilege", 0) or 0),
+                }
+
+        return {
+            "devices": device_summaries,
+            "users_by_norm_atid": norm_user_matrix
+        }
+
     # ---------------- Real-Time Scan Logs ----------------
 
     def get_realtime_attendance_logs(self, limit: int = 50) -> List[Dict[str, Any]]:
@@ -1038,6 +1220,17 @@ class ZkDirectClient:
                     for u in dev_users:
                         uid_to_user[int(u.uid)] = u
                         userid_to_user[str(u.user_id).strip()] = u
+                    try:
+                        conn.read_sizes()
+                    except Exception:
+                        pass
+                    self._device_capacities[ip] = {
+                        "users": getattr(conn, "users", len(dev_users)) or len(dev_users),
+                        "faces": getattr(conn, "faces", 0) or 0,
+                        "fingers": getattr(conn, "fingers", 0) or 0,
+                        "records": getattr(conn, "records", 0) or 0,
+                        "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    }
                 except Exception as u_err:
                     logger.debug("[ZK LIVE] Could not preload users on %s: %s", name, u_err)
 

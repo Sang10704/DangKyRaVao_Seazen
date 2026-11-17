@@ -846,6 +846,34 @@ def register_visitor():
                     "conflict_visitor": item
                 }), 400
 
+    # 0b. Pre-validate companion cards against active holders and main visitor card
+    companions_in = data.get("companions") or []
+    seen_batch_cards = {card_number.lstrip("0") or "0"} if card_number else set()
+    if isinstance(companions_in, list):
+        for comp in companions_in:
+            comp_name = str(comp.get("full_name") or "").strip() or "Nhân sự đi cùng"
+            comp_card = str(comp.get("card_number") or "").strip()
+            if not comp_card:
+                continue
+            comp_clean = comp_card.lstrip("0") or "0"
+            if comp_clean in seen_batch_cards:
+                return jsonify({
+                    "success": False,
+                    "error": f"Thẻ {comp_card} của người đi cùng ({comp_name}) bị trùng ngay trong cùng phiếu đăng ký!",
+                    "conflict_card": comp_card
+                }), 400
+            seen_batch_cards.add(comp_clean)
+            for item in active_now:
+                item_card = str(item.get("card_number", "")).strip()
+                item_clean = item_card.lstrip("0") or "0"
+                if item_card and (item_card == comp_card or item_clean == comp_clean):
+                    return jsonify({
+                        "success": False,
+                        "error": f"Thẻ {comp_card} gán cho {comp_name} đang được giữ bởi khách: {item.get('full_name')}!",
+                        "conflict_card": comp_card,
+                        "conflict_visitor": item
+                    }), 400
+
     # 1. Create SharePoint Item in 'VMS SEAZEN - KHÁCH RA VÀO' to get 1-to-1 bridged ATID (80000000 + SharePoint Item ID)
     try:
         import sharepoint_vms_sync
@@ -924,7 +952,7 @@ def register_visitor():
     print(f"    * Hệ thống Cửa  : {epad_sync_info}", flush=True)
     print("=" * 76 + "\n", flush=True)
 
-    # 4. Process accompanying visitors (Thông tin nhân sự đi cùng) if provided
+    # 4. Process accompanying visitors (Thông tin nhân sự đi cùng) linked via parent_visitor_id
     companions = data.get("companions") or []
     companion_records = []
     if isinstance(companions, list):
@@ -938,13 +966,19 @@ def register_visitor():
                 "full_name": c_name,
                 "cccd_number": c_cccd,
                 "birth_date": comp.get("birth_date") or "",
-                "card_number": c_card.lstrip("0") if c_card.isdigit() else c_card,
+                "card_number": (c_card.lstrip("0") or "0") if c_card.isdigit() else c_card,
                 "company": data.get("company") or "",
                 "department": data.get("department") or "",
                 "host_person": data.get("host_person") or "",
-                "purpose": f"Đi cùng đoàn: {full_name} - {data.get('purpose') or ''}".strip(" -"),
+                "host_phone": data.get("host_phone") or "",
+                "purpose": f"Đi cùng đoàn: {full_name}" + (f" - {data.get('purpose')}" if data.get("purpose") else ""),
                 "operator": data.get("operator") or "Lễ tân",
-                "expected_checkout_time": comp.get("to_time") or data.get("expected_checkout_time")
+                "from_date": data.get("from_date"),
+                "from_time": comp.get("from_time") or data.get("from_time"),
+                "to_date": data.get("to_date"),
+                "expected_checkout_time": comp.get("to_time") or data.get("expected_checkout_time"),
+                "parent_visitor_id": record.get("id"),
+                "parent_visitor_name": full_name or cccd_num,
             }
             try:
                 import sharepoint_vms_sync
@@ -1123,6 +1157,44 @@ def batch_checkout():
     })
 
 
+@app.route("/api/visitor/checkout_group", methods=["POST"])
+@require_role(["admin", "staff"])
+def checkout_visitor_group():
+    """
+    Checks out a primary visitor together with all active companions linked via parent_visitor_id.
+    Releases every assigned RFID card across all 4 ZKTeco terminals.
+    """
+    data = request.get_json(silent=True) or {}
+    q = str(data.get("query") or data.get("id") or "").strip()
+    if not q:
+        return jsonify({"success": False, "error": "Thiếu mã định danh khách trưởng đoàn."}), 400
+
+    records = storage.checkout_visitor_group(q)
+    if not records:
+        return jsonify({"success": False, "error": f"Không tìm thấy khách đang hoạt động '{q}'"}), 404
+
+    for rec in records:
+        target_card = rec.get("card_number")
+        if target_card:
+            try:
+                zk_client.return_or_delete_card(str(target_card))
+            except Exception:
+                pass
+        try:
+            import sharepoint_vms_sync
+            sharepoint_vms_sync.checkout_visitor_on_sharepoint_async(rec)
+        except Exception:
+            pass
+
+    lead_name = records[0].get("full_name") or "Khách"
+    return jsonify({
+        "success": True,
+        "count": len(records),
+        "visitors": records,
+        "message": f"Đã trả thẻ & Check-out toàn bộ đoàn {lead_name} ({len(records)} người)."
+    })
+
+
 @app.route("/api/analytics/dashboard", methods=["GET"])
 @require_role(["admin", "staff"])
 def get_dashboard_analytics():
@@ -1218,9 +1290,10 @@ def get_employees():
     dept = request.args.get("department")
     q = (request.args.get("q") or "").strip().lower()
     page = max(1, int(request.args.get("page", 1)))
-    limit = min(200, max(10, int(request.args.get("limit", 25))))
+    limit = min(500, max(10, int(request.args.get("limit", 25))))
+    include_inactive = str(request.args.get("include_inactive") or "").strip() in ("1", "true", "yes")
 
-    all_emps = storage.get_employees(department=dept)
+    all_emps = storage.get_employees(department=dept, include_inactive=include_inactive)
     if not all_emps and not dept and EPAD_ENABLED:
         try:
             all_raw = epad_client.get_all_employees()
@@ -1363,9 +1436,9 @@ def get_active_visitors():
 
 
 @app.route("/api/visitors/history", methods=["GET"])
-@require_role(["admin"])
+@require_role(["admin", "staff"])
 def get_visitor_history():
-    limit = int(request.args.get("limit", 200))
+    limit = int(request.args.get("limit", 250))
     return jsonify({"history": storage.get_visitor_history(limit=limit)})
 
 
@@ -1533,22 +1606,288 @@ def api_upsert_employee():
         atid = str(data.get("EmployeeATID") or "").strip()
         full_name = str(data.get("FullName") or "").strip()
         card_num = str(data.get("CardNumber") or "").strip()
-        hw_res = zk_client.enroll_visitor_card({
-            "epad_atid": atid,
-            "full_name": full_name,
-            "card_number": card_num or "0"
-        })
+        privilege = int(data.get("Privilege") or 0)
+        hw_res = zk_client.upsert_employee_on_hardware(
+            atid=atid,
+            full_name=full_name,
+            card_number=card_num,
+            privilege=privilege
+        )
+        if hw_res.get("success"):
+            db_mssql.mark_employee_hardware_synced_db(atid, card_num, privilege)
         db_mssql.log_device_command_db(
-            cmd_code="UPLOAD_USER_TCP4370",
+            cmd_code="UPLOAD_STAFF_TCP4370",
             target_serial="ALL",
             target_name="4 máy ZKTeco SenseFace 4A",
-            payload={"EmployeeATID": atid, "FullName": full_name, "CardNumber": card_num},
+            payload={"EmployeeATID": atid, "FullName": full_name, "CardNumber": card_num, "Privilege": privilege},
             status="COMPLETED" if hw_res.get("success") else "FAILED",
-            result_msg=str(hw_res),
+            result_msg=hw_res.get("message") or str(hw_res),
             operator=operator
         )
         res["hardware_sync"] = hw_res
+    if res.get("success"):
+        try:
+            zk_client._load_person_cache()
+        except Exception:
+            pass
     return jsonify(res), (200 if res.get("success") else 400)
+
+
+@app.route("/api/hrm/employee/status", methods=["POST"])
+@require_role(["admin"])
+def api_toggle_employee_status():
+    import db_mssql
+    data = request.get_json(silent=True) or {}
+    atid = str(data.get("EmployeeATID") or data.get("atid") or "").strip()
+    is_active = bool(data.get("IsActive", True))
+    res = db_mssql.toggle_employee_status_db(atid, is_active)
+    if res.get("success"):
+        try:
+            zk_client._load_person_cache()
+        except Exception:
+            pass
+    return jsonify(res), (200 if res.get("success") else 400)
+
+
+@app.route("/api/hrm/export_excel", methods=["GET"])
+@require_role(["admin"])
+def api_hrm_export_excel():
+    """Exports structured Employee & Department HR Directory to Excel (.xlsx)."""
+    import io
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    from openpyxl.utils import get_column_letter
+
+    dept_filter = (request.args.get("department") or "").strip()
+    q_filter = (request.args.get("q") or "").strip().lower()
+    include_inactive = str(request.args.get("include_inactive") or "").strip() in ("1", "true")
+
+    emps = storage.get_employees(department=dept_filter or None, include_inactive=include_inactive)
+    if q_filter:
+        emps = [
+            e for e in emps
+            if q_filter in f"{e.get('fullname','')} {e.get('atid','')} {e.get('code','')} {e.get('position','')} {e.get('phone','')} {e.get('email','')}".lower()
+        ]
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Danh Ba Nhan Su"
+
+    ws.merge_cells("A1:I1")
+    title = ws.cell(1, 1, f"DANH BẠ NHÂN SỰ SEAZEN ({len(emps)} nhân sự · {dept_filter or 'Tất cả phòng ban'})")
+    title.font = Font(name="Calibri", size=14, bold=True, color="111111")
+    title.alignment = Alignment(horizontal="left", vertical="center")
+    ws.row_dimensions[1].height = 24
+
+    headers = ["STT", "Mã ATID", "Mã NV HR", "Họ và Tên", "Phòng ban", "Chức vụ", "Số điện thoại", "Email", "Trạng thái"]
+    hdr_fill = PatternFill(start_color="111111", end_color="111111", fill_type="solid")
+    hdr_font = Font(name="Calibri", size=10.5, bold=True, color="FFFFFF")
+    thin = Side(style="thin", color="D1D5DB")
+    brd = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    for ci, h in enumerate(headers, 1):
+        c = ws.cell(3, ci, h)
+        c.fill = hdr_fill
+        c.font = hdr_font
+        c.alignment = Alignment(horizontal="center", vertical="center")
+        c.border = brd
+    ws.row_dimensions[3].height = 24
+
+    for idx, emp in enumerate(emps, start=1):
+        row_n = 3 + idx
+        vals = [
+            idx,
+            emp.get("atid", ""),
+            emp.get("code", ""),
+            emp.get("fullname", ""),
+            emp.get("department", ""),
+            emp.get("position", "") or "Nhân viên",
+            emp.get("phone", "") or "—",
+            emp.get("email", "") or "—",
+            "Đang làm việc" if emp.get("is_active", True) else "Tạm khóa",
+        ]
+        for ci, val in enumerate(vals, 1):
+            c = ws.cell(row_n, ci, val)
+            c.border = brd
+            c.alignment = Alignment(
+                horizontal="center" if ci in (1, 2, 3, 9) else "left",
+                vertical="center"
+            )
+            c.font = Font(name="Calibri", size=10.5, bold=(ci == 4))
+        ws.row_dimensions[row_n].height = 20
+
+    widths = [6, 14, 14, 28, 20, 18, 16, 28, 16]
+    for ci, w in enumerate(widths, 1):
+        ws.column_dimensions[get_column_letter(ci)].width = w
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return send_file(
+        buf,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=f"Danh_Ba_Nhan_Su_SeaZen_{datetime.now().strftime('%Y%m%d')}.xlsx"
+    )
+
+
+@app.route("/api/biometrics/matrix", methods=["GET"])
+@require_role(["admin"])
+def api_biometrics_matrix():
+    """
+    Combines SQL Server tbl_Employees + tbl_EmployeeBiometrics + real-time 4-terminal
+    ZKTeco SenseFace 4A user rosters + attendance verify-mode evidence.
+    Query params: ?refresh=1 (triggers live TCP 4370 scan on 4 devices)
+    """
+    import db_mssql
+    refresh = str(request.args.get("refresh") or "").strip() in ("1", "true", "yes")
+    dept_filter = (request.args.get("department") or "").strip()
+    q_filter = (request.args.get("q") or "").strip().lower()
+
+    emps = storage.get_employees(department=dept_filter or None)
+    hw_info = zk_client.get_hardware_biometric_matrix(refresh=refresh)
+    hw_devs = hw_info.get("devices", [])
+    hw_map = hw_info.get("users_by_norm_atid", {})
+
+    # Reconcile SQL Server tbl_Devices user/face/finger counts if refreshed
+    if refresh and db_mssql.is_mssql_active():
+        try:
+            import pyodbc
+            with pyodbc.connect(db_mssql.get_connection_string(), timeout=4) as conn:
+                cur = conn.cursor()
+                for d in hw_devs:
+                    if d.get("sn") and d.get("online"):
+                        cur.execute("""
+                            UPDATE tbl_Devices
+                            SET UserCount = ?, FaceCount = ?, FingerCount = ?, IsOnline = 1, LastPingTime = GETDATE()
+                            WHERE SerialNumber = ?
+                        """, (int(d["user_count"]), int(d["face_count"]), int(d["finger_count"]), d["sn"]))
+                conn.commit()
+        except Exception as ex:
+            logger.debug("Reconcile tbl_Devices warning: %s", ex)
+
+    rows = []
+    face_ready_count = 0
+    card_ready_count = 0
+    finger_ready_count = 0
+    all_4_synced_count = 0
+
+    for e in emps:
+        raw_atid = str(e.get("atid") or "").strip()
+        norm_k = str(int(raw_atid)) if raw_atid.isdigit() else raw_atid
+        dev_presence = hw_map.get(norm_k) or hw_map.get(raw_atid) or {}
+
+        doors_status = {}
+        hw_cards = []
+        hw_priv = int(e.get("privilege") or 0)
+        synced_cnt = 0
+        for d in hw_devs:
+            ip = d["ip"]
+            u_entry = dev_presence.get(ip)
+            present = bool(u_entry)
+            if present:
+                synced_cnt += 1
+                if u_entry.get("card"):
+                    hw_cards.append(u_entry["card"])
+                if u_entry.get("privilege", 0) > hw_priv:
+                    hw_priv = u_entry["privilege"]
+            doors_status[d["short_ip"]] = {
+                "present": present,
+                "name": d["name"],
+                "uid": u_entry.get("uid") if u_entry else None,
+                "card": u_entry.get("card") if u_entry else "",
+                "privilege": u_entry.get("privilege", 0) if u_entry else 0,
+            }
+
+        db_card = str(e.get("card_number") or "").strip()
+        effective_card = db_card or (hw_cards[0] if hw_cards else "")
+        last_vmode = str(e.get("last_verify_mode") or "")
+        scan_has_face = "face" in last_vmode.lower()
+        scan_has_finger = "finger" in last_vmode.lower() or last_vmode == "4"
+
+        has_face_evidence = bool(e.get("has_face") or e.get("face_photo") or scan_has_face or synced_cnt > 0)
+        has_card = bool(effective_card or e.get("has_card"))
+        has_finger = bool(e.get("has_finger") or scan_has_finger)
+
+        if has_face_evidence:
+            face_ready_count += 1
+        if has_card:
+            card_ready_count += 1
+        if has_finger:
+            finger_ready_count += 1
+        if len(hw_devs) > 0 and synced_cnt == len(hw_devs):
+            all_4_synced_count += 1
+
+        row_obj = {
+            **e,
+            "card_number": effective_card,
+            "db_card_number": db_card,
+            "hardware_card": hw_cards[0] if hw_cards else "",
+            "privilege": hw_priv,
+            "db_has_face": bool(e.get("has_face")),
+            "scan_verified_face": scan_has_face,
+            "has_face_effective": has_face_evidence,
+            "has_card_effective": has_card,
+            "has_finger_effective": has_finger,
+            "synced_doors_count": synced_cnt,
+            "total_doors": len(hw_devs),
+            "doors": doors_status,
+        }
+
+        if q_filter:
+            hay = f"{row_obj.get('fullname','')} {raw_atid} {row_obj.get('code','')} {effective_card} {row_obj.get('department','')}".lower()
+            if q_filter not in hay:
+                continue
+        rows.append(row_obj)
+
+    return jsonify({
+        "success": True,
+        "devices": hw_devs,
+        "summary": {
+            "total_staff": len(emps),
+            "face_ready": face_ready_count,
+            "card_ready": card_ready_count,
+            "finger_ready": finger_ready_count,
+            "all_4_synced": all_4_synced_count,
+        },
+        "count": len(rows),
+        "rows": rows
+    })
+
+
+@app.route("/api/biometrics/push_hardware", methods=["POST"])
+@require_role(["admin"])
+def api_biometrics_push_hardware():
+    """Pushes one staff profile (ATID, FullName, CardNumber, Privilege) directly to all 4 ZKTeco terminals (TZ1=1)."""
+    import db_mssql
+    data = request.get_json(silent=True) or {}
+    atid = str(data.get("EmployeeATID") or data.get("atid") or "").strip()
+    full_name = str(data.get("FullName") or data.get("fullname") or "").strip()
+    card_num = str(data.get("CardNumber") or data.get("card_number") or "").strip()
+    privilege = int(data.get("Privilege") or data.get("privilege") or 0)
+
+    if not atid:
+        return jsonify({"success": False, "error": "Thiếu Mã ATID nhân viên để nạp thiết bị."}), 400
+
+    hw_res = zk_client.upsert_employee_on_hardware(
+        atid=atid,
+        full_name=full_name or atid,
+        card_number=card_num,
+        privilege=privilege
+    )
+    if hw_res.get("success"):
+        db_mssql.mark_employee_hardware_synced_db(atid, card_num or None, privilege)
+        u = get_current_user()
+        db_mssql.log_device_command_db(
+            cmd_code="PUSH_BIOMETRICS_4DOORS",
+            target_serial="ALL",
+            target_name="4 máy ZKTeco SenseFace 4A",
+            payload={"EmployeeATID": atid, "FullName": full_name, "CardNumber": card_num, "Privilege": privilege},
+            status="COMPLETED",
+            result_msg=hw_res.get("message") or "",
+            operator=u["full_name"] if u else "Quản trị viên"
+        )
+    return jsonify(hw_res), (200 if hw_res.get("success") else 500)
 
 
 @app.route("/api/visitor/cards", methods=["GET"])

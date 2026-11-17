@@ -297,6 +297,12 @@ GO
 IF COL_LENGTH('tbl_Visitors', 'Address') IS NULL
     ALTER TABLE tbl_Visitors ADD Address NVARCHAR(500) NULL;
 GO
+IF COL_LENGTH('tbl_Visitors', 'ParentVisitorID') IS NULL
+    ALTER TABLE tbl_Visitors ADD ParentVisitorID NVARCHAR(50) NULL;
+GO
+IF COL_LENGTH('tbl_Visitors', 'ParentVisitorName') IS NULL
+    ALTER TABLE tbl_Visitors ADD ParentVisitorName NVARCHAR(255) NULL;
+GO
 
 -- 11. Bảng Đăng Ký Hẹn Khách Trước (HR_EmailDeclareGuest)
 IF OBJECT_ID(N'tbl_PreRegisteredGuests', N'U') IS NULL
