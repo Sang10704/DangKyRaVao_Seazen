@@ -367,6 +367,11 @@ class StorageManager:
                         "source": "DOOR_SCAN"
                     }
                     active_map[card_no] = synth_item
+                    if MSSQL_AVAILABLE and db_mssql and db_mssql.is_mssql_active():
+                        try:
+                            db_mssql.insert_visitor_db(synth_item)
+                        except Exception:
+                            pass
         except Exception as e:
             logger.warning("Error fetching inside visitors from door scans: %s", e)
 
@@ -1016,11 +1021,16 @@ class StorageManager:
             except Exception as e:
                 logger.debug("[Storage] Lỗi lưu log vào MSSQL: %s", e)
 
-            # Asynchronous Write-Through to SharePoint Online List 'VMS SEAZEN - NHẬT KÝ RA VÀO'
+            # Asynchronous Write-Through to SharePoint Online List 'VMS SEAZEN - NHẬT KÝ QUẸT THẺ' & 'TỔNG HỢP CHẤM CÔNG'
             try:
                 import sharepoint_vms_sync
-                if actually_added:
-                    sharepoint_vms_sync.push_live_scans_to_sharepoint_async(actually_added[:25])
+                recent_day_prefix = today_str
+                realtime_batch = [
+                    sc for sc in actually_added
+                    if str(sc.get("CheckTime") or sc.get("Time") or "").replace("T", " ").startswith(recent_day_prefix)
+                ]
+                if realtime_batch:
+                    sharepoint_vms_sync.push_live_scans_to_sharepoint_async(realtime_batch)
             except Exception as sp_err:
                 logger.debug("[Storage] SharePoint async push skipped: %s", sp_err)
 
@@ -1434,11 +1444,12 @@ class StorageManager:
     # ---------------- Door Action Audit Logs ----------------
 
     def log_door_action(self, door_id: int, door_name: str, duration_sec: int, operator: str = "Bảo vệ", success: bool = True, action: str = "UNLOCK") -> Dict[str, Any]:
-        """Logs manual unlock/lock command triggered by UI."""
+        """Logs manual unlock/lock command triggered by UI into JSON, SQL Server, and SharePoint Online in real time."""
         actions = _read_json(DOOR_ACTIONS_FILE, [])
+        now_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         record = {
             "id": str(uuid.uuid4())[:8],
-            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "timestamp": now_ts,
             "door_id": door_id,
             "door_name": door_name,
             "duration_sec": duration_sec,
@@ -1447,13 +1458,30 @@ class StorageManager:
             "success": success
         }
         actions.append(record)
-        # Keep latest 1000 logs
         if len(actions) > 1000:
             actions = actions[-1000:]
         _write_json(DOOR_ACTIONS_FILE, actions)
 
-        if self.sp_enabled:
-            self._sync_door_action_to_sharepoint(record)
+        try:
+            import db_mssql
+            if db_mssql.is_mssql_active():
+                db_mssql.log_door_audit_db(
+                    door_id=door_id,
+                    door_name=door_name,
+                    action=action,
+                    duration_sec=duration_sec,
+                    operator=operator,
+                    success=success,
+                    timestamp_str=now_ts
+                )
+        except Exception as db_err:
+            logger.debug("log_door_audit_db skip: %s", db_err)
+
+        try:
+            import sharepoint_vms_sync
+            sharepoint_vms_sync.push_door_audit_async(record)
+        except Exception as sp_err:
+            logger.debug("push_door_audit_async skip: %s", sp_err)
 
         return record
 
@@ -1461,121 +1489,34 @@ class StorageManager:
         actions = _read_json(DOOR_ACTIONS_FILE, [])
         return sorted(actions, key=lambda x: x.get("timestamp", ""), reverse=True)[:limit]
 
-    # ---------------- SharePoint Online Integration Hook ----------------
+    # ---------------- SharePoint Online Integration Hook (SEAZENHR-PORTAL App) ----------------
 
     def _get_sharepoint_access_token(self) -> Optional[str]:
-        """Loads cached SharePoint token from token_cache.bin via MSAL (same as Canteen Kiosk)."""
-        cache_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "token_cache.bin")
-        if not os.path.exists(cache_file):
-            logger.warning("[SharePoint] Chưa tìm thấy token_cache.bin. Vui lòng chạy DANG_NHAP_SHAREPOINT.bat để đăng nhập.")
+        """Delegates to SEAZENHR-PORTAL (0390280b-12b8-49c4-adbf-a9c2b8bccfb5) OAuth2 Bearer Token."""
+        try:
+            import sharepoint_vms_sync
+            tok = sharepoint_vms_sync.get_sharepoint_tokens()
+            return tok.get("sp_token") if tok.get("ok") else None
+        except Exception:
             return None
 
-        try:
-            import msal
-            cache = msal.SerializableTokenCache()
-            with open(cache_file, "r", encoding="utf-8") as f:
-                cache.deserialize(f.read())
-
-            tenant_id = self.sp_config.get("tenant_id", "29101901-3778-4339-827c-7d2b50914db0")
-            client_id = self.sp_config.get("client_id", "04b07795-8ddb-461a-bbee-02f9e1bf7b46")
-            scopes = ["https://graph.microsoft.com/.default"]
-
-            app = msal.PublicClientApplication(
-                client_id,
-                authority=f"https://login.microsoftonline.com/{tenant_id}",
-                token_cache=cache
-            )
-            accounts = app.get_accounts()
-            if accounts:
-                result = app.acquire_token_silent(scopes, account=accounts[0])
-                if result and "access_token" in result:
-                    # Save updated cache if refreshed
-                    if cache.has_state_changed:
-                        with open(cache_file, "w", encoding="utf-8") as f:
-                            f.write(cache.serialize())
-                    return result["access_token"]
-            logger.warning("[SharePoint] Token trong token_cache.bin đã hết hạn hoặc không tìm thấy tài khoản.")
-        except Exception as e:
-            logger.error("[SharePoint] Lỗi đọc token_cache.bin: %s", e)
-        return None
-
     def _sync_visitor_to_sharepoint(self, visitor_record: Dict[str, Any], is_checkout: bool = False):
-        """
-        Pushes visitor record to SharePoint Online List via Microsoft Graph API.
-        Requires token_cache.bin (created via DANG_NHAP_SHAREPOINT.bat).
-        """
-        token = self._get_sharepoint_access_token()
-        site_id = self.sp_config.get("site_id", "").strip()
-        list_name = self.sp_config.get("visitor_list_name", "ACCESS_CONTROL_VISITORS")
-
-        if not token or not site_id:
-            logger.info("[SharePoint Sync] Sẵn sàng ghi nhận: %s (checkout=%s) - Chờ cấu hình site_id hoặc token", visitor_record.get("full_name"), is_checkout)
-            return
-
+        """Delegates real-time visitor sync to sharepoint_vms_sync (VMS SEAZEN - KHÁCH RA VÀO)."""
         try:
-            import requests
-            url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/lists/{list_name}/items"
-            headers = {
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/json"
-            }
-            cccd = visitor_record.get("cccd_number") or visitor_record.get("id_number", "")
-            payload = {
-                "fields": {
-                    "Title": visitor_record.get("full_name", ""),
-                    "CardNumber": visitor_record.get("card_number", ""),
-                    "IDNumber": cccd,
-                    "CCCDNumber": cccd,
-                    "BirthYear": visitor_record.get("birth_year", ""),
-                    "Gender": visitor_record.get("gender", ""),
-                    "Address": visitor_record.get("address", ""),
-                    "Phone": visitor_record.get("phone", ""),
-                    "Company": visitor_record.get("company", ""),
-                    "HostPerson": visitor_record.get("host_person", ""),
-                    "Department": visitor_record.get("department", ""),
-                    "Reason": visitor_record.get("purpose") or visitor_record.get("reason", ""),
-                    "VehicleNumber": visitor_record.get("vehicle_number", ""),
-                    "CheckinTime": visitor_record.get("checkin_time", ""),
-                    "CheckoutTime": visitor_record.get("checkout_time", "") or "",
-                    "Status": visitor_record.get("status", "ACTIVE")
-                }
-            }
-            res = requests.post(url, json=payload, headers=headers, timeout=6)
-            if res.status_code in (200, 201):
-                logger.info("[SharePoint Sync] Đồng bộ khách %s thành công!", visitor_record.get("full_name"))
+            import sharepoint_vms_sync
+            if is_checkout:
+                sharepoint_vms_sync.checkout_visitor_on_sharepoint_async(visitor_record)
             else:
-                logger.warning("[SharePoint Sync] Đồng bộ thất bại HTTP %s: %s", res.status_code, res.text)
+                sharepoint_vms_sync.push_table_async("tbl_Visitors", 200)
         except Exception as e:
-            logger.error("[SharePoint Sync] Lỗi khi gửi dữ liệu lên SharePoint: %s", e)
+            logger.debug("_sync_visitor_to_sharepoint skip: %s", e)
 
     def _sync_door_action_to_sharepoint(self, door_action: Dict[str, Any]):
-        token = self._get_sharepoint_access_token()
-        site_id = self.sp_config.get("site_id", "").strip()
-        list_name = self.sp_config.get("log_list_name", "ACCESS_CONTROL_LOGS")
-
-        if not token or not site_id:
-            return
-
         try:
-            import requests
-            url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/lists/{list_name}/items"
-            headers = {
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/json"
-            }
-            payload = {
-                "fields": {
-                    "Title": door_action.get("door_name", ""),
-                    "DoorID": str(door_action.get("door_id", "")),
-                    "Timestamp": door_action.get("timestamp", ""),
-                    "DurationSec": str(door_action.get("duration_sec", "")),
-                    "Operator": door_action.get("operator", ""),
-                    "Success": str(door_action.get("success", True))
-                }
-            }
-            requests.post(url, json=payload, headers=headers, timeout=5)
+            import sharepoint_vms_sync
+            sharepoint_vms_sync.push_door_audit_async(door_action)
         except Exception as e:
-            logger.error("[SharePoint Sync] Lỗi đồng bộ nhật ký cửa: %s", e)
+            logger.debug("_sync_door_action_to_sharepoint skip: %s", e)
 
     # ---------------- Excel Export ----------------
 

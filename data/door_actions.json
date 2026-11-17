@@ -190,5 +190,55 @@
     "action": "UNLOCK",
     "operator": "Quản Trị Viên Hệ Thống",
     "success": true
+  },
+  {
+    "id": "44c581fe",
+    "timestamp": "2026-11-17 17:16:41",
+    "door_id": 1,
+    "door_name": "Làn VÀO phải",
+    "duration_sec": 1,
+    "action": "UNLOCK",
+    "operator": "Quản Trị Viên Hệ Thống (SeazenAdmin)",
+    "success": true
+  },
+  {
+    "id": "9185a15e",
+    "timestamp": "2026-11-17 17:16:42",
+    "door_id": 1,
+    "door_name": "Làn VÀO trái",
+    "duration_sec": 1,
+    "action": "UNLOCK",
+    "operator": "Quản Trị Viên Hệ Thống (SeazenAdmin)",
+    "success": true
+  },
+  {
+    "id": "e8ee04bf",
+    "timestamp": "2026-11-17 17:16:43",
+    "door_id": 2,
+    "door_name": "Làn RA phải",
+    "duration_sec": 1,
+    "action": "UNLOCK",
+    "operator": "Quản Trị Viên Hệ Thống (SeazenAdmin)",
+    "success": true
+  },
+  {
+    "id": "c8dc6162",
+    "timestamp": "2026-11-17 17:16:50",
+    "door_id": 2,
+    "door_name": "Làn RA trái",
+    "duration_sec": 1,
+    "action": "UNLOCK",
+    "operator": "Quản Trị Viên Hệ Thống (SeazenAdmin)",
+    "success": true
+  },
+  {
+    "id": "f4207fca",
+    "timestamp": "2026-11-17 17:16:52",
+    "door_id": 2,
+    "door_name": "Làn RA phải",
+    "duration_sec": 1,
+    "action": "UNLOCK",
+    "operator": "Quản Trị Viên Hệ Thống (SeazenAdmin)",
+    "success": true
   }
 ]

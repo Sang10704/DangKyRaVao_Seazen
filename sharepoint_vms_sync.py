@@ -11,9 +11,14 @@ import os
 import sys
 import json
 import zlib
+import time
+import base64
+import re
+import threading
 import ctypes
 import ctypes.wintypes
 import logging
+from datetime import datetime
 from typing import Dict, Any, List, Optional
 import requests
 import msal
@@ -693,28 +698,83 @@ def provision_vms_sharepoint_lists(selected_tables: Optional[List[str]] = None) 
     }
 
 
-def sync_table_to_sharepoint(sql_table: str, max_rows: int = 200) -> Dict[str, Any]:
+def _build_sp_unique_key(sql_table: str, row: Dict[str, Any]) -> str:
+    """Computes a collision-free unique SharePoint Title key for both master tables and time-series logs."""
+    if sql_table == "tbl_AttendanceLogs":
+        atid = str(row.get("EmployeeATID") or "").strip()
+        chk = str(row.get("CheckTime") or row.get("Time") or "").replace("T", " ").strip()[:19]
+        return f"{atid}_{chk}" if (atid and chk) else str(row.get("LogID") or atid)
+    if sql_table == "tbl_DailyTimekeeping":
+        wdate = str(row.get("WorkDate") or "")[:10]
+        atid = str(row.get("EmployeeATID") or "").strip()
+        return f"{wdate}_{atid}" if (wdate and atid) else str(row.get("TimekeepingID") or atid)
+    if sql_table == "tbl_DoorAuditLogs":
+        act = str(row.get("Action") or "UNLOCK").strip()
+        did = str(row.get("DoorID") or "0").strip()
+        ts = str(row.get("CreatedAt") or "").replace("T", " ").strip()[:19]
+        return f"{act}_D{did}_{ts}" if ts else str(row.get("AuditID") or act)
+    if sql_table == "tbl_DeviceCommands":
+        cid = str(row.get("CommandID") or "").strip()
+        code = str(row.get("CommandCode") or "CMD").strip()
+        return f"{cid}_{code}" if cid else code
+    if sql_table == "tbl_ClockSyncAuditLogs":
+        caid = str(row.get("ClockAuditID") or "").strip()
+        atype = str(row.get("AuditType") or "AUDIT").strip()
+        return f"{caid}_{atype}" if caid else atype
+    if sql_table == "tbl_DepartmentAccessGroups":
+        return str(row.get("DepartmentName") or row.get("MappingID") or "").strip()
+    meta = VMS_SHAREPOINT_LIST_SCHEMAS.get(sql_table, {})
+    return str(row.get(meta.get("title_sql_col", "")) or row.get(meta.get("key_sql_col", "")) or "N/A").strip()
+
+
+_PROVISIONED_LIST_CACHE: Dict[str, str] = {}
+_SP_SYNC_LOCK = threading.Lock()
+_SP_RECENT_SCAN_SIGS: set = set()
+_SP_SCAN_SIGS_WARMED = False
+
+
+def _ensure_list_id_cached(sql_table: str) -> Optional[str]:
+    if sql_table in _PROVISIONED_LIST_CACHE:
+        return _PROVISIONED_LIST_CACHE[sql_table]
+    known = _SP_KNOWN_LIST_IDS.get(sql_table)
+    if known:
+        _PROVISIONED_LIST_CACHE[sql_table] = known
+        return known
+    prov = provision_vms_sharepoint_lists([sql_table])
+    if prov.get("success") and prov.get("results") and prov["results"][0].get("success"):
+        lid = prov["results"][0]["list_id"]
+        _PROVISIONED_LIST_CACHE[sql_table] = lid
+        return lid
+    return None
+
+
+def sync_table_to_sharepoint(sql_table: str, max_rows: int = 200, ensure_schema: bool = False) -> Dict[str, Any]:
     """
     Pushes records from a local SQL Server table (SeaZen_AccessControl)
     to its corresponding 'VMS SEAZEN - (Tên bảng)' SharePoint List via OAuth2 Bearer Token.
+    Uses composite unique keys for log/timekeeping tables to avoid overwriting distinct events.
     """
     meta = VMS_SHAREPOINT_LIST_SCHEMAS.get(sql_table)
     if not meta:
         return {"success": False, "error": f"Bảng không hợp lệ: {sql_table}"}
 
-    # Ensure the target list & Vietnamese columns exist first
-    prov = provision_vms_sharepoint_lists([sql_table])
-    if not prov.get("success") or not prov.get("results"):
-        return {"success": False, "error": prov.get("error", "Không thể khởi tạo SharePoint List")}
+    if ensure_schema or sql_table not in _PROVISIONED_LIST_CACHE:
+        prov = provision_vms_sharepoint_lists([sql_table])
+        if not prov.get("success") or not prov.get("results"):
+            return {"success": False, "error": prov.get("error", "Không thể khởi tạo SharePoint List")}
+        list_info = prov["results"][0]
+        if not list_info.get("success"):
+            return {"success": False, "error": list_info.get("error")}
+        list_id = list_info["list_id"]
+        _PROVISIONED_LIST_CACHE[sql_table] = list_id
+    else:
+        list_id = _PROVISIONED_LIST_CACHE[sql_table]
 
-    list_info = prov["results"][0]
-    if not list_info.get("success"):
-        return {"success": False, "error": list_info.get("error")}
-
-    list_id = list_info["list_id"]
-    list_title = list_info["list_title"]
+    list_title = meta["list_title"]
 
     tok_info = get_sharepoint_tokens()
+    if not tok_info.get("ok"):
+        return {"success": False, "error": tok_info.get("error")}
     sp_token = tok_info["sp_token"]
 
     ctx_resp = requests.post(
@@ -735,29 +795,55 @@ def sync_table_to_sharepoint(sql_table: str, max_rows: int = 200) -> Dict[str, A
         "X-RequestDigest": digest
     }
 
-    # Fetch existing Title values in SharePoint list to avoid duplicate inserts
-    existing_titles = {}
+    # Fetch existing items to prevent duplicate inserts (plus extra signature fields for log/timekeeping tables)
+    existing_by_key: Dict[str, Dict[str, Any]] = {}
+    select_fields = ["Id", "Title"]
+    if sql_table == "tbl_AttendanceLogs":
+        select_fields.extend(["MaChamCongATID", "ThoiGianQuet"])
+    elif sql_table == "tbl_DailyTimekeeping":
+        select_fields.extend(["NgayLamViec", "MaChamCongATID", "TongSoLanQuet", "GioRaCuoiCung"])
+    elif sql_table == "tbl_DoorAuditLogs":
+        select_fields.extend(["HanhDong", "MaCua", "ThoiGianThaoTac"])
+
     try:
         r_items = requests.get(
-            f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items?$select=Id,Title&$top=5000",
+            f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items?$select={','.join(select_fields)}&$top=5000&$orderby=Id desc",
             headers=headers_read,
             timeout=15
         )
         if r_items.status_code == 200:
             for it in r_items.json().get("value", []):
                 if it.get("Title") is not None:
-                    existing_titles[str(it["Title"]).strip()] = it["Id"]
+                    existing_by_key.setdefault(str(it["Title"]).strip(), it)
+                if sql_table == "tbl_AttendanceLogs":
+                    s_atid = str(it.get("MaChamCongATID") or "").strip()
+                    s_ts = str(it.get("ThoiGianQuet") or "").replace("T", " ").strip()[:19]
+                    if s_atid and s_ts:
+                        existing_by_key.setdefault(f"{s_atid}_{s_ts}", it)
+                elif sql_table == "tbl_DailyTimekeeping":
+                    s_wd = str(it.get("NgayLamViec") or "")[:10]
+                    s_atid = str(it.get("MaChamCongATID") or "").strip()
+                    if s_wd and s_atid:
+                        existing_by_key.setdefault(f"{s_wd}_{s_atid}", it)
+                elif sql_table == "tbl_DoorAuditLogs":
+                    s_act = str(it.get("HanhDong") or "").strip()
+                    s_did = str(it.get("MaCua") or "0").strip()
+                    s_ts = str(it.get("ThoiGianThaoTac") or "").replace("T", " ").strip()[:19]
+                    if s_act and s_ts:
+                        existing_by_key.setdefault(f"{s_act}_D{s_did}_{s_ts}", it)
     except Exception as e:
-        logger.warning("Read existing items warning: %s", e)
+        logger.warning("Read existing items warning (%s): %s", sql_table, e)
 
     # Read rows from SQL Server
     rows = db_mssql.get_table_rows(sql_table, limit=max_rows)
     inserted = 0
     updated = 0
+    skipped = 0
+    errors = 0
 
     for row in rows:
-        title_val = str(row.get(meta["title_sql_col"]) or row.get(meta["key_sql_col"]) or "N/A").strip()
-        item_payload: Dict[str, Any] = {"Title": title_val[:250]}
+        unique_key = _build_sp_unique_key(sql_table, row)
+        item_payload: Dict[str, Any] = {"Title": unique_key[:250]}
 
         for col in meta["columns"]:
             raw_val = row.get(col["sql"])
@@ -776,8 +862,23 @@ def sync_table_to_sharepoint(sql_table: str, max_rows: int = 200) -> Dict[str, A
             else:
                 item_payload[col["internal"]] = str(raw_val)[:250]
 
-        sp_item_id = existing_titles.get(title_val)
-        if sp_item_id:
+        existing_it = existing_by_key.get(unique_key)
+        if existing_it:
+            # Skip redundant MERGE for immutable append-only logs
+            if sql_table in ("tbl_AttendanceLogs", "tbl_DoorAuditLogs", "tbl_DeviceCommands", "tbl_ClockSyncAuditLogs"):
+                skipped += 1
+                continue
+            # For tbl_DailyTimekeeping, skip MERGE if scan count & last out already match
+            if sql_table == "tbl_DailyTimekeeping":
+                sp_scans = int(existing_it.get("TongSoLanQuet") or 0)
+                sp_out = str(existing_it.get("GioRaCuoiCung") or "")
+                cur_scans = int(row.get("TotalScans") or 0)
+                cur_out = str(row.get("LastOutTime") or "")
+                if sp_scans == cur_scans and sp_out == cur_out:
+                    skipped += 1
+                    continue
+
+            sp_item_id = existing_it["Id"]
             resp = requests.post(
                 f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items({sp_item_id})",
                 headers={**headers_write, "X-HTTP-Method": "MERGE", "If-Match": "*"},
@@ -786,6 +887,9 @@ def sync_table_to_sharepoint(sql_table: str, max_rows: int = 200) -> Dict[str, A
             )
             if resp.status_code in (200, 204):
                 updated += 1
+            else:
+                errors += 1
+                logger.warning("[SP Sync MERGE %s id=%s] HTTP %s: %s", sql_table, sp_item_id, resp.status_code, resp.text[:200])
         else:
             resp = requests.post(
                 f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items",
@@ -795,15 +899,22 @@ def sync_table_to_sharepoint(sql_table: str, max_rows: int = 200) -> Dict[str, A
             )
             if resp.status_code in (200, 201):
                 inserted += 1
+                created_obj = resp.json() if resp.text else {}
+                existing_by_key[unique_key] = {"Id": created_obj.get("Id")}
+            else:
+                errors += 1
+                logger.warning("[SP Sync POST %s key=%s] HTTP %s: %s", sql_table, unique_key, resp.status_code, resp.text[:200])
 
     return {
-        "success": True,
+        "success": errors == 0 or (inserted + updated) > 0,
         "sql_table": sql_table,
         "list_title": list_title,
         "list_id": list_id,
         "rows_processed": len(rows),
         "inserted": inserted,
-        "updated": updated
+        "updated": updated,
+        "skipped": skipped,
+        "errors": errors,
     }
 
 
@@ -811,10 +922,6 @@ def sync_table_to_sharepoint(sql_table: str, max_rows: int = 200) -> Dict[str, A
 # REAL-TIME 2-WAY SHAREPOINT LIVE CRUD, VISITOR NFC BRIDGE (80000000 + ID)
 # & BIOMETRIC ATTACHMENT ENGINE (OAuth2 Bearer Token - No Cookies)
 # ==============================================================================
-
-import base64
-import re
-import threading
 
 _SP_KNOWN_LIST_IDS = {
     "tbl_Departments": "37bbb8fb-c962-43cc-927e-d7c5aa027362",
@@ -963,13 +1070,170 @@ def checkout_visitor_on_sharepoint_async(visitor_record: Dict[str, Any]) -> None
     threading.Thread(target=_worker, daemon=True).start()
 
 
+def _warm_scan_sigs_cache(sp_token: str) -> None:
+    global _SP_SCAN_SIGS_WARMED
+    if _SP_SCAN_SIGS_WARMED:
+        return
+    try:
+        list_id = _SP_KNOWN_LIST_IDS["tbl_AttendanceLogs"]
+        headers_read = {"Authorization": f"Bearer {sp_token}", "Accept": "application/json;odata=nometadata"}
+        r = requests.get(
+            f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items?$select=Id,Title,MaChamCongATID,ThoiGianQuet&$top=5000&$orderby=Id desc",
+            headers=headers_read,
+            timeout=12
+        )
+        if r.status_code == 200:
+            for it in r.json().get("value", []):
+                if it.get("Title"):
+                    _SP_RECENT_SCAN_SIGS.add(str(it["Title"]).strip())
+                s_atid = str(it.get("MaChamCongATID") or "").strip()
+                s_ts = str(it.get("ThoiGianQuet") or "").replace("T", " ").strip()[:19]
+                if s_atid and s_ts:
+                    _SP_RECENT_SCAN_SIGS.add(f"{s_atid}_{s_ts}")
+        _SP_SCAN_SIGS_WARMED = True
+    except Exception as e:
+        logger.debug("_warm_scan_sigs_cache warning: %s", e)
+
+
 def push_live_scans_to_sharepoint_async(scans: List[Dict[str, Any]]) -> None:
     """
-    Asynchronously pushes real-time captured scans (from TCP 4370 live_capture)
-    to SharePoint List 'VMS SEAZEN - NHẬT KÝ QUẸT THẺ' without blocking hardware threads.
+    Asynchronously pushes ALL real-time captured scans (from TCP 4370 or ADMS push)
+    to SharePoint List 'VMS SEAZEN - NHẬT KÝ QUẸT THẺ' AND immediately updates
+    the corresponding rows in 'VMS SEAZEN - TỔNG HỢP CHẤM CÔNG'.
     """
     if not scans:
         return
+    scans_copy = [dict(s) for s in scans]
+
+    def _worker():
+        try:
+            with _SP_SYNC_LOCK:
+                tok_info = get_sharepoint_tokens()
+                if not tok_info.get("ok"):
+                    return
+                sp_token = tok_info["sp_token"]
+                _warm_scan_sigs_cache(sp_token)
+                list_id = _SP_KNOWN_LIST_IDS["tbl_AttendanceLogs"]
+                headers_write = _get_sp_write_headers(sp_token)
+
+                staff_dates_to_sync = set()
+                for sc in scans_copy:
+                    atid = str(sc.get("EmployeeATID") or "").strip()
+                    if not atid:
+                        continue
+                    chk_norm = str(sc.get("CheckTime") or sc.get("Time") or "").replace("T", " ").strip()[:19]
+                    sig = f"{atid}_{chk_norm}" if chk_norm else atid
+                    if sig in _SP_RECENT_SCAN_SIGS:
+                        continue
+
+                    payload = {
+                        "Title": sig[:250],
+                        "MaChamCongATID": atid[:250],
+                        "HoVaTen": str(sc.get("FullName") or "")[:250],
+                        "PhongBan": str(sc.get("Department") or "")[:250],
+                        "SerialThietBi": str(sc.get("SerialNumber") or sc.get("DeviceSerialNumber") or "")[:100],
+                        "TenThietBiCua": str(sc.get("DeviceName") or "")[:200],
+                        "ThoiGianQuet": chk_norm or str(sc.get("CheckTime") or ""),
+                        "PhuongThucXacThuc": str(sc.get("VerifyMode") or "FaceTemplate")[:100],
+                        "LaNhanVien": bool(sc.get("is_staff", True)),
+                        "NguonDongBo": str(sc.get("SyncSource") or "LIVE_REG_EVENT")[:100],
+                    }
+                    r_post = requests.post(
+                        f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items",
+                        headers=headers_write,
+                        json=payload,
+                        timeout=8
+                    )
+                    if r_post.status_code in (200, 201):
+                        _SP_RECENT_SCAN_SIGS.add(sig)
+                        if bool(sc.get("is_staff", True)) and chk_norm:
+                            staff_dates_to_sync.add((chk_norm[:10], atid))
+                    else:
+                        logger.warning("[SP LiveScan] HTTP %s: %s", r_post.status_code, r_post.text[:180])
+
+                # Also push today's updated DailyTimekeeping rows to SharePoint right away
+                if staff_dates_to_sync and db_mssql.is_mssql_active():
+                    try:
+                        sync_specific_daily_timekeeping_rows(staff_dates_to_sync, sp_token=sp_token, headers_write=headers_write)
+                    except Exception as tk_ex:
+                        logger.debug("[SP LiveTimekeeping] warning: %s", tk_ex)
+        except Exception as e:
+            logger.warning("push_live_scans_to_sharepoint_async warning: %s", e)
+
+    threading.Thread(target=_worker, daemon=True).start()
+
+
+def sync_specific_daily_timekeeping_rows(
+    date_atid_pairs: set,
+    sp_token: Optional[str] = None,
+    headers_write: Optional[Dict[str, str]] = None
+) -> None:
+    """Upserts exact (WorkDate, EmployeeATID) rows from tbl_DailyTimekeeping into SharePoint in realtime."""
+    if not date_atid_pairs or not db_mssql.is_mssql_active():
+        return
+    if not sp_token:
+        tok_info = get_sharepoint_tokens()
+        if not tok_info.get("ok"):
+            return
+        sp_token = tok_info["sp_token"]
+    if not headers_write:
+        headers_write = _get_sp_write_headers(sp_token)
+    list_id = _SP_KNOWN_LIST_IDS["tbl_DailyTimekeeping"]
+    headers_read = {"Authorization": f"Bearer {sp_token}", "Accept": "application/json;odata=nometadata"}
+
+    import pyodbc
+    with pyodbc.connect(db_mssql.get_connection_string(), timeout=5) as conn:
+        cur = conn.cursor()
+        for wdate, atid in date_atid_pairs:
+            cur.execute("""
+                SELECT TOP 1 WorkDate, EmployeeATID, FullName, DepartmentName, ShiftCode,
+                       FirstInTime, LastOutTime, TotalScans, LateMinutes, TotalHours, AttendanceStatus
+                FROM tbl_DailyTimekeeping
+                WHERE WorkDate = ? AND EmployeeATID = ?
+            """, (wdate, atid))
+            r = cur.fetchone()
+            if not r:
+                continue
+            key_title = f"{str(r[0])[:10]}_{str(r[1]).strip()}"
+            payload = {
+                "Title": key_title,
+                "NgayLamViec": str(r[0])[:10],
+                "MaChamCongATID": str(r[1]).strip(),
+                "HoVaTen": str(r[2] or "")[:250],
+                "PhongBan": str(r[3] or "")[:250],
+                "MaCa": str(r[4] or "HC_0745_1645")[:50],
+                "GioVaoDauTien": r[5].strftime("%Y-%m-%d %H:%M:%S") if r[5] else "",
+                "GioRaCuoiCung": r[6].strftime("%Y-%m-%d %H:%M:%S") if r[6] else "",
+                "TongSoLanQuet": int(r[7] or 1),
+                "SoPhutDiTre": int(r[8] or 0),
+                "TongGioLamViec": float(r[9] or 0.0),
+                "TrangThaiChamCong": str(r[10] or "PRESENT")[:50],
+            }
+            q_resp = requests.get(
+                f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items?$select=Id,Title&$filter=Title eq '{key_title}'",
+                headers=headers_read,
+                timeout=8
+            )
+            sp_items = q_resp.json().get("value", []) if q_resp.status_code == 200 else []
+            if sp_items:
+                requests.post(
+                    f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items({sp_items[0]['Id']})",
+                    headers={**headers_write, "X-HTTP-Method": "MERGE", "If-Match": "*"},
+                    json=payload,
+                    timeout=8
+                )
+            else:
+                requests.post(
+                    f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items",
+                    headers=headers_write,
+                    json=payload,
+                    timeout=8
+                )
+
+
+def push_door_audit_async(door_record: Dict[str, Any]) -> None:
+    """Pushes door unlock/lock audit log immediately to SharePoint List 'VMS SEAZEN - NHẬT KÝ ĐÓNG MỞ CỬA'."""
+    rec_copy = dict(door_record)
 
     def _worker():
         try:
@@ -977,35 +1241,108 @@ def push_live_scans_to_sharepoint_async(scans: List[Dict[str, Any]]) -> None:
             if not tok_info.get("ok"):
                 return
             sp_token = tok_info["sp_token"]
-            list_id = _SP_KNOWN_LIST_IDS["tbl_AttendanceLogs"]
+            list_id = _SP_KNOWN_LIST_IDS["tbl_DoorAuditLogs"]
             headers_write = _get_sp_write_headers(sp_token)
-
-            for sc in scans[:10]:
-                atid = str(sc.get("EmployeeATID") or "").strip()
-                if not atid:
-                    continue
-                payload = {
-                    "Title": atid[:250],
-                    "MaChamCongATID": atid[:250],
-                    "HoVaTen": str(sc.get("FullName") or "")[:250],
-                    "PhongBan": str(sc.get("Department") or "")[:250],
-                    "SerialThietBi": str(sc.get("SerialNumber") or sc.get("DeviceSerialNumber") or "")[:100],
-                    "TenThietBiCua": str(sc.get("DeviceName") or "")[:200],
-                    "ThoiGianQuet": str(sc.get("CheckTime") or ""),
-                    "PhuongThucXacThuc": str(sc.get("VerifyMode") or "FaceTemplate")[:100],
-                    "LaNhanVien": bool(sc.get("is_staff", True)),
-                    "NguonDongBo": str(sc.get("SyncSource") or "LIVE_REG_EVENT")[:100],
-                }
-                requests.post(
-                    f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items",
-                    headers=headers_write,
-                    json=payload,
-                    timeout=8
-                )
+            act = str(rec_copy.get("action") or "UNLOCK")
+            did = int(rec_copy.get("door_id") or 0)
+            ts = str(rec_copy.get("timestamp") or datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+            payload = {
+                "Title": f"{act}_D{did}_{ts}"[:250],
+                "MaCua": did,
+                "TenCua": str(rec_copy.get("door_name") or "")[:250],
+                "HanhDong": act[:100],
+                "SoGiayKichRole": int(rec_copy.get("duration_sec") or 0),
+                "NguoiThaoTac": str(rec_copy.get("operator") or "Quản trị viên")[:200],
+                "ThanhCong": bool(rec_copy.get("success", True)),
+                "ThoiGianThaoTac": ts[:100],
+            }
+            requests.post(
+                f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items",
+                headers=headers_write,
+                json=payload,
+                timeout=8
+            )
         except Exception as e:
-            logger.debug("push_live_scans_to_sharepoint_async warning: %s", e)
+            logger.debug("push_door_audit_async warning: %s", e)
 
     threading.Thread(target=_worker, daemon=True).start()
+
+
+def push_table_async(sql_table: str, max_rows: int = 200) -> None:
+    """Runs sync_table_to_sharepoint in a non-blocking daemon thread."""
+    def _worker():
+        try:
+            with _SP_SYNC_LOCK:
+                sync_table_to_sharepoint(sql_table, max_rows=max_rows)
+        except Exception as e:
+            logger.debug("push_table_async(%s) warning: %s", sql_table, e)
+
+    threading.Thread(target=_worker, daemon=True).start()
+
+
+def sync_all_active_lists(full_attendance_limit: int = 350, timekeeping_limit: int = 350) -> Dict[str, Any]:
+    """
+    Reconciles all 18 VMS SEAZEN SharePoint lists with SQL Server & local operational queues.
+    Used both for manual 1-click full sync and periodic 60s background reconciliation.
+    """
+    # Backfill door_actions.json into SQL tbl_DoorAuditLogs if needed before pushing
+    try:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        door_file = os.path.join(base_dir, "data", "door_actions.json")
+        if os.path.isfile(door_file) and db_mssql.is_mssql_active():
+            with open(door_file, "r", encoding="utf-8") as f:
+                door_rows = json.load(f)
+            for dr in door_rows[-100:]:
+                db_mssql.log_door_audit_db(
+                    door_id=int(dr.get("door_id") or 0),
+                    door_name=str(dr.get("door_name") or ""),
+                    action=str(dr.get("action") or "UNLOCK"),
+                    duration_sec=int(dr.get("duration_sec") or 1),
+                    operator=str(dr.get("operator") or "Quản trị viên"),
+                    success=bool(dr.get("success", True)),
+                    timestamp_str=str(dr.get("timestamp") or "")
+                )
+    except Exception as ex:
+        logger.debug("Door audit backfill warning: %s", ex)
+
+    order = [
+        ("tbl_Departments", 100),
+        ("tbl_Doors", 50),
+        ("tbl_Devices", 50),
+        ("tbl_Shifts", 50),
+        ("tbl_AccessTimezones", 50),
+        ("tbl_AccessGroups", 50),
+        ("tbl_DepartmentAccessGroups", 100),
+        ("tbl_Employees", 300),
+        ("tbl_EmployeeBiometrics", 300),
+        ("tbl_CustomerCards", 200),
+        ("tbl_Visitors", 200),
+        ("tbl_PreRegisteredGuests", 200),
+        ("tbl_Contractors", 200),
+        ("tbl_DailyTimekeeping", timekeeping_limit),
+        ("tbl_AttendanceLogs", full_attendance_limit),
+        ("tbl_DoorAuditLogs", 150),
+        ("tbl_DeviceCommands", 150),
+        ("tbl_ClockSyncAuditLogs", 100),
+    ]
+
+    summary = {}
+    with _SP_SYNC_LOCK:
+        for tbl, lim in order:
+            try:
+                res = sync_table_to_sharepoint(tbl, max_rows=lim)
+                summary[tbl] = {
+                    "ok": bool(res.get("success")),
+                    "rows": res.get("rows_processed", 0),
+                    "inserted": res.get("inserted", 0),
+                    "updated": res.get("updated", 0),
+                    "skipped": res.get("skipped", 0),
+                    "errors": res.get("errors", 0),
+                }
+            except Exception as ex:
+                summary[tbl] = {"ok": False, "error": str(ex)}
+
+    return {"success": True, "synced_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "tables": summary}
 
 
 def upload_biometric_attachment_to_sharepoint_async(

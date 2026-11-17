@@ -258,6 +258,55 @@ def _background_scan_collector():
 threading.Thread(target=_background_scan_collector, daemon=True, name="ZkHardwareHarvester").start()
 
 
+def _sharepoint_realtime_reconciler():
+    """
+    Continuous background reconciler for SharePoint Online (ONESEAZEN):
+    1. Waits 6s after server start and performs a full reconciliation across all 18 'VMS SEAZEN - ...' lists
+       so Employees (117), Biometrics (117), DailyTimekeeping, AttendanceLogs, DoorAuditLogs, and Visitors are 100% populated.
+    2. Every 60 seconds, incrementally reconciles live tables (AttendanceLogs, DailyTimekeeping, Visitors,
+       DoorAuditLogs, DeviceCommands, Devices) so nothing can ever fall behind even after offline drops.
+    """
+    time.sleep(6)
+    try:
+        import sharepoint_vms_sync
+        tok = sharepoint_vms_sync.get_sharepoint_tokens()
+        if tok.get("ok"):
+            logger.info("[SharePoint Reconciler] Bắt đầu đồng bộ tổng thể 18 danh sách VMS SEAZEN lên ONESEAZEN (%s)...", tok.get("account"))
+            sharepoint_vms_sync.sync_all_active_lists(full_attendance_limit=350, timekeeping_limit=400)
+            logger.info("[SharePoint Reconciler] Đã hoàn tất đồng bộ tổng thể 18 danh sách lên SharePoint!")
+        else:
+            logger.warning("[SharePoint Reconciler] Chưa có MSAL token, sẽ thử lại sau: %s", tok.get("error"))
+    except Exception as ex:
+        logger.warning("[SharePoint Reconciler] Lỗi đồng bộ ban đầu: %s", ex)
+
+    live_tables = [
+        ("tbl_AttendanceLogs", 200),
+        ("tbl_DailyTimekeeping", 250),
+        ("tbl_Visitors", 100),
+        ("tbl_DoorAuditLogs", 100),
+        ("tbl_DeviceCommands", 100),
+        ("tbl_Devices", 20),
+    ]
+    while True:
+        time.sleep(60)
+        try:
+            import sharepoint_vms_sync
+            tok = sharepoint_vms_sync.get_sharepoint_tokens()
+            if not tok.get("ok"):
+                continue
+            with sharepoint_vms_sync._SP_SYNC_LOCK:
+                for tbl, lim in live_tables:
+                    try:
+                        sharepoint_vms_sync.sync_table_to_sharepoint(tbl, max_rows=lim)
+                    except Exception:
+                        pass
+        except Exception as e:
+            logger.debug("[SharePoint Reconciler] Cycle warning: %s", e)
+
+
+threading.Thread(target=_sharepoint_realtime_reconciler, daemon=True, name="SharePointRealtimeReconciler").start()
+
+
 # ---------------- Built-in ZKTeco ADMS Push Receiver (/iclock/*) ----------------
 
 @app.route("/iclock/cdata", methods=["GET", "POST"])
@@ -1506,6 +1555,13 @@ def api_clock_sync_ntp():
         result_msg="Đã đồng bộ giờ chuẩn NTP Việt Nam (UTC+7) qua xác nhận 2 lớp.",
         operator=operator
     )
+    try:
+        import sharepoint_vms_sync
+        sharepoint_vms_sync.push_table_async("tbl_ClockSyncAuditLogs", 50)
+        sharepoint_vms_sync.push_table_async("tbl_DeviceCommands", 50)
+        sharepoint_vms_sync.push_table_async("tbl_Devices", 20)
+    except Exception:
+        pass
     return jsonify({"success": True, "sync_result": res, "audit": audit})
 
 
@@ -1587,11 +1643,8 @@ def api_upsert_employee():
     if res.get("success"):
         try:
             import sharepoint_vms_sync
-            threading.Thread(
-                target=sharepoint_vms_sync.sync_table_to_sharepoint,
-                args=("tbl_Employees", 200),
-                daemon=True
-            ).start()
+            sharepoint_vms_sync.push_table_async("tbl_Employees", 300)
+            sharepoint_vms_sync.push_table_async("tbl_EmployeeBiometrics", 300)
             if atid and (data.get("FacePhotoBase64") or data.get("FaceTemplateBIODATA")):
                 sharepoint_vms_sync.upload_biometric_attachment_to_sharepoint_async(
                     employee_atid=atid,
@@ -1624,6 +1677,11 @@ def api_upsert_employee():
             result_msg=hw_res.get("message") or str(hw_res),
             operator=operator
         )
+        try:
+            import sharepoint_vms_sync
+            sharepoint_vms_sync.push_table_async("tbl_DeviceCommands", 100)
+        except Exception:
+            pass
         res["hardware_sync"] = hw_res
     if res.get("success"):
         try:
@@ -1644,6 +1702,8 @@ def api_toggle_employee_status():
     if res.get("success"):
         try:
             zk_client._load_person_cache()
+            import sharepoint_vms_sync
+            sharepoint_vms_sync.push_table_async("tbl_Employees", 300)
         except Exception:
             pass
     return jsonify(res), (200 if res.get("success") else 400)
@@ -1887,6 +1947,12 @@ def api_biometrics_push_hardware():
             result_msg=hw_res.get("message") or "",
             operator=u["full_name"] if u else "Quản trị viên"
         )
+        try:
+            import sharepoint_vms_sync
+            sharepoint_vms_sync.push_table_async("tbl_EmployeeBiometrics", 300)
+            sharepoint_vms_sync.push_table_async("tbl_DeviceCommands", 100)
+        except Exception:
+            pass
     return jsonify(hw_res), (200 if hw_res.get("success") else 500)
 
 
@@ -1941,6 +2007,12 @@ def api_upsert_pre_register():
     import db_mssql
     data = request.get_json(silent=True) or {}
     res = db_mssql.upsert_pre_registered_guest_db(data)
+    if res.get("success"):
+        try:
+            import sharepoint_vms_sync
+            sharepoint_vms_sync.push_table_async("tbl_PreRegisteredGuests", 200)
+        except Exception:
+            pass
     return jsonify(res), (200 if res.get("success") else 400)
 
 
@@ -1950,6 +2022,12 @@ def api_upsert_contractor():
     import db_mssql
     data = request.get_json(silent=True) or {}
     res = db_mssql.upsert_contractor_db(data)
+    if res.get("success"):
+        try:
+            import sharepoint_vms_sync
+            sharepoint_vms_sync.push_table_async("tbl_Contractors", 200)
+        except Exception:
+            pass
     return jsonify(res), (200 if res.get("success") else 400)
 
 
@@ -1959,6 +2037,12 @@ def api_upsert_timezone():
     import db_mssql
     data = request.get_json(silent=True) or {}
     res = db_mssql.upsert_access_timezone_db(data)
+    if res.get("success"):
+        try:
+            import sharepoint_vms_sync
+            sharepoint_vms_sync.push_table_async("tbl_AccessTimezones", 50)
+        except Exception:
+            pass
     return jsonify(res), (200 if res.get("success") else 400)
 
 
@@ -1968,6 +2052,12 @@ def api_upsert_access_group():
     import db_mssql
     data = request.get_json(silent=True) or {}
     res = db_mssql.upsert_access_group_db(data)
+    if res.get("success"):
+        try:
+            import sharepoint_vms_sync
+            sharepoint_vms_sync.push_table_async("tbl_AccessGroups", 50)
+        except Exception:
+            pass
     return jsonify(res), (200 if res.get("success") else 400)
 
 
@@ -2843,6 +2933,16 @@ def api_sharepoint_sync_table():
     sql_table = str(data.get("sql_table") or "tbl_Departments").strip()
     max_rows = int(data.get("max_rows") or 200)
     return jsonify(sharepoint_vms_sync.sync_table_to_sharepoint(sql_table, max_rows=max_rows))
+
+
+@app.route("/api/sharepoint/sync_all", methods=["POST"])
+@require_role(["admin"])
+def api_sharepoint_sync_all():
+    import sharepoint_vms_sync
+    data = request.get_json(silent=True) or {}
+    att_lim = int(data.get("attendance_limit") or 350)
+    tk_lim = int(data.get("timekeeping_limit") or 400)
+    return jsonify(sharepoint_vms_sync.sync_all_active_lists(full_attendance_limit=att_lim, timekeeping_limit=tk_lim))
 
 
 # ---------------- Application Entry Point ----------------

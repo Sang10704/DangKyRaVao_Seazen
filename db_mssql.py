@@ -814,9 +814,31 @@ def get_table_rows(table_name: str, limit: int = 200) -> List[Dict[str, Any]]:
         return []
     try:
         conn_str = get_connection_string()
-        with pyodbc.connect(conn_str, timeout=6) as conn:
+        with pyodbc.connect(conn_str, timeout=8) as conn:
             cur = conn.cursor()
-            cur.execute(f"SELECT TOP ({int(limit)}) * FROM [{table_name}] ORDER BY 1 DESC")
+            if table_name == "tbl_Employees":
+                cur.execute(f"""
+                    SELECT TOP ({int(limit)}) *
+                    FROM tbl_Employees
+                    WHERE IsStaff = 1 AND IsActive = 1
+                      AND DepartmentName IS NOT NULL AND DepartmentName <> '' AND DepartmentName <> N'Khác'
+                    ORDER BY FullName ASC
+                """)
+            elif table_name == "tbl_EmployeeBiometrics":
+                cur.execute(f"""
+                    SELECT TOP ({int(limit)}) b.*
+                    FROM tbl_EmployeeBiometrics b
+                    INNER JOIN tbl_Employees e ON b.EmployeeATID = e.EmployeeATID
+                    WHERE e.IsStaff = 1 AND e.IsActive = 1
+                      AND e.DepartmentName IS NOT NULL AND e.DepartmentName <> '' AND e.DepartmentName <> N'Khác'
+                    ORDER BY b.UpdatedAt DESC, b.BiometricID DESC
+                """)
+            elif table_name == "tbl_DailyTimekeeping":
+                cur.execute(f"SELECT TOP ({int(limit)}) * FROM tbl_DailyTimekeeping ORDER BY WorkDate DESC, UpdatedAt DESC")
+            elif table_name == "tbl_AttendanceLogs":
+                cur.execute(f"SELECT TOP ({int(limit)}) * FROM tbl_AttendanceLogs ORDER BY CheckTime DESC, LogID DESC")
+            else:
+                cur.execute(f"SELECT TOP ({int(limit)}) * FROM [{table_name}] ORDER BY 1 DESC")
             cols = [c[0] for c in cur.description]
             return [_serialize_row(cols, r) for r in cur.fetchall()]
     except Exception as e:
@@ -1300,6 +1322,43 @@ def log_device_command_db(cmd_code: str, target_serial: str, target_name: str, p
             conn.commit()
     except Exception as e:
         logger.debug("log_device_command_db warning: %s", e)
+
+
+def log_door_audit_db(
+    door_id: int,
+    door_name: str,
+    action: str,
+    duration_sec: int,
+    operator: str,
+    success: bool = True,
+    timestamp_str: Optional[str] = None
+) -> None:
+    if not is_mssql_active():
+        return
+    try:
+        try:
+            created_dt = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S") if timestamp_str else datetime.now()
+        except Exception:
+            created_dt = datetime.now()
+        with pyodbc.connect(get_connection_string(), timeout=4) as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                IF NOT EXISTS (
+                    SELECT 1 FROM tbl_DoorAuditLogs
+                    WHERE DoorID = ? AND Action = ? AND CreatedAt = ?
+                )
+                BEGIN
+                    INSERT INTO tbl_DoorAuditLogs (DoorID, DoorName, Action, DurationSec, Operator, Success, CreatedAt)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                END
+            """, (
+                int(door_id or 0), str(action or "UNLOCK"), created_dt,
+                int(door_id or 0), str(door_name or ""), str(action or "UNLOCK"),
+                int(duration_sec or 0), str(operator or "Quản trị viên"), 1 if success else 0, created_dt
+            ))
+            conn.commit()
+    except Exception as e:
+        logger.debug("log_door_audit_db warning: %s", e)
 
 
 def log_clock_sync_audit_db(audit_type: str, audit_data: Dict[str, Any], confirm_code: str, operator: str, status: str) -> None:
