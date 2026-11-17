@@ -2130,10 +2130,11 @@ def api_timekeeping_export_excel_bcc():
     One row per employee per day.
     Weekend rule:
       - First Saturday + Last Saturday of the range's month = working day (included normally)
-      - All other Saturdays + all Sundays = "Ngày nghỉ tuần"
+      - All other Saturdays + all Sundays = rest day ("Ngày nghỉ tuần" if no scan, or "Làm ngày nghỉ Xh" if scanned)
     """
     import io
     import calendar as _calendar
+    from datetime import date as _dt_date, time as _dt_time
     from flask import send_file
     import openpyxl
     from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -2151,7 +2152,6 @@ def api_timekeeping_export_excel_bcc():
 
     # --- Weekend helper: first & last Saturday of given year/month ---
     def _get_first_last_sat(year: int, month: int):
-        from datetime import date as _dt_date
         last_day = _calendar.monthrange(year, month)[1]
         sats = [
             d for d in range(1, last_day + 1)
@@ -2161,14 +2161,9 @@ def api_timekeeping_export_excel_bcc():
             return set()
         return {sats[0], sats[-1]}
 
-    # Pre-compute for all year/month combos that appear in days
     _sat_cache: dict = {}
-    def _is_working_saturday(d_iso: str) -> bool:
-        from datetime import date as _date
-        try:
-            dt = _date.fromisoformat(d_iso)
-        except Exception:
-            return False
+
+    def _is_working_saturday(dt: _dt_date) -> bool:
         if dt.weekday() != 5:
             return False
         key = (dt.year, dt.month)
@@ -2176,7 +2171,14 @@ def api_timekeeping_export_excel_bcc():
             _sat_cache[key] = _get_first_last_sat(dt.year, dt.month)
         return dt.day in _sat_cache[key]
 
-    # Day-of-week labels (Monday=0)
+    def _parse_hhmm(val: str):
+        if not val or val == "---":
+            return None
+        try:
+            return _dt_time(int(val[:2]), int(val[3:5]))
+        except Exception:
+            return val
+
     _thu_labels = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "Chủ Nhật"]
 
     # --- Style setup ---
@@ -2203,7 +2205,6 @@ def api_timekeeping_export_excel_bcc():
     ws.cell(1, 1, f"BẢNG CHẤM CÔNG SZ-EXPERT – {matrix['from_date']} đến {matrix['to_date']} – {dept_label}").font = Font(name="Arial", size=13, bold=True)
     ws.row_dimensions[1].height = 20
 
-    # Header row
     headers = ["Ngày", "Thứ", "Số hiệu", "Họ và tên",
                "Thời gian sớm nhất", "Thời gian trễ nhất", "Giờ làm việc", "Ghi chú"]
     for ci, h in enumerate(headers, 1):
@@ -2214,171 +2215,142 @@ def api_timekeeping_export_excel_bcc():
         c.border = brd
     ws.row_dimensions[3].height = 22
 
-    # Column widths
     col_widths = [13, 10, 12, 26, 20, 20, 16, 30]
     for ci, w in enumerate(col_widths, 1):
         ws.column_dimensions[get_column_letter(ci)].width = w
 
-    # Build lookup: atid -> employee row
-    emp_lookup = {e["employee_atid"]: e for e in employees}
-
     cur_row = 4
     for emp in employees:
+        emp_atid_raw = emp["employee_atid"]
+        try:
+            emp_atid_val = int(emp_atid_raw)
+        except Exception:
+            emp_atid_val = emp_atid_raw
+        emp_days = emp.get("days", {})
+
         for dm in days:
             d_iso = dm["date"]
-            wd = dm["date"]
-            # Parse weekday from dm
             try:
-                from datetime import date as _date2
-                _dt = _date2.fromisoformat(d_iso)
+                _dt = _dt_date.fromisoformat(d_iso)
                 wd_idx = _dt.weekday()  # 0=Mon..6=Sun
             except Exception:
+                _dt = None
                 wd_idx = 0
 
             thu_label = _thu_labels[wd_idx]
             is_sunday = wd_idx == 6
             is_saturday = wd_idx == 5
-            is_rest_day = is_sunday or (is_saturday and not _is_working_saturday(d_iso))
+            is_work_sat = bool(_dt and is_saturday and _is_working_saturday(_dt))
+            is_rest_day = is_sunday or (is_saturday and not is_work_sat)
 
-            cell_data = emp.get("days", {}).get(d_iso)
+            cell_data = emp_days.get(d_iso)
+            has_scan = bool(cell_data)
 
             # Col A: Date
             c_date = ws.cell(cur_row, 1)
-            try:
-                from datetime import date as _date3
-                c_date.value = _date3.fromisoformat(d_iso)
+            if _dt is not None:
+                c_date.value = _dt
                 c_date.number_format = "DD/MM/YYYY"
-            except Exception:
+            else:
                 c_date.value = d_iso
-            c_date.font = fnt_norm
+            c_date.font = fnt_rest if (is_rest_day and not has_scan) else fnt_norm
             c_date.alignment = Alignment(horizontal="center", vertical="center")
             c_date.border = brd
 
             # Col B: Thứ
             c_thu = ws.cell(cur_row, 2, thu_label)
-            c_thu.font = fnt_rest if is_rest_day else fnt_norm
+            c_thu.font = fnt_rest if (is_rest_day and not has_scan) else fnt_norm
             c_thu.alignment = Alignment(horizontal="center", vertical="center")
             c_thu.border = brd
 
             # Col C: Số hiệu (ATID)
-            c_atid = ws.cell(cur_row, 3)
-            try:
-                c_atid.value = int(emp["employee_atid"])
-            except Exception:
-                c_atid.value = emp["employee_atid"]
-            c_atid.font = fnt_norm
+            c_atid = ws.cell(cur_row, 3, emp_atid_val)
+            c_atid.font = fnt_rest if (is_rest_day and not has_scan) else fnt_norm
             c_atid.alignment = Alignment(horizontal="center", vertical="center")
             c_atid.border = brd
 
             # Col D: Họ và tên
             c_name = ws.cell(cur_row, 4, emp["full_name"])
-            c_name.font = fnt_emp
+            c_name.font = fnt_rest if (is_rest_day and not has_scan) else fnt_emp
             c_name.alignment = Alignment(horizontal="left", vertical="center")
             c_name.border = brd
 
-            fill_row = rest_fill if is_rest_day else (work_sat_fill if is_saturday else None)
+            c_in = ws.cell(cur_row, 5)
+            c_out = ws.cell(cur_row, 6)
+            c_hrs = ws.cell(cur_row, 7)
+            c_note = ws.cell(cur_row, 8)
 
-            if is_rest_day:
-                # Rest day: blank times, "Ngày nghỉ tuần" in Ghi chú
-                for ci in range(1, 9):
-                    _c = ws.cell(cur_row, ci)
-                    _c.fill = rest_fill
-                    _c.border = brd
-                    if _c.font and _c.font.color:
-                        pass  # keep existing font set above
-                # Override fonts for rest-day rows
-                ws.cell(cur_row, 1).font = fnt_rest
-                ws.cell(cur_row, 2).font = fnt_rest
-                ws.cell(cur_row, 3).font = fnt_rest
-                ws.cell(cur_row, 4).font = fnt_rest
+            c_in.alignment = Alignment(horizontal="center", vertical="center")
+            c_out.alignment = Alignment(horizontal="center", vertical="center")
+            c_hrs.alignment = Alignment(horizontal="center", vertical="center")
+            c_note.alignment = Alignment(horizontal="left", vertical="center")
+            c_in.border = brd
+            c_out.border = brd
+            c_hrs.border = brd
+            c_note.border = brd
 
-                ws.cell(cur_row, 5).value = None
-                ws.cell(cur_row, 5).font = fnt_rest
-                ws.cell(cur_row, 5).border = brd
-                ws.cell(cur_row, 5).fill = rest_fill
+            fill_row = rest_fill if is_rest_day else (work_sat_fill if is_work_sat else None)
 
-                ws.cell(cur_row, 6).value = None
-                ws.cell(cur_row, 6).font = fnt_rest
-                ws.cell(cur_row, 6).border = brd
-                ws.cell(cur_row, 6).fill = rest_fill
-
-                ws.cell(cur_row, 7, "0.0").font = fnt_rest
-                ws.cell(cur_row, 7).border = brd
-                ws.cell(cur_row, 7).fill = rest_fill
-                ws.cell(cur_row, 7).alignment = Alignment(horizontal="center", vertical="center")
-
-                c_note = ws.cell(cur_row, 8, "Ngày nghỉ tuần")
+            if is_rest_day and not has_scan:
+                c_in.value = None
+                c_in.font = fnt_rest
+                c_out.value = None
+                c_out.font = fnt_rest
+                c_hrs.value = 0.0
+                c_hrs.number_format = "0.0"
+                c_hrs.font = fnt_rest
+                c_note.value = "Ngày nghỉ tuần"
                 c_note.font = fnt_note
-                c_note.fill = rest_fill
-                c_note.border = brd
-                c_note.alignment = Alignment(horizontal="left", vertical="center")
-            else:
-                # Working day
+                for ci in range(1, 9):
+                    ws.cell(cur_row, ci).fill = rest_fill
+            elif has_scan:
                 if fill_row:
                     for ci in range(1, 9):
                         ws.cell(cur_row, ci).fill = fill_row
 
-                if cell_data:
-                    # Col E: Thời gian sớm nhất (First In)
-                    in_t = cell_data.get("in_time", "")
-                    out_t = cell_data.get("out_time", "")
-                    hours_val = cell_data.get("hours", 0.0)
+                in_parsed = _parse_hhmm(cell_data.get("in_time", ""))
+                out_parsed = _parse_hhmm(cell_data.get("out_time", ""))
+                hours_val = float(cell_data.get("hours") or 0.0)
+                has_out = bool(cell_data.get("has_out"))
 
-                    c_in = ws.cell(cur_row, 5)
-                    if in_t and in_t != "---":
-                        try:
-                            from datetime import time as _time
-                            h, m = int(in_t[:2]), int(in_t[3:5])
-                            c_in.value = _time(h, m)
-                            c_in.number_format = "HH:MM"
-                        except Exception:
-                            c_in.value = in_t
-                    c_in.font = fnt_time
-                    c_in.alignment = Alignment(horizontal="center", vertical="center")
-                    c_in.border = brd
+                c_in.value = in_parsed
+                if isinstance(in_parsed, _dt_time):
+                    c_in.number_format = "HH:MM"
+                c_in.font = fnt_time
 
-                    c_out = ws.cell(cur_row, 6)
-                    if out_t and out_t != "---":
-                        try:
-                            from datetime import time as _time2
-                            h2, m2 = int(out_t[:2]), int(out_t[3:5])
-                            c_out.value = _time2(h2, m2)
-                            c_out.number_format = "HH:MM"
-                        except Exception:
-                            c_out.value = out_t
-                    c_out.font = fnt_time
-                    c_out.alignment = Alignment(horizontal="center", vertical="center")
-                    c_out.border = brd
+                c_out.value = out_parsed
+                if isinstance(out_parsed, _dt_time):
+                    c_out.number_format = "HH:MM"
+                c_out.font = fnt_time
 
-                    # Col G: Giờ làm việc (numeric hours)
-                    c_hrs = ws.cell(cur_row, 7)
-                    c_hrs.value = hours_val if hours_val > 0 else "0.0"
-                    c_hrs.font = fnt_emp
-                    c_hrs.alignment = Alignment(horizontal="center", vertical="center")
-                    c_hrs.border = brd
+                c_hrs.value = round(hours_val, 1)
+                c_hrs.number_format = "0.0"
+                c_hrs.font = fnt_emp
 
-                    # Col H: Ghi chú (note if overtime on rest day, or early/late)
-                    note_text = ""
-                    if hours_val > 0 and not cell_data.get("has_out"):
-                        note_text = "Thiếu giờ ra"
-                    c_note2 = ws.cell(cur_row, 8, note_text)
-                    c_note2.font = fnt_note if note_text else fnt_norm
-                    c_note2.fill = note_fill if note_text else (fill_row or PatternFill())
-                    c_note2.alignment = Alignment(horizontal="left", vertical="center")
-                    c_note2.border = brd
+                if is_rest_day:
+                    note_text = f"Làm ngày nghỉ {hours_val:.1f}h" if has_out else "Làm ngày nghỉ · Thiếu giờ ra"
+                elif not has_out:
+                    note_text = "Thiếu giờ ra"
                 else:
-                    # Present in date range but no scan this day
-                    ws.cell(cur_row, 5).value = None
-                    ws.cell(cur_row, 5).border = brd
-                    ws.cell(cur_row, 5).alignment = Alignment(horizontal="center", vertical="center")
-                    ws.cell(cur_row, 6).value = None
-                    ws.cell(cur_row, 6).border = brd
-                    ws.cell(cur_row, 6).alignment = Alignment(horizontal="center", vertical="center")
-                    ws.cell(cur_row, 7, "0.0").font = fnt_norm
-                    ws.cell(cur_row, 7).border = brd
-                    ws.cell(cur_row, 7).alignment = Alignment(horizontal="center", vertical="center")
-                    ws.cell(cur_row, 8).value = None
-                    ws.cell(cur_row, 8).border = brd
+                    note_text = ""
+
+                c_note.value = note_text or None
+                c_note.font = fnt_note if note_text else fnt_norm
+                if note_text:
+                    c_note.fill = note_fill
+            else:
+                if fill_row:
+                    for ci in range(1, 9):
+                        ws.cell(cur_row, ci).fill = fill_row
+                c_in.value = None
+                c_in.font = fnt_norm
+                c_out.value = None
+                c_out.font = fnt_norm
+                c_hrs.value = 0.0
+                c_hrs.number_format = "0.0"
+                c_hrs.font = fnt_norm
+                c_note.value = None
+                c_note.font = fnt_norm
 
             ws.row_dimensions[cur_row].height = 16
             cur_row += 1
