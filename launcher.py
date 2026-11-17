@@ -62,20 +62,27 @@ def is_port_open(host: str, port: int) -> bool:
 
 
 def free_stale_port(port: int) -> None:
-    """Terminates any previous Python process holding port 6868 so this console owns the server."""
-    if sys.platform != "win32" or not is_port_open("127.0.0.1", port):
+    """Terminates any previous Python process holding port 6868 using fast netstat + taskkill."""
+    if sys.platform != "win32":
         return
-    try:
-        my_pid = os.getpid()
-        cmd = (
-            f"Get-NetTCPConnection -LocalPort {port} -State Listen -ErrorAction SilentlyContinue | "
-            f"Where-Object {{ $_.OwningProcess -ne {my_pid} }} | "
-            f"ForEach-Object {{ Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }}"
-        )
-        subprocess.run(["powershell", "-NoProfile", "-Command", cmd], timeout=5, capture_output=True)
-        time.sleep(0.8)
-    except Exception:
-        pass
+    my_pid = os.getpid()
+    for _ in range(3):
+        if not is_port_open("127.0.0.1", port):
+            return
+        try:
+            out = subprocess.check_output(["netstat", "-ano", "-p", "TCP"], text=True, timeout=4)
+            pids_to_kill = set()
+            for line in out.splitlines():
+                parts = line.split()
+                if len(parts) >= 5 and f":{port}" in parts[1] and parts[3].upper() == "LISTENING":
+                    pid = int(parts[4])
+                    if pid != my_pid and pid > 0:
+                        pids_to_kill.add(pid)
+            for pid in pids_to_kill:
+                subprocess.run(["taskkill", "/F", "/PID", str(pid)], timeout=4, capture_output=True)
+            time.sleep(0.5)
+        except Exception:
+            break
 
 
 def launch_webview_app_window(url: str) -> bool:
