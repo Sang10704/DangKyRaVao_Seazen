@@ -232,6 +232,39 @@ export default function LoginPage({ onLoginSuccess, clockAudit }) {
             >
               {loading ? 'Đang xác thực...' : 'Đăng nhập'}
             </button>
+
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => {
+                setCredential('Letan');
+                setPassword('Letan@1516');
+                performLogin('Letan', 'Letan@1516');
+              }}
+              style={{
+                width: '100%',
+                height: 46,
+                borderRadius: 999,
+                border: '1.5px solid var(--gold)',
+                background: 'var(--gold-soft)',
+                color: 'var(--jet)',
+                fontSize: 13.5,
+                fontWeight: 700,
+                cursor: loading ? 'not-allowed' : 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                transition: 'all 0.18s ease',
+              }}
+            >
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <polyline points="16 11 18 13 22 9" />
+              </svg>
+              <span>Đăng nhập nhanh Quầy Lễ tân</span>
+            </button>
           </form>
 
           <div className="sz-login-divider">hạ tầng kết nối trực tiếp</div>

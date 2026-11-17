@@ -493,5 +493,30 @@
     "duration_str": "51 phút",
     "status": "COMPLETED",
     "operator": "Bàn Tiếp Đón Lễ Tân (Letan)"
+  },
+  {
+    "id": "56253",
+    "epad_atid": "56253",
+    "sp_item_id": null,
+    "cccd_number": "049204013662",
+    "full_name": "Nguyễn Huỳnh Văn Sang",
+    "birth_date": "10/07/2004",
+    "birth_year": "2004",
+    "phone": "0901234567",
+    "company": "SeaZen Test",
+    "host_person": "Kỹ Thuật",
+    "host_phone": "0987654322",
+    "department": "SeaZen Tech",
+    "access_area": "Sảnh Chính (Cổng Làn Vào & Làn Ra)",
+    "note": "",
+    "purpose": "",
+    "vehicle_number": "",
+    "card_number": "7959898",
+    "checkin_time": "2026-11-17 11:54:00",
+    "expected_checkout_time": "2026-11-17 16:45:00",
+    "checkout_time": "2026-11-17 11:57:07",
+    "duration_str": "3 phút",
+    "status": "COMPLETED",
+    "operator": "Bàn Tiếp Đón Lễ Tân (Letan)"
   }
 ]
