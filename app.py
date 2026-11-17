@@ -2151,10 +2151,11 @@ def api_timekeeping_export_excel_bcc():
 
     # --- Weekend helper: first & last Saturday of given year/month ---
     def _get_first_last_sat(year: int, month: int):
+        from datetime import date as _dt_date
         last_day = _calendar.monthrange(year, month)[1]
         sats = [
             d for d in range(1, last_day + 1)
-            if _calendar.date(year, month, d).weekday() == 5
+            if _dt_date(year, month, d).weekday() == 5
         ]
         if not sats:
             return set()
