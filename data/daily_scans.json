@@ -1,5 +1,21 @@
 [
   {
+    "EmployeeATID": "14043784",
+    "FullName": "Test",
+    "DepartmentName": "HC QTNS",
+    "Department": "HC QTNS",
+    "DeviceName": "Làn RA trái",
+    "SerialNumber": "1313244800122",
+    "DoorName": "Cửa Làn RA",
+    "Direction": "OUT",
+    "CardNumber": "14043784",
+    "VerifyMode": 1,
+    "Time": "2026-11-17 11:54:54",
+    "CheckTime": "2026-11-17T11:54:54",
+    "is_staff": false,
+    "direction": "OUT"
+  },
+  {
     "EmployeeATID": "00014824",
     "FullName": "Đỗ Nguyễn Hạnh Dung",
     "SerialNumber": "1313244800129",

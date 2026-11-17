@@ -98,9 +98,17 @@ export default function SidebarShell({
     <aside className="tino-sidebar">
       <div>
         <div className="tino-logo-wrap">
-          <div className="tino-diamond-logo">
-            <span>SZ.</span>
-          </div>
+          <img
+            src="/img/app_icon.png"
+            alt="SeaZen Portal"
+            style={{
+              width: 42,
+              height: 42,
+              objectFit: 'contain',
+              flexShrink: 0,
+              filter: 'drop-shadow(0 4px 10px rgba(17, 17, 17, 0.14))',
+            }}
+          />
           <div>
             <div className="tino-brand-title">SeaZen VMS</div>
             <div className="tino-brand-sub">Kiểm soát Ra vào</div>
