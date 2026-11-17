@@ -536,6 +536,38 @@ class ZkDirectClient:
 
     # ---------------- Visitor RFID Card Provisioning ----------------
 
+    @staticmethod
+    def _set_access_user_tz(
+        conn,
+        uid: int,
+        name: str,
+        user_id: str,
+        card: int = 0,
+        privilege: int = 0,
+        password: str = "",
+        tz1: int = 1
+    ) -> None:
+        """
+        Writes a 72-byte ZKTeco SenseFace 4A Access Control user record via CMD_USER_WRQ
+        with explicit Access Control TimeZone bytes:
+          bytes[39:48] = <BHHHH (AccGroup=1, UseGroupTZ=0, TZ1=tz1, TZ2=0, TZ3=0)
+                        -> 01 00 00 01 00 00 00 00 00 (when tz1=1)
+        Why NOT conn.set_user()?
+          Open-source pyzk's conn.set_user() packs 'HB8s24s4sx7sx24s', which zeroes bytes[40:48]
+          (setting TZ1=0 -> 01 00 00 00 00 00 00 00 00). On SenseFace 4A (DeviceType=acc),
+          TZ1=0 means TimeZone #0 (00:00-00:00), causing 'Chu kỳ thời gian không hợp lệ'!
+        """
+        pw_bytes = str(password or "").encode("utf-8", errors="ignore")[:8].ljust(8, b"\x00")
+        name_bytes = str(name or "").encode("utf-8", errors="ignore")[:24].ljust(24, b"\x00")
+        card_bytes = struct.pack("<I", int(card or 0))
+        acc_tz_bytes = struct.pack("<BHHHH", 1, 0, int(tz1), 0, 0)
+        userid_bytes = str(user_id or uid).encode("utf-8", errors="ignore")[:24].ljust(24, b"\x00")
+        pkt = struct.pack("<HB8s24s4s9s24s", int(uid), int(privilege), pw_bytes, name_bytes, card_bytes, acc_tz_bytes, userid_bytes)
+        res = conn._ZK__send_command(const.CMD_USER_WRQ, pkt, 1024)
+        if not res.get("status"):
+            raise RuntimeError(f"CMD_USER_WRQ failed (code={res.get('code')})")
+        conn.refresh_data()
+
     def enroll_visitor_card(self, visitor_data: Dict[str, Any]) -> Dict[str, Any]:
         """Alias for register_customer_epad."""
         return self.register_customer_epad(visitor_data)
@@ -614,8 +646,8 @@ class ZkDirectClient:
                             target_slot = eu
                         elif eu_id_str == guest_user_id:
                             fallback_slot = eu
-                    elif card_int and (eu.card == card_int or eu_id_str.startswith("803")):
-                        # Delete any 80xxxxxx record holding the same card (expired/missing userauthorize causes "Chu kỳ thời gian không hợp lệ")
+                    elif card_int and (eu.card == card_int or eu_id_str.startswith("803") or eu_id_str.startswith("809")):
+                        # Delete any 80xxxxxx record holding the same card so it never shadows the 562xx slot
                         conn.delete_user(uid=eu.uid, user_id=eu.user_id)
                         logger.info("[ZK DIRECT] Đã xóa bản ghi 80xxxxxx cũ (uid=%s, user_id=%s) trùng thẻ %s trên %s",
                                     eu.uid, eu.user_id, card_num_str, name)
@@ -629,15 +661,17 @@ class ZkDirectClient:
                     slot_uid = 1720 + slot_index
                     slot_user_id = guest_user_id
 
-                # 2. Bind card_int to the pre-authorized 562xx slot (preserving its permanent 24/7 userauthorize!)
-                conn.set_user(
+                # 2. Write exact 72-byte Access Control struct with TZ1=1 (01 00 00 01 00 00 00 00 00)
+                # onto the pre-authorized 562xx slot (satisfies BOTH FCT_USER.TZ1=1 and Linux userauthorize!)
+                self._set_access_user_tz(
+                    conn=conn,
                     uid=slot_uid,
                     name=f"Khach {full_name}"[:24],
+                    user_id=slot_user_id,
+                    card=card_int,
                     privilege=0,
                     password="",
-                    group_id="",
-                    user_id=slot_user_id,
-                    card=card_int
+                    tz1=1
                 )
                 conn.disconnect()
                 success_count += 1
@@ -715,18 +749,19 @@ class ZkDirectClient:
                         u_id_str = str(u.user_id).strip()
                         if u_id_str.startswith("562"):
                             # Pre-authorized 562xx slot: NEVER delete the user (preserves permanent userauthorize),
-                            # just unbind card=0 so the returned card cannot open the gate until re-issued!
-                            conn.set_user(
+                            # unbind card=0 while keeping TZ1=1 (01 00 00 01 00 00 00 00 00) intact!
+                            self._set_access_user_tz(
+                                conn=conn,
                                 uid=int(u.uid),
                                 name=f"Khach {u_id_str[-2:]}",
+                                user_id=u_id_str,
+                                card=0,
                                 privilege=0,
                                 password="",
-                                group_id="",
-                                user_id=u_id_str,
-                                card=0
+                                tz1=1
                             )
                             deleted_count += 1
-                            logger.info("[ZK DIRECT] Đã giải phóng thẻ %s khỏi khe phân quyền %s trên %s", clean_card, u_id_str, name)
+                            logger.info("[ZK DIRECT] Đã giải phóng thẻ %s khỏi khe phân quyền %s (giữ TZ1=1) trên %s", clean_card, u_id_str, name)
                         else:
                             conn.delete_user(uid=u.uid, user_id=u.user_id)
                             deleted_count += 1

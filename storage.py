@@ -399,20 +399,28 @@ class StorageManager:
             if len(clean_dob) == 8:
                 birth_year = clean_dob[4:]
 
-        cin_d = str(visitor_data.get("checkin_date", "")).strip() or today_str
-        cin_t = str(visitor_data.get("checkin_time", "")).strip() or time_str[:5]
-        if len(cin_t) == 5:
-            cin_t += ":00"
-        checkin_full = f"{cin_d} {cin_t}".strip()
+        cin_d = str(visitor_data.get("checkin_date") or visitor_data.get("from_date") or "").strip() or today_str
+        cin_t = str(visitor_data.get("checkin_time") or visitor_data.get("from_time") or "").strip() or time_str[:5]
+        if " " in cin_t and len(cin_t) >= 15:
+            checkin_full = cin_t
+        else:
+            if len(cin_t) == 5:
+                cin_t += ":00"
+            checkin_full = f"{cin_d} {cin_t}".strip()
 
-        cout_d = str(visitor_data.get("expected_checkout_date", "")).strip() or cin_d
-        cout_t = str(visitor_data.get("expected_checkout_time", "")).strip() or "16:45"
-        if len(cout_t) == 5:
-            cout_t += ":00"
-        expected_checkout_full = f"{cout_d} {cout_t}".strip()
+        cout_d = str(visitor_data.get("expected_checkout_date") or visitor_data.get("to_date") or "").strip() or cin_d
+        cout_t = str(visitor_data.get("expected_checkout_time") or visitor_data.get("to_time") or "").strip() or "17:30"
+        if " " in cout_t and len(cout_t) >= 15:
+            expected_checkout_full = cout_t
+        else:
+            if len(cout_t) == 5:
+                cout_t += ":00"
+            expected_checkout_full = f"{cout_d} {cout_t}".strip()
 
         record = {
-            "id": str(uuid.uuid4())[:8],
+            "id": str(visitor_data.get("id") or visitor_data.get("epad_atid") or str(uuid.uuid4())[:8]),
+            "epad_atid": str(visitor_data.get("epad_atid") or ""),
+            "sp_item_id": visitor_data.get("sp_item_id"),
             "cccd_number": cccd_num,
             "full_name": visitor_data.get("full_name", "").strip(),
             "birth_date": dob,
