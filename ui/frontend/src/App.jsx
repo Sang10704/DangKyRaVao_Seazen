@@ -43,6 +43,7 @@ export default function App() {
   const [activeVisitors, setActiveVisitors] = useState([]);
   const [visitorHistory, setVisitorHistory] = useState([]);
   const [customerCards, setCustomerCards] = useState([]);
+  const [pendingCardPhotoCount, setPendingCardPhotoCount] = useState(0);
 
   const notify = useCallback((msg, type = 'info') => {
     const id = Date.now() + Math.random();
@@ -83,7 +84,7 @@ export default function App() {
 
   const fetchLiveStreams = useCallback(async () => {
     if (!user) return;
-    const [logRes, anaRes, visRes] = await Promise.all([
+    const [logRes, anaRes, visRes, cardsLiteRes] = await Promise.all([
       apiFetch(
         `/api/door/realtime_logs?date=${scanDate}&category=${scanCategory}&direction=${scanDirection}&search=${encodeURIComponent(
           scanSearch
@@ -91,10 +92,14 @@ export default function App() {
       ),
       apiFetch(`/api/analytics/dashboard?date=${scanDate}`),
       apiFetch('/api/visitors/active'),
+      apiFetch('/api/visitor/cards?include_photos=0'),
     ]);
     if (logRes.ok && logRes.data.logs) setRealtimeLogs(logRes.data.logs);
     if (anaRes.ok && anaRes.data.analytics) setAnalytics(anaRes.data.analytics);
     if (visRes.ok && visRes.data.visitors) setActiveVisitors(visRes.data.visitors);
+    if (cardsLiteRes.ok && typeof cardsLiteRes.data.pending_photo_count === 'number') {
+      setPendingCardPhotoCount(cardsLiteRes.data.pending_photo_count);
+    }
   }, [user, scanDate, scanCategory, scanDirection, scanSearch]);
 
   const fetchCoreDirectory = useCallback(async () => {
@@ -106,7 +111,7 @@ export default function App() {
           empDeptFilter
         )}&page=1&limit=300`
       ),
-      apiFetch('/api/sql/table/tbl_CustomerCards?limit=300'),
+      apiFetch('/api/visitor/cards?include_photos=1'),
       apiFetch('/api/visitors/history?limit=250'),
     ]);
 
@@ -115,7 +120,12 @@ export default function App() {
       setEmployees(empRes.data.employees);
       setEmpTotal(empRes.data.total || empRes.data.employees.length);
     }
-    if (cardsRes.ok && cardsRes.data.rows) setCustomerCards(cardsRes.data.rows);
+    if (cardsRes.ok && cardsRes.data.rows) {
+      setCustomerCards(cardsRes.data.rows);
+      if (typeof cardsRes.data.pending_photo_count === 'number') {
+        setPendingCardPhotoCount(cardsRes.data.pending_photo_count);
+      }
+    }
     if (histRes.ok && histRes.data.history) setVisitorHistory(histRes.data.history);
   }, [user, empSearch, empDeptFilter]);
 
@@ -235,6 +245,7 @@ export default function App() {
             user={user}
             onLogout={handleLogout}
             activeVisitorsCount={activeVisitors.length}
+            pendingCardPhotoCount={pendingCardPhotoCount}
           />
 
           <div className="main-area" style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
@@ -311,6 +322,7 @@ export default function App() {
               <CardManagementPage
                 customerCards={customerCards}
                 activeVisitors={activeVisitors}
+                user={user}
                 onRefreshData={() => {
                   fetchLiveStreams();
                   fetchCoreDirectory();

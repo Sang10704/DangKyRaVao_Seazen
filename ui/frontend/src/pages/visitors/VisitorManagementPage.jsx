@@ -402,16 +402,18 @@ export default function VisitorManagementPage({
     (cardInput) => {
       const q = normCard(cardInput);
       const qRaw = String(cardInput || '').trim().toLowerCase();
-      const mapped = customerCards.map((c) => {
-        const num = String(c.CardNumber || '').trim();
-        const holder = findActiveCardHolder(num);
-        return {
-          cardNumber: num,
-          cardCode: c.CardCode || num,
-          cardType: c.CardType || 'VISITOR',
-          holder,
-        };
-      });
+      const mapped = customerCards
+        .filter((c) => !['LOST', 'LOCKED'].includes(String(c.Status || '').toUpperCase()))
+        .map((c) => {
+          const num = String(c.CardNumber || '').trim();
+          const holder = findActiveCardHolder(num);
+          return {
+            cardNumber: num,
+            cardCode: c.CardCode || num,
+            cardType: c.CardType || 'VISITOR',
+            holder,
+          };
+        });
       const filtered = !q && !qRaw
         ? mapped
         : mapped.filter(
@@ -946,6 +948,34 @@ export default function VisitorManagementPage({
       return (
         <div className="card-holder-inline ready" style={{ fontSize: 11.5, fontWeight: 600 }}>
           <span>Đã thu hồi thẻ từ {justReleasedInfo.holder} — Thẻ sẵn sàng gán cho khách mới.</span>
+        </div>
+      );
+    }
+    const knownCard = customerCards.find((c) => normCard(c.CardNumber) === nc);
+    if (knownCard && ['LOST', 'LOCKED'].includes(String(knownCard.Status || '').toUpperCase())) {
+      const label = String(knownCard.Status).toUpperCase() === 'LOST' ? 'ĐÃ BÁO MẤT' : 'ĐANG KHÓA / HỎNG';
+      return (
+        <div
+          className="card-holder-inline"
+          style={{ background: '#fef2f2', borderColor: '#fecaca', color: '#b91c1c', fontSize: 11.5, fontWeight: 600 }}
+        >
+          <span>Thẻ {knownCard.CardNumber} ({knownCard.CardCode}) đang ở trạng thái {label} — Không thể cấp phát.</span>
+        </div>
+      );
+    }
+    if (!knownCard && nc.length >= 4) {
+      return (
+        <div
+          className="card-holder-inline ready"
+          style={{
+            background: '#fffbeb',
+            borderColor: '#fde68a',
+            color: '#92400e',
+            fontSize: 11.5,
+            fontWeight: 600,
+          }}
+        >
+          <span>Thẻ mới chưa có trong Kho thẻ — Hệ thống sẽ tự thêm mới và báo Admin bổ sung ảnh bằng chứng khi lưu.</span>
         </div>
       );
     }

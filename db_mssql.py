@@ -177,9 +177,13 @@ def is_mssql_active() -> bool:
     return cfg.get("enabled", False) and PYODBC_AVAILABLE
 
 
+_EXTENDED_SCHEMA_READY = False
+
+
 def ensure_extended_schema() -> None:
-    """Idempotently ensures optional columns (ParentVisitorID, ParentVisitorName) exist without data loss."""
-    if not is_mssql_active():
+    """Idempotently ensures optional columns exist without data loss."""
+    global _EXTENDED_SCHEMA_READY
+    if _EXTENDED_SCHEMA_READY or not is_mssql_active():
         return
     try:
         with pyodbc.connect(get_connection_string(), timeout=4) as conn:
@@ -189,8 +193,21 @@ def ensure_extended_schema() -> None:
                     ALTER TABLE tbl_Visitors ADD ParentVisitorID NVARCHAR(50) NULL;
                 IF COL_LENGTH('tbl_Visitors', 'ParentVisitorName') IS NULL
                     ALTER TABLE tbl_Visitors ADD ParentVisitorName NVARCHAR(255) NULL;
+                IF COL_LENGTH('tbl_CustomerCards', 'CardPhotoBase64') IS NULL
+                    ALTER TABLE tbl_CustomerCards ADD CardPhotoBase64 NVARCHAR(MAX) NULL;
+                IF COL_LENGTH('tbl_CustomerCards', 'EvidenceStatus') IS NULL
+                    ALTER TABLE tbl_CustomerCards ADD EvidenceStatus NVARCHAR(50) DEFAULT 'PENDING_PHOTO';
+                IF COL_LENGTH('tbl_CustomerCards', 'AutoDetectedAt') IS NULL
+                    ALTER TABLE tbl_CustomerCards ADD AutoDetectedAt DATETIME NULL;
+                IF COL_LENGTH('tbl_CustomerCards', 'DetectedBy') IS NULL
+                    ALTER TABLE tbl_CustomerCards ADD DetectedBy NVARCHAR(100) NULL;
+                IF COL_LENGTH('tbl_CustomerCards', 'VerifiedBy') IS NULL
+                    ALTER TABLE tbl_CustomerCards ADD VerifiedBy NVARCHAR(100) NULL;
+                IF COL_LENGTH('tbl_CustomerCards', 'VerifiedAt') IS NULL
+                    ALTER TABLE tbl_CustomerCards ADD VerifiedAt DATETIME NULL;
             """)
             conn.commit()
+            _EXTENDED_SCHEMA_READY = True
     except Exception as e:
         logger.debug("ensure_extended_schema warning: %s", e)
 
@@ -1041,13 +1058,257 @@ def mark_employee_hardware_synced_db(atid: str, card_num: Optional[str] = None, 
         logger.debug("mark_employee_hardware_synced_db warning: %s", e)
 
 
+def _normalize_card_number(raw: Any) -> str:
+    s = str(raw or "").strip()
+    if s.isdigit():
+        return s.lstrip("0") or "0"
+    return s
+
+
+def get_customer_cards_db(limit: int = 500, include_photos: bool = True) -> Dict[str, Any]:
+    """Returns card inventory with evidence status summary counts."""
+    if not is_mssql_active():
+        return {"rows": [], "count": 0, "pending_photo_count": 0, "lost_count": 0}
+    try:
+        ensure_extended_schema()
+        photo_expr = "CardPhotoBase64" if include_photos else "CAST(NULL AS NVARCHAR(MAX)) AS CardPhotoBase64"
+        with pyodbc.connect(get_connection_string(), timeout=5) as conn:
+            cur = conn.cursor()
+            cur.execute(f"""
+                SELECT TOP ({int(limit)})
+                    CardID, CardCode, CardNumber, CardType, Status,
+                    CurrentHolderName, CurrentHolderCCCD, AssignedAt, IsSyncedToDevices,
+                    {photo_expr},
+                    CASE WHEN CardPhotoBase64 IS NOT NULL AND LEN(CardPhotoBase64) > 20 THEN 1 ELSE 0 END AS HasPhoto,
+                    ISNULL(EvidenceStatus, CASE WHEN CardPhotoBase64 IS NOT NULL AND LEN(CardPhotoBase64) > 20 THEN 'VERIFIED' ELSE 'PENDING_PHOTO' END) AS EvidenceStatus,
+                    AutoDetectedAt, DetectedBy, VerifiedBy, VerifiedAt, Notes, CreatedAt, UpdatedAt
+                FROM tbl_CustomerCards
+                ORDER BY
+                    CASE WHEN ISNULL(EvidenceStatus, 'PENDING_PHOTO') = 'PENDING_PHOTO' AND (CardPhotoBase64 IS NULL OR LEN(CardPhotoBase64) <= 20) THEN 0 ELSE 1 END,
+                    UpdatedAt DESC, CardID DESC
+            """)
+            cols = [c[0] for c in cur.description]
+            rows = [_serialize_row(cols, r) for r in cur.fetchall()]
+            pending_cnt = sum(1 for r in rows if not r.get("HasPhoto") or r.get("EvidenceStatus") == "PENDING_PHOTO")
+            lost_cnt = sum(1 for r in rows if str(r.get("Status") or "").upper() in ("LOST", "LOCKED"))
+            return {
+                "rows": rows,
+                "count": len(rows),
+                "pending_photo_count": pending_cnt,
+                "lost_count": lost_cnt,
+            }
+    except Exception as e:
+        logger.error("get_customer_cards_db error: %s", e)
+        return {"rows": [], "count": 0, "pending_photo_count": 0, "lost_count": 0}
+
+
+def check_card_not_blocked_db(card_number: str) -> Dict[str, Any]:
+    """Checks if a card exists in tbl_CustomerCards and is marked LOST or LOCKED."""
+    clean_num = _normalize_card_number(card_number)
+    if not clean_num or not is_mssql_active():
+        return {"blocked": False}
+    try:
+        ensure_extended_schema()
+        with pyodbc.connect(get_connection_string(), timeout=4) as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT TOP 1 CardCode, CardNumber, Status, CurrentHolderName
+                FROM tbl_CustomerCards
+                WHERE CardNumber = ? OR CardNumber = ?
+            """, (str(card_number).strip(), clean_num))
+            row = cur.fetchone()
+            if row and str(row[2] or "").upper() in ("LOST", "LOCKED"):
+                st_label = "ĐÃ BÁO MẤT" if str(row[2]).upper() == "LOST" else "ĐANG KHÓA / HỎNG"
+                return {
+                    "blocked": True,
+                    "status": str(row[2]).upper(),
+                    "card_code": str(row[0] or ""),
+                    "error": f"Thẻ {row[1]} ({row[0]}) đang ở trạng thái {st_label} trong Kho thẻ Admin. Vui lòng kiểm tra hoặc mở khóa thẻ trước khi cấp cho khách!",
+                }
+    except Exception as e:
+        logger.debug("check_card_not_blocked_db warning: %s", e)
+    return {"blocked": False}
+
+
+def sync_card_assignment_on_checkin(
+    card_number: str,
+    holder_name: str,
+    holder_cccd: str = "",
+    operator: str = "Lễ tân",
+) -> Dict[str, Any]:
+    """
+    Progressive Card Onboarding (Cách 1):
+    - If card is missing from tbl_CustomerCards -> auto-insert with EvidenceStatus='PENDING_PHOTO'
+      so Admin sees an immediate alert badge to attach evidence photo.
+    - If card exists -> update holder & IN_USE state while preserving photo/evidence status.
+    """
+    clean_num = _normalize_card_number(card_number)
+    if not clean_num or not is_mssql_active():
+        return {"is_new": False, "needs_photo": False}
+    try:
+        ensure_extended_schema()
+        with pyodbc.connect(get_connection_string(), timeout=5) as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT TOP 1 CardID, CardCode, CardNumber,
+                       CASE WHEN CardPhotoBase64 IS NOT NULL AND LEN(CardPhotoBase64) > 20 THEN 1 ELSE 0 END,
+                       ISNULL(EvidenceStatus, 'PENDING_PHOTO'),
+                       Status
+                FROM tbl_CustomerCards
+                WHERE CardNumber = ? OR CardNumber = ?
+            """, (str(card_number).strip(), clean_num))
+            row = cur.fetchone()
+            if row:
+                cid, ccode, cnum, has_photo, ev_status, cur_status = row
+                if str(cur_status or "").upper() in ("LOST", "LOCKED"):
+                    return {"blocked": True, "is_new": False, "card_number": str(cnum), "card_code": str(ccode)}
+                cur.execute("""
+                    UPDATE tbl_CustomerCards
+                    SET Status = 'IN_USE',
+                        CurrentHolderName = ?,
+                        CurrentHolderCCCD = ?,
+                        AssignedAt = GETDATE(),
+                        IsSyncedToDevices = 1,
+                        UpdatedAt = GETDATE()
+                    WHERE CardID = ?
+                """, (str(holder_name or "Khách")[:250], str(holder_cccd or "")[:50], int(cid)))
+                conn.commit()
+                needs_photo = (not bool(has_photo)) or (str(ev_status) == "PENDING_PHOTO")
+                return {
+                    "blocked": False,
+                    "is_new": False,
+                    "needs_photo": needs_photo,
+                    "card_id": int(cid),
+                    "card_number": str(cnum),
+                    "card_code": str(ccode),
+                }
+
+            new_code = f"THE-KHACH-{clean_num}"[:50]
+            note_txt = f"Phát hiện thẻ mới khi đón khách {holder_name}"[:500]
+            cur.execute("""
+                INSERT INTO tbl_CustomerCards (
+                    CardCode, CardNumber, CardType, Status,
+                    CurrentHolderName, CurrentHolderCCCD, AssignedAt,
+                    IsSyncedToDevices, EvidenceStatus, AutoDetectedAt, DetectedBy, Notes
+                ) VALUES (?, ?, 'VISITOR', 'IN_USE', ?, ?, GETDATE(), 1, 'PENDING_PHOTO', GETDATE(), ?, ?)
+            """, (
+                new_code,
+                clean_num[:50],
+                str(holder_name or "Khách")[:250],
+                str(holder_cccd or "")[:50],
+                str(operator or "Lễ tân")[:100],
+                note_txt,
+            ))
+            conn.commit()
+            return {
+                "blocked": False,
+                "is_new": True,
+                "needs_photo": True,
+                "card_number": clean_num,
+                "card_code": new_code,
+            }
+    except Exception as e:
+        logger.warning("sync_card_assignment_on_checkin warning: %s", e)
+        return {"is_new": False, "needs_photo": False, "error": str(e)}
+
+
+def release_card_on_checkout(card_number: str) -> bool:
+    """Marks visitor card AVAILABLE on checkout unless marked LOST or LOCKED."""
+    clean_num = _normalize_card_number(card_number)
+    if not clean_num or not is_mssql_active():
+        return False
+    try:
+        ensure_extended_schema()
+        with pyodbc.connect(get_connection_string(), timeout=4) as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                UPDATE tbl_CustomerCards
+                SET Status = 'AVAILABLE',
+                    CurrentHolderName = NULL,
+                    CurrentHolderCCCD = NULL,
+                    UpdatedAt = GETDATE()
+                WHERE (CardNumber = ? OR CardNumber = ?)
+                  AND ISNULL(Status, 'AVAILABLE') NOT IN ('LOST', 'LOCKED')
+            """, (str(card_number).strip(), clean_num))
+            conn.commit()
+            return cur.rowcount > 0
+    except Exception as e:
+        logger.debug("release_card_on_checkout warning: %s", e)
+        return False
+
+
+def upload_card_evidence_db(
+    card_id_or_number: Any,
+    photo_b64: str,
+    verified_by: str = "Quản trị viên",
+    card_code: Optional[str] = None,
+    notes: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Attaches physical card evidence photo and marks card VERIFIED."""
+    key_str = str(card_id_or_number or "").strip()
+    clean_photo = str(photo_b64 or "").strip()
+    if not key_str:
+        return {"success": False, "error": "Thiếu thông tin thẻ cần cập nhật ảnh."}
+    if len(clean_photo) < 25:
+        return {"success": False, "error": "Vui lòng chọn hoặc dán ảnh bằng chứng thẻ hợp lệ."}
+    if not clean_photo.startswith("data:image/"):
+        clean_photo = f"data:image/jpeg;base64,{clean_photo}"
+
+    try:
+        ensure_extended_schema()
+        clean_num = _normalize_card_number(key_str)
+        with pyodbc.connect(get_connection_string(), timeout=5) as conn:
+            cur = conn.cursor()
+            if key_str.isdigit() and len(key_str) <= 6:
+                cur.execute(
+                    "SELECT CardID, CardNumber, CardCode FROM tbl_CustomerCards WHERE CardID = ? OR CardNumber = ? OR CardNumber = ?",
+                    (int(key_str), key_str, clean_num),
+                )
+            else:
+                cur.execute(
+                    "SELECT CardID, CardNumber, CardCode FROM tbl_CustomerCards WHERE CardNumber = ? OR CardNumber = ? OR CardCode = ?",
+                    (key_str, clean_num, key_str),
+                )
+            row = cur.fetchone()
+            if not row:
+                return {"success": False, "error": f"Không tìm thấy thẻ '{key_str}' trong kho thẻ."}
+            cid, cnum, ccode = int(row[0]), str(row[1]), str(row[2])
+            new_code = str(card_code or "").strip() or ccode
+            cur.execute("""
+                UPDATE tbl_CustomerCards
+                SET CardPhotoBase64 = ?,
+                    EvidenceStatus = 'VERIFIED',
+                    VerifiedBy = ?,
+                    VerifiedAt = GETDATE(),
+                    CardCode = ?,
+                    Notes = CASE WHEN ? IS NOT NULL AND ? <> '' THEN ? ELSE Notes END,
+                    UpdatedAt = GETDATE()
+                WHERE CardID = ?
+            """, (clean_photo, str(verified_by or "Quản trị viên")[:100], new_code[:50], notes, notes, notes, cid))
+            conn.commit()
+            return {
+                "success": True,
+                "card_id": cid,
+                "card_number": cnum,
+                "card_code": new_code,
+                "message": f"Đã lưu ảnh bằng chứng cho thẻ {cnum} ({new_code}).",
+            }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 def upsert_customer_card_db(data: Dict[str, Any]) -> Dict[str, Any]:
+    ensure_extended_schema()
     card_id = data.get("CardID")
-    card_num = str(data.get("CardNumber") or "").strip()
-    card_code = str(data.get("CardCode") or f"CARD-{card_num}").strip()
+    card_num = _normalize_card_number(data.get("CardNumber"))
+    card_code = str(data.get("CardCode") or f"THE-KHACH-{card_num}").strip()
     card_type = str(data.get("CardType") or "VISITOR").strip()
-    status = str(data.get("Status") or "AVAILABLE").strip()
+    status = str(data.get("Status") or "AVAILABLE").strip().upper()
     notes = str(data.get("Notes") or "").strip()
+    photo_b64 = str(data.get("CardPhotoBase64") or "").strip() or None
+    if photo_b64 and len(photo_b64) > 25 and not photo_b64.startswith("data:image/"):
+        photo_b64 = f"data:image/jpeg;base64,{photo_b64}"
+    verified_by = str(data.get("VerifiedBy") or data.get("operator") or "Quản trị viên").strip()[:100]
 
     if not card_num:
         return {"success": False, "error": "Số thẻ từ RFID/NFC không được để trống."}
@@ -1058,24 +1319,45 @@ def upsert_customer_card_db(data: Dict[str, Any]) -> Dict[str, Any]:
             if card_id:
                 cur.execute("""
                     UPDATE tbl_CustomerCards
-                    SET CardCode = ?, CardNumber = ?, CardType = ?, Status = ?, Notes = ?, UpdatedAt = GETDATE()
+                    SET CardCode = ?, CardNumber = ?, CardType = ?, Status = ?, Notes = ?,
+                        CardPhotoBase64 = COALESCE(?, CardPhotoBase64),
+                        EvidenceStatus = CASE WHEN ? IS NOT NULL THEN 'VERIFIED' ELSE EvidenceStatus END,
+                        VerifiedBy = CASE WHEN ? IS NOT NULL THEN ? ELSE VerifiedBy END,
+                        VerifiedAt = CASE WHEN ? IS NOT NULL THEN GETDATE() ELSE VerifiedAt END,
+                        UpdatedAt = GETDATE()
                     WHERE CardID = ?
-                """, (card_code, card_num, card_type, status, notes, int(card_id)))
+                """, (card_code, card_num, card_type, status, notes, photo_b64, photo_b64, photo_b64, verified_by, photo_b64, int(card_id)))
             else:
                 cur.execute("SELECT CardID FROM tbl_CustomerCards WHERE CardNumber = ?", (card_num,))
                 if cur.fetchone():
                     cur.execute("""
                         UPDATE tbl_CustomerCards
-                        SET CardCode = ?, CardType = ?, Status = ?, Notes = ?, UpdatedAt = GETDATE()
+                        SET CardCode = ?, CardType = ?, Status = ?, Notes = ?,
+                            CardPhotoBase64 = COALESCE(?, CardPhotoBase64),
+                            EvidenceStatus = CASE WHEN ? IS NOT NULL THEN 'VERIFIED' ELSE EvidenceStatus END,
+                            VerifiedBy = CASE WHEN ? IS NOT NULL THEN ? ELSE VerifiedBy END,
+                            VerifiedAt = CASE WHEN ? IS NOT NULL THEN GETDATE() ELSE VerifiedAt END,
+                            UpdatedAt = GETDATE()
                         WHERE CardNumber = ?
-                    """, (card_code, card_type, status, notes, card_num))
+                    """, (card_code, card_type, status, notes, photo_b64, photo_b64, photo_b64, verified_by, photo_b64, card_num))
                 else:
+                    ev_st = "VERIFIED" if photo_b64 else "PENDING_PHOTO"
                     cur.execute("""
-                        INSERT INTO tbl_CustomerCards (CardCode, CardNumber, CardType, Status, IsSyncedToDevices, Notes)
-                        VALUES (?, ?, ?, ?, 1, ?)
-                    """, (card_code, card_num, card_type, status, notes))
+                        INSERT INTO tbl_CustomerCards (
+                            CardCode, CardNumber, CardType, Status, IsSyncedToDevices,
+                            CardPhotoBase64, EvidenceStatus, VerifiedBy, VerifiedAt, Notes
+                        )
+                        VALUES (?, ?, ?, ?, 1, ?, ?, CASE WHEN ? IS NOT NULL THEN ? ELSE NULL END,
+                                CASE WHEN ? IS NOT NULL THEN GETDATE() ELSE NULL END, ?)
+                    """, (card_code, card_num, card_type, status, photo_b64, ev_st, photo_b64, verified_by, photo_b64, notes))
             conn.commit()
-            return {"success": True, "message": f"Đã lưu thẻ {card_num} ({card_code}) vào CSDL Kho thẻ."}
+            return {
+                "success": True,
+                "card_number": card_num,
+                "card_code": card_code,
+                "has_photo": bool(photo_b64),
+                "message": f"Đã lưu thẻ {card_num} ({card_code}) vào CSDL Kho thẻ.",
+            }
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -1086,13 +1368,13 @@ def delete_customer_card_db(card_id_or_number: Any) -> Dict[str, Any]:
         return {"success": False, "error": "Vui lòng chọn thẻ cần xóa."}
 
     try:
+        clean_num = _normalize_card_number(key_str)
         with pyodbc.connect(get_connection_string(), timeout=5) as conn:
             cur = conn.cursor()
-            target_card_num = key_str
             if key_str.isdigit() and len(key_str) <= 6:
-                cur.execute("SELECT CardNumber, CardCode FROM tbl_CustomerCards WHERE CardID = ? OR CardNumber = ?", (int(key_str), key_str))
+                cur.execute("SELECT CardNumber, CardCode FROM tbl_CustomerCards WHERE CardID = ? OR CardNumber = ? OR CardNumber = ?", (int(key_str), key_str, clean_num))
             else:
-                cur.execute("SELECT CardNumber, CardCode FROM tbl_CustomerCards WHERE CardNumber = ? OR CardCode = ?", (key_str, key_str))
+                cur.execute("SELECT CardNumber, CardCode FROM tbl_CustomerCards WHERE CardNumber = ? OR CardNumber = ? OR CardCode = ?", (key_str, clean_num, key_str))
             row = cur.fetchone()
             if not row:
                 return {"success": False, "error": f"Không tìm thấy thẻ '{key_str}' trong kho thẻ."}
@@ -1105,6 +1387,44 @@ def delete_customer_card_db(card_id_or_number: Any) -> Dict[str, Any]:
                 "card_number": target_card_num,
                 "card_code": target_card_code,
                 "message": f"Đã xóa thẻ {target_card_num} ({target_card_code}) khỏi CSDL Kho thẻ."
+            }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def clear_customer_cards_db(card_numbers: Optional[List[str]] = None, clear_all: bool = False) -> Dict[str, Any]:
+    """
+    Deletes selected cards (or all unheld cards when clear_all=True) from tbl_CustomerCards.
+    Never deletes cards currently held by an ACTIVE visitor in tbl_Visitors.
+    """
+    try:
+        with pyodbc.connect(get_connection_string(), timeout=5) as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT DISTINCT LTRIM(RTRIM(ISNULL(CardNumber, ''))) FROM tbl_Visitors WHERE Status = 'ACTIVE' AND CardNumber IS NOT NULL AND CardNumber <> ''")
+            active_held = {_normalize_card_number(r[0]) for r in cur.fetchall() if r[0]}
+
+            cur.execute("SELECT CardID, CardNumber, CardCode FROM tbl_CustomerCards")
+            all_rows = cur.fetchall()
+
+            targets_set = {_normalize_card_number(c) for c in (card_numbers or []) if str(c or "").strip()}
+            deleted = []
+            skipped_active = []
+            for cid, cnum, ccode in all_rows:
+                norm_c = _normalize_card_number(cnum)
+                if not clear_all and norm_c not in targets_set and str(cnum) not in (card_numbers or []):
+                    continue
+                if norm_c in active_held:
+                    skipped_active.append(str(cnum))
+                    continue
+                cur.execute("DELETE FROM tbl_CustomerCards WHERE CardID = ?", (int(cid),))
+                deleted.append({"card_number": str(cnum), "card_code": str(ccode or "")})
+            conn.commit()
+            return {
+                "success": True,
+                "deleted_count": len(deleted),
+                "deleted": deleted,
+                "skipped_active": skipped_active,
+                "message": f"Đã xóa {len(deleted)} thẻ khỏi Kho thẻ SQL" + (f" (bỏ qua {len(skipped_active)} thẻ đang có khách giữ)" if skipped_active else "."),
             }
     except Exception as e:
         return {"success": False, "error": str(e)}

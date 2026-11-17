@@ -238,17 +238,38 @@ BEGIN
         CardID INT IDENTITY(1,1) PRIMARY KEY,
         CardCode NVARCHAR(50) NOT NULL,
         CardNumber NVARCHAR(50) NOT NULL UNIQUE,
-        CardType NVARCHAR(50) DEFAULT 'VISITOR',          -- VISITOR, CONTRACTOR, VIP
-        Status NVARCHAR(50) DEFAULT 'AVAILABLE',          -- AVAILABLE, ASSIGNED, LOST, LOCKED
+        CardType NVARCHAR(50) DEFAULT 'VISITOR',          -- VISITOR, CONTRACTOR, VIP, TEMP_STAFF
+        Status NVARCHAR(50) DEFAULT 'AVAILABLE',          -- AVAILABLE, IN_USE, LOST, LOCKED
         CurrentHolderName NVARCHAR(255) NULL,
         CurrentHolderCCCD NVARCHAR(50) NULL,
         AssignedAt DATETIME NULL,
         IsSyncedToDevices BIT DEFAULT 1,
+        CardPhotoBase64 NVARCHAR(MAX) NULL,
+        EvidenceStatus NVARCHAR(50) DEFAULT 'PENDING_PHOTO', -- PENDING_PHOTO, VERIFIED
+        AutoDetectedAt DATETIME NULL,
+        DetectedBy NVARCHAR(100) NULL,
+        VerifiedBy NVARCHAR(100) NULL,
+        VerifiedAt DATETIME NULL,
         Notes NVARCHAR(500) NULL,
         CreatedAt DATETIME DEFAULT GETDATE(),
         UpdatedAt DATETIME DEFAULT GETDATE()
     );
     CREATE INDEX IX_CustomerCards_Status ON tbl_CustomerCards(Status);
+END
+ELSE
+BEGIN
+    IF COL_LENGTH('tbl_CustomerCards', 'CardPhotoBase64') IS NULL
+        ALTER TABLE tbl_CustomerCards ADD CardPhotoBase64 NVARCHAR(MAX) NULL;
+    IF COL_LENGTH('tbl_CustomerCards', 'EvidenceStatus') IS NULL
+        ALTER TABLE tbl_CustomerCards ADD EvidenceStatus NVARCHAR(50) DEFAULT 'PENDING_PHOTO';
+    IF COL_LENGTH('tbl_CustomerCards', 'AutoDetectedAt') IS NULL
+        ALTER TABLE tbl_CustomerCards ADD AutoDetectedAt DATETIME NULL;
+    IF COL_LENGTH('tbl_CustomerCards', 'DetectedBy') IS NULL
+        ALTER TABLE tbl_CustomerCards ADD DetectedBy NVARCHAR(100) NULL;
+    IF COL_LENGTH('tbl_CustomerCards', 'VerifiedBy') IS NULL
+        ALTER TABLE tbl_CustomerCards ADD VerifiedBy NVARCHAR(100) NULL;
+    IF COL_LENGTH('tbl_CustomerCards', 'VerifiedAt') IS NULL
+        ALTER TABLE tbl_CustomerCards ADD VerifiedAt DATETIME NULL;
 END
 GO
 

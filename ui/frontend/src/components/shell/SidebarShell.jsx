@@ -7,6 +7,7 @@ export default function SidebarShell({
   user,
   onLogout,
   activeVisitorsCount = 0,
+  pendingCardPhotoCount = 0,
 }) {
   const navItems = [
     {
@@ -46,6 +47,8 @@ export default function SidebarShell({
     {
       path: ROUTES.CARDS,
       label: 'Quản lý Kho Thẻ',
+      badge: pendingCardPhotoCount > 0 ? pendingCardPhotoCount : null,
+      badgeAlert: true,
       svg: (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
           <rect x="2" y="5" width="20" height="14" rx="2.5"></rect>
@@ -130,7 +133,19 @@ export default function SidebarShell({
               >
                 {item.svg}
                 <span>{item.label}</span>
-                {item.badge && <span className="tino-nav-badge">{item.badge}</span>}
+                {item.badge && (
+                  <span
+                    className="tino-nav-badge"
+                    style={
+                      item.badgeAlert
+                        ? { background: '#dc2626', color: '#ffffff' }
+                        : undefined
+                    }
+                    title={item.badgeAlert ? `${item.badge} thẻ mới chờ bổ sung ảnh bằng chứng` : undefined}
+                  >
+                    {item.badge}
+                  </span>
+                )}
               </a>
             );
           })}

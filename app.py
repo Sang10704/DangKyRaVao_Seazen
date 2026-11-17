@@ -923,6 +923,26 @@ def register_visitor():
                         "conflict_visitor": item
                     }), 400
 
+    # 0c. Block cards explicitly marked LOST / LOCKED in Admin Card Inventory
+    try:
+        import db_mssql
+        if db_mssql.is_mssql_active():
+            cards_to_check = ([card_number] if card_number else []) + [
+                str(c.get("card_number") or "").strip()
+                for c in (companions_in if isinstance(companions_in, list) else [])
+                if str(c.get("card_number") or "").strip()
+            ]
+            for chk_card in cards_to_check:
+                blk = db_mssql.check_card_not_blocked_db(chk_card)
+                if blk.get("blocked"):
+                    return jsonify({
+                        "success": False,
+                        "error": blk.get("error"),
+                        "blocked_card": chk_card,
+                    }), 400
+    except Exception:
+        pass
+
     # 1. Create SharePoint Item in 'VMS SEAZEN - KHÁCH RA VÀO' to get 1-to-1 bridged ATID (80000000 + SharePoint Item ID)
     try:
         import sharepoint_vms_sync
@@ -1050,6 +1070,33 @@ def register_visitor():
             except Exception as ce:
                 logger.warning("Companion registration warning: %s", ce)
 
+    # 4b. Progressive Card Onboarding (Cách 1): auto-register unseen RFID cards into tbl_CustomerCards + SharePoint
+    new_cards_detected = []
+    pending_photo_cards = []
+    cards_touched = False
+    try:
+        import db_mssql
+        if db_mssql.is_mssql_active():
+            card_assign_jobs = []
+            if card_number:
+                card_assign_jobs.append((card_number, full_name or cccd_num, cccd_num))
+            for cr in companion_records:
+                if cr.get("card_number"):
+                    card_assign_jobs.append((cr["card_number"], cr.get("full_name") or full_name, cr.get("cccd_number") or ""))
+            op_name = data.get("operator") or "Lễ tân"
+            for c_num, c_holder, c_cccd in card_assign_jobs:
+                res_card = db_mssql.sync_card_assignment_on_checkin(c_num, c_holder, c_cccd, op_name)
+                cards_touched = True
+                if res_card.get("is_new"):
+                    new_cards_detected.append(res_card.get("card_number") or c_num)
+                if res_card.get("needs_photo"):
+                    pending_photo_cards.append(res_card.get("card_number") or c_num)
+            if cards_touched:
+                import sharepoint_vms_sync
+                sharepoint_vms_sync.push_table_async("tbl_CustomerCards", 200)
+    except Exception as card_ex:
+        logger.debug("Progressive card onboarding warning: %s", card_ex)
+
     # 5. Optional auto unlock (default False)
     auto_unlock = data.get("auto_unlock", False)
     if auto_unlock:
@@ -1064,16 +1111,23 @@ def register_visitor():
         )
 
     extra_comp_msg = f" (kèm {len(companion_records)} nhân sự đi cùng)" if companion_records else ""
+    new_card_msg = (
+        f" Hệ thống đã tự động thêm thẻ mới ({', '.join(new_cards_detected)}) vào Kho thẻ Admin ở trạng thái chờ ảnh bằng chứng."
+        if new_cards_detected
+        else ""
+    )
     resp_msg = (
-        f"Đã đăng ký thành công cho khách {full_name or cccd_num}{extra_comp_msg}. Đã lưu hệ thống & đồng bộ thiết bị cửa."
+        f"Đã đăng ký thành công cho khách {full_name or cccd_num}{extra_comp_msg}. Đã lưu hệ thống & đồng bộ thiết bị cửa.{new_card_msg}"
         if epad_sync_ok or not card_number
-        else f"Đã lưu hồ sơ cho khách {full_name or cccd_num}{extra_comp_msg} nhưng {epad_sync_info}."
+        else f"Đã lưu hồ sơ cho khách {full_name or cccd_num}{extra_comp_msg} nhưng {epad_sync_info}.{new_card_msg}"
     )
 
     return jsonify({
         "success": True,
         "visitor": record,
         "companions": companion_records,
+        "new_cards_detected": new_cards_detected,
+        "pending_photo_cards": pending_photo_cards,
         "epad_sync": epad_sync_info,
         "epad_sync_ok": epad_sync_ok,
         "message": resp_msg
@@ -1117,6 +1171,12 @@ def fast_checkout():
                 epad_client.return_or_delete_card(target_card)
             except Exception:
                 pass
+        try:
+            import db_mssql, sharepoint_vms_sync
+            if db_mssql.release_card_on_checkout(target_card):
+                sharepoint_vms_sync.push_table_async("tbl_CustomerCards", 200)
+        except Exception:
+            pass
 
     # Async update SharePoint List 'VMS SEAZEN - KHÁCH RA VÀO' to CHECKED_OUT
     try:
@@ -1960,8 +2020,9 @@ def api_biometrics_push_hardware():
 @require_role(["admin", "staff"])
 def api_get_customer_cards():
     import db_mssql
-    rows = db_mssql.get_table_rows("tbl_CustomerCards", limit=500)
-    return jsonify({"success": True, "count": len(rows), "rows": rows})
+    include_photos = str(request.args.get("include_photos", "1")).strip() not in ("0", "false", "no")
+    res = db_mssql.get_customer_cards_db(limit=500, include_photos=include_photos)
+    return jsonify({"success": True, **res})
 
 
 @app.route("/api/visitor/card", methods=["POST"])
@@ -1969,16 +2030,60 @@ def api_get_customer_cards():
 def api_upsert_customer_card():
     import db_mssql
     data = request.get_json(silent=True) or {}
+    u = get_current_user()
+    if u and not data.get("VerifiedBy"):
+        data["VerifiedBy"] = u.get("full_name") or "Quản trị viên"
     res = db_mssql.upsert_customer_card_db(data)
     if res.get("success"):
+        card_num = res.get("card_number") or str(data.get("CardNumber") or "").strip()
+        card_code = res.get("card_code") or str(data.get("CardCode") or "").strip()
+        if str(data.get("Status") or "").upper() in ("LOST", "LOCKED") and card_num:
+            try:
+                if not EPAD_ENABLED:
+                    zk_client.return_or_delete_card(card_num)
+            except Exception:
+                pass
         try:
-            import threading
             import sharepoint_vms_sync
-            threading.Thread(
-                target=sharepoint_vms_sync.sync_table_to_sharepoint,
-                args=("tbl_CustomerCards", 200),
-                daemon=True
-            ).start()
+            sharepoint_vms_sync.push_table_async("tbl_CustomerCards", 200)
+            if data.get("CardPhotoBase64") and card_num:
+                sharepoint_vms_sync.upload_card_evidence_attachment_async(
+                    card_number=card_num,
+                    card_code=card_code,
+                    photo_b64=data["CardPhotoBase64"],
+                    verified_by=data.get("VerifiedBy") or "Quản trị viên",
+                )
+        except Exception:
+            pass
+    return jsonify(res), (200 if res.get("success") else 400)
+
+
+@app.route("/api/visitor/card/upload_evidence", methods=["POST"])
+@require_role(["admin", "staff"])
+def api_upload_card_evidence():
+    import db_mssql
+    data = request.get_json(silent=True) or {}
+    target = data.get("CardID") or data.get("CardNumber") or data.get("card_number") or ""
+    photo_b64 = data.get("CardPhotoBase64") or data.get("photo_base64") or ""
+    u = get_current_user()
+    verified_by = (u.get("full_name") if u else None) or "Quản trị viên"
+    res = db_mssql.upload_card_evidence_db(
+        card_id_or_number=target,
+        photo_b64=photo_b64,
+        verified_by=verified_by,
+        card_code=data.get("CardCode"),
+        notes=data.get("Notes"),
+    )
+    if res.get("success"):
+        try:
+            import sharepoint_vms_sync
+            sharepoint_vms_sync.push_table_async("tbl_CustomerCards", 200)
+            sharepoint_vms_sync.upload_card_evidence_attachment_async(
+                card_number=res["card_number"],
+                card_code=res["card_code"],
+                photo_b64=photo_b64,
+                verified_by=verified_by,
+            )
         except Exception:
             pass
     return jsonify(res), (200 if res.get("success") else 400)
@@ -1993,9 +2098,45 @@ def api_delete_customer_card(card_key: str = ""):
     target = card_key or data.get("CardNumber") or data.get("CardID") or data.get("card_number") or ""
     res = db_mssql.delete_customer_card_db(target)
     if res.get("success") and res.get("card_number"):
+        if not data.get("skip_hardware"):
+            try:
+                if not EPAD_ENABLED:
+                    zk_client.return_or_delete_card(str(res["card_number"]))
+            except Exception:
+                pass
         try:
-            if not EPAD_ENABLED:
-                zk_client.return_or_delete_card(str(res["card_number"]))
+            import sharepoint_vms_sync
+            sharepoint_vms_sync.delete_customer_cards_on_sharepoint_async([{
+                "card_number": res["card_number"],
+                "card_code": res.get("card_code", ""),
+            }])
+        except Exception:
+            pass
+    return jsonify(res), (200 if res.get("success") else 400)
+
+
+@app.route("/api/visitor/cards/clear", methods=["POST"])
+@require_role(["admin"])
+def api_clear_customer_cards():
+    import db_mssql
+    data = request.get_json(silent=True) or {}
+    clear_all = bool(data.get("clear_all", False))
+    card_numbers = data.get("card_numbers") or []
+    res = db_mssql.clear_customer_cards_db(card_numbers=card_numbers, clear_all=clear_all)
+    if res.get("success"):
+        deleted_items = res.get("deleted") or []
+        if data.get("revoke_hardware") and not EPAD_ENABLED:
+            for it in deleted_items:
+                try:
+                    zk_client.return_or_delete_card(str(it.get("card_number") or ""))
+                except Exception:
+                    pass
+        try:
+            import sharepoint_vms_sync
+            if clear_all and not (res.get("skipped_active")):
+                threading.Thread(target=sharepoint_vms_sync.clear_all_customer_cards_on_sharepoint, daemon=True).start()
+            elif deleted_items:
+                sharepoint_vms_sync.delete_customer_cards_on_sharepoint_async(deleted_items)
         except Exception:
             pass
     return jsonify(res), (200 if res.get("success") else 400)

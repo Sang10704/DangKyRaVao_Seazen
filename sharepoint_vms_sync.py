@@ -176,6 +176,9 @@ VMS_SHAREPOINT_LIST_SCHEMAS: Dict[str, Dict[str, Any]] = {
             {"internal": "TrangThaiThe", "display": "Trạng Thái Thẻ", "type": "text", "sql": "Status"},
             {"internal": "NguoiDangGiuThe", "display": "Người Đang Giữ Thẻ", "type": "text", "sql": "CurrentHolderName"},
             {"internal": "SoCCCDNguoiGiu", "display": "Số CCCD Người Giữ", "type": "text", "sql": "CurrentHolderCCCD"},
+            {"internal": "TrangThaiBangChung", "display": "Trạng Thái Ảnh Bằng Chứng", "type": "text", "sql": "EvidenceStatus"},
+            {"internal": "NguoiPhatHien", "display": "Người Phát Hiện / Lễ Tân", "type": "text", "sql": "DetectedBy"},
+            {"internal": "NguoiXacMinhAnh", "display": "Admin Xác Minh Ảnh", "type": "text", "sql": "VerifiedBy"},
             {"internal": "GhiChu", "display": "Ghi Chú", "type": "note", "sql": "Notes"},
         ]
     },
@@ -804,6 +807,8 @@ def sync_table_to_sharepoint(sql_table: str, max_rows: int = 200, ensure_schema:
         select_fields.extend(["NgayLamViec", "MaChamCongATID", "TongSoLanQuet", "GioRaCuoiCung"])
     elif sql_table == "tbl_DoorAuditLogs":
         select_fields.extend(["HanhDong", "MaCua", "ThoiGianThaoTac"])
+    elif sql_table == "tbl_CustomerCards":
+        select_fields.extend(["SoTheRFID"])
 
     try:
         r_items = requests.get(
@@ -831,6 +836,10 @@ def sync_table_to_sharepoint(sql_table: str, max_rows: int = 200, ensure_schema:
                     s_ts = str(it.get("ThoiGianThaoTac") or "").replace("T", " ").strip()[:19]
                     if s_act and s_ts:
                         existing_by_key.setdefault(f"{s_act}_D{s_did}_{s_ts}", it)
+                elif sql_table == "tbl_CustomerCards":
+                    s_rfid = str(it.get("SoTheRFID") or "").strip()
+                    if s_rfid:
+                        existing_by_key.setdefault(f"RFID_{s_rfid}", it)
     except Exception as e:
         logger.warning("Read existing items warning (%s): %s", sql_table, e)
 
@@ -863,6 +872,10 @@ def sync_table_to_sharepoint(sql_table: str, max_rows: int = 200, ensure_schema:
                 item_payload[col["internal"]] = str(raw_val)[:250]
 
         existing_it = existing_by_key.get(unique_key)
+        if not existing_it and sql_table == "tbl_CustomerCards":
+            rfid_k = str(row.get("CardNumber") or "").strip()
+            if rfid_k:
+                existing_it = existing_by_key.get(f"RFID_{rfid_k}")
         if existing_it:
             # Skip redundant MERGE for immutable append-only logs
             if sql_table in ("tbl_AttendanceLogs", "tbl_DoorAuditLogs", "tbl_DeviceCommands", "tbl_ClockSyncAuditLogs"):
@@ -1425,5 +1438,154 @@ def upload_biometric_attachment_to_sharepoint_async(
                 )
         except Exception as e:
             logger.debug("upload_biometric_attachment_to_sharepoint_async warning: %s", e)
+
+    threading.Thread(target=_worker, daemon=True).start()
+
+
+def clear_all_customer_cards_on_sharepoint(filter_card_numbers: Optional[List[str]] = None) -> Dict[str, Any]:
+    """
+    Deletes all items (or matching CardNumber items) in SharePoint List
+    'VMS SEAZEN - KHO THẺ KHÁCH' via OAuth2 Bearer Token (no cookies).
+    """
+    tok_info = get_sharepoint_tokens()
+    if not tok_info.get("ok"):
+        return {"success": False, "error": tok_info.get("error")}
+
+    sp_token = tok_info["sp_token"]
+    list_id = _SP_KNOWN_LIST_IDS["tbl_CustomerCards"]
+    headers_read = {"Authorization": f"Bearer {sp_token}", "Accept": "application/json;odata=nometadata"}
+    headers_write = _get_sp_write_headers(sp_token)
+    del_headers = {**headers_write, "X-HTTP-Method": "DELETE", "If-Match": "*"}
+
+    r = requests.get(
+        f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items?$select=Id,Title,SoTheRFID&$top=5000",
+        headers=headers_read,
+        timeout=15
+    )
+    if r.status_code != 200:
+        return {"success": False, "error": f"HTTP {r.status_code}: {r.text[:200]}"}
+
+    filter_set = {str(x).strip() for x in (filter_card_numbers or []) if str(x or "").strip()}
+    deleted = 0
+    errors = 0
+    for it in r.json().get("value", []):
+        rfid = str(it.get("SoTheRFID") or "").strip()
+        title = str(it.get("Title") or "").strip()
+        if filter_card_numbers is not None and rfid not in filter_set and title not in filter_set:
+            continue
+        dr = requests.post(
+            f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items({it['Id']})",
+            headers=del_headers,
+            timeout=10
+        )
+        if dr.status_code in (200, 204):
+            deleted += 1
+        else:
+            errors += 1
+
+    return {"success": errors == 0, "deleted": deleted, "errors": errors}
+
+
+def delete_customer_cards_on_sharepoint_async(cards_info: List[Dict[str, str]]) -> None:
+    """Deletes deleted SQL cards from SharePoint List 'VMS SEAZEN - KHO THẺ KHÁCH' in background."""
+    targets = []
+    for c in cards_info or []:
+        if c.get("card_number"):
+            targets.append(str(c["card_number"]).strip())
+        if c.get("card_code"):
+            targets.append(str(c["card_code"]).strip())
+    if not targets:
+        return
+
+    def _worker():
+        try:
+            with _SP_SYNC_LOCK:
+                clear_all_customer_cards_on_sharepoint(filter_card_numbers=targets)
+        except Exception as e:
+            logger.debug("delete_customer_cards_on_sharepoint_async warning: %s", e)
+
+    threading.Thread(target=_worker, daemon=True).start()
+
+
+def upload_card_evidence_attachment_async(
+    card_number: str,
+    card_code: str,
+    photo_b64: str,
+    verified_by: str = "Quản trị viên",
+) -> None:
+    """
+    Uploads physical card evidence photo (.jpg/.png) to SharePoint List
+    'VMS SEAZEN - KHO THẺ KHÁCH' AttachmentFiles via OAuth2 Bearer Token.
+    """
+    clean_card = str(card_number or "").strip()
+    clean_code = str(card_code or f"THE-KHACH-{clean_card}").strip()
+    if not clean_card or not photo_b64:
+        return
+
+    def _worker():
+        try:
+            with _SP_SYNC_LOCK:
+                tok_info = get_sharepoint_tokens()
+                if not tok_info.get("ok"):
+                    return
+                sp_token = tok_info["sp_token"]
+                list_id = _SP_KNOWN_LIST_IDS["tbl_CustomerCards"]
+                headers_read = {"Authorization": f"Bearer {sp_token}", "Accept": "application/json;odata=nometadata"}
+                headers_write = _get_sp_write_headers(sp_token)
+                digest = headers_write.get("X-RequestDigest", "")
+
+                r = requests.get(
+                    f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items?$select=Id,Title,SoTheRFID&$filter=SoTheRFID eq '{clean_card}' or Title eq '{clean_code}'",
+                    headers=headers_read,
+                    timeout=10
+                )
+                sp_item_id = None
+                if r.status_code == 200 and r.json().get("value"):
+                    sp_item_id = r.json()["value"][0]["Id"]
+                    requests.post(
+                        f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items({sp_item_id})",
+                        headers={**headers_write, "X-HTTP-Method": "MERGE", "If-Match": "*"},
+                        json={
+                            "TrangThaiBangChung": "VERIFIED",
+                            "NguoiXacMinhAnh": str(verified_by or "Quản trị viên")[:200],
+                        },
+                        timeout=10
+                    )
+                else:
+                    cr = requests.post(
+                        f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items",
+                        headers=headers_write,
+                        json={
+                            "Title": clean_code[:250],
+                            "MaDinhDanhThe": clean_code[:250],
+                            "SoTheRFID": clean_card[:250],
+                            "TrangThaiBangChung": "VERIFIED",
+                            "NguoiXacMinhAnh": str(verified_by or "Quản trị viên")[:200],
+                        },
+                        timeout=10
+                    )
+                    if cr.status_code in (200, 201):
+                        sp_item_id = cr.json().get("Id")
+
+                if not sp_item_id:
+                    return
+
+                ext = "png" if "image/png" in photo_b64[:40].lower() else "jpg"
+                raw_b64 = photo_b64.split(",", 1)[1] if "," in photo_b64 else photo_b64
+                raw_bytes = base64.b64decode(raw_b64)
+                safe_name = sanitize_sp_attachment_name(f"card_evidence_{clean_card}.{ext}")
+                requests.post(
+                    f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items({sp_item_id})/AttachmentFiles/add(FileName='{safe_name}')",
+                    headers={
+                        "Authorization": f"Bearer {sp_token}",
+                        "X-RequestDigest": digest,
+                        "Content-Type": "application/octet-stream",
+                        "Accept": "application/json;odata=verbose"
+                    },
+                    data=raw_bytes,
+                    timeout=15
+                )
+        except Exception as e:
+            logger.debug("upload_card_evidence_attachment_async warning: %s", e)
 
     threading.Thread(target=_worker, daemon=True).start()

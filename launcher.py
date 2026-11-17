@@ -177,8 +177,10 @@ def main():
     print(f"  [4] Tai khoan Ban Le Tan        : Letan        | Mat khau: Letan@1516 (Chi trang Dang ky Khach)")
     print("-" * 78)
 
-    # 5. Open application window
-    if devtest_mode:
+    # 5. Open application window unless --no-browser is passed
+    if "--no-browser" in sys.argv:
+        pass
+    elif devtest_mode:
         webbrowser.open(url)
     else:
         if not launch_webview_app_window(url):
