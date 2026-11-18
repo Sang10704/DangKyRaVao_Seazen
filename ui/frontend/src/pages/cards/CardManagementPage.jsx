@@ -53,6 +53,8 @@ export default function CardManagementPage({
   const [evidenceNotes, setEvidenceNotes] = useState('');
   const [uploadingEvidence, setUploadingEvidence] = useState(false);
   const [previewLightbox, setPreviewLightbox] = useState(null);
+  const [sortKey, setSortKey] = useState('CardName');
+  const [sortDir, setSortDir] = useState('asc');
 
   const formFileRef = useRef(null);
   const modalFileRef = useRef(null);
@@ -374,12 +376,40 @@ export default function CardManagementPage({
     }
   };
 
+  const handleSortColumn = useCallback(
+    (key) => {
+      if (sortKey === key) {
+        setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+      } else {
+        setSortKey(key);
+        setSortDir('asc');
+      }
+    },
+    [sortKey]
+  );
+
   const filteredCards = useMemo(() => {
-    return (cards || []).filter((c) => {
+    const natCmp = (a, b) =>
+      String(a || '').localeCompare(String(b || ''), 'vi', { numeric: true, sensitivity: 'base' });
+
+    const getHolderName = (c) => {
       const cleanNum = String(c.CardNumber || '').trim();
       const holder =
         activeCardHolderMap[cleanNum] ||
         (/^\d+$/.test(cleanNum) ? activeCardHolderMap[cleanNum.replace(/^0+/, '') || '0'] : null);
+      return { holder, label: holder?.full_name || c.CurrentHolderName || '' };
+    };
+
+    const getStatusLabel = (c, holder) => {
+      const st = String(c.Status || 'AVAILABLE').toUpperCase();
+      if (st === 'LOST') return 'Đã báo mất';
+      if (st === 'LOCKED') return 'Đang khóa / Hỏng';
+      if (holder || st === 'IN_USE') return 'Đang cấp cho khách';
+      return 'Sẵn sàng cấp';
+    };
+
+    const list = (cards || []).filter((c) => {
+      const { holder } = getHolderName(c);
       const curStatus = String(c.Status || 'AVAILABLE').toUpperCase();
       const effectiveStatus = holder ? 'IN_USE' : curStatus;
       const missingInfo = getMissingInfo(c);
@@ -399,7 +429,95 @@ export default function CardManagementPage({
       }
       return true;
     });
-  }, [cards, activeCardHolderMap, statusFilter, searchQuery, getMissingInfo]);
+
+    list.sort((a, b) => {
+      // Priority 1: Always pin cards missing Name or Photo at the top
+      const missA = getMissingInfo(a).incomplete ? 0 : 1;
+      const missB = getMissingInfo(b).incomplete ? 0 : 1;
+      if (missA !== missB) return missA - missB;
+
+      // Priority 2: Sort within group by selected column
+      let cmp = 0;
+      const hA = getHolderName(a);
+      const hB = getHolderName(b);
+      switch (sortKey) {
+        case 'CardName': {
+          const nA = String(a.CardName || '').trim();
+          const nB = String(b.CardName || '').trim();
+          if (!nA && nB) cmp = 1;
+          else if (nA && !nB) cmp = -1;
+          else cmp = natCmp(nA, nB);
+          break;
+        }
+        case 'HasPhoto': {
+          const pA = a.CardPhotoBase64 && String(a.CardPhotoBase64).length > 20 ? 1 : 0;
+          const pB = b.CardPhotoBase64 && String(b.CardPhotoBase64).length > 20 ? 1 : 0;
+          cmp = pA - pB;
+          break;
+        }
+        case 'CardCode':
+          cmp = natCmp(
+            a.CardCode || `THE-KHACH-${String(a.CardNumber || '').trim()}`,
+            b.CardCode || `THE-KHACH-${String(b.CardNumber || '').trim()}`
+          );
+          break;
+        case 'CardNumber':
+          cmp = natCmp(a.CardNumber, b.CardNumber);
+          break;
+        case 'Status':
+          cmp = natCmp(getStatusLabel(a, hA.holder), getStatusLabel(b, hB.holder));
+          break;
+        case 'Holder':
+          cmp = natCmp(hA.label, hB.label);
+          break;
+        case 'Notes':
+          cmp = natCmp(a.Notes, b.Notes);
+          break;
+        case 'UpdatedAt':
+          cmp = String(a.UpdatedAt || a.CreatedAt || '').localeCompare(
+            String(b.UpdatedAt || b.CreatedAt || '')
+          );
+          break;
+        default:
+          cmp = 0;
+      }
+      if (cmp !== 0) return sortDir === 'desc' ? -cmp : cmp;
+      return natCmp(a.CardName || a.CardNumber, b.CardName || b.CardNumber);
+    });
+
+    return list;
+  }, [cards, activeCardHolderMap, statusFilter, searchQuery, getMissingInfo, sortKey, sortDir]);
+
+  const renderSortableTh = (label, key, width) => {
+    const active = sortKey === key;
+    return (
+      <th
+        style={{ width, cursor: 'pointer', userSelect: 'none' }}
+        onClick={() => handleSortColumn(key)}
+        title={`Nhấp để sắp xếp theo ${label}`}
+      >
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <span>{label}</span>
+          <svg
+            width="10"
+            height="10"
+            viewBox="0 0 10 10"
+            fill="none"
+            style={{ flexShrink: 0, opacity: active ? 1 : 0.35 }}
+          >
+            <path
+              d="M5 1.2L8 4.4H2L5 1.2Z"
+              fill={active && sortDir === 'asc' ? '#111111' : '#94a3b8'}
+            />
+            <path
+              d="M5 8.8L2 5.6H8L5 8.8Z"
+              fill={active && sortDir === 'desc' ? '#111111' : '#94a3b8'}
+            />
+          </svg>
+        </span>
+      </th>
+    );
+  };
 
   const toggleSelectRow = (cardNum) => {
     setSelectedNumbers((prev) =>
@@ -831,14 +949,14 @@ export default function CardManagementPage({
                       onChange={toggleSelectAllFiltered}
                     />
                   </th>
-                  <th style={{ width: '10%' }}>Tên thẻ</th>
-                  <th style={{ width: '8%' }}>Ảnh bằng chứng</th>
-                  <th style={{ width: '13%' }}>Mã thẻ</th>
-                  <th style={{ width: '8%' }}>Số RFID</th>
-                  <th style={{ width: '12%' }}>Trạng thái</th>
-                  <th style={{ width: '14%' }}>Người đang giữ / Ghi nhận</th>
-                  <th style={{ width: '11%' }}>Ghi chú</th>
-                  <th style={{ width: '10%' }}>Cập nhật</th>
+                  {renderSortableTh('Tên thẻ', 'CardName', '10%')}
+                  {renderSortableTh('Ảnh bằng chứng', 'HasPhoto', '8%')}
+                  {renderSortableTh('Mã thẻ', 'CardCode', '13%')}
+                  {renderSortableTh('Số RFID', 'CardNumber', '8%')}
+                  {renderSortableTh('Trạng thái', 'Status', '12%')}
+                  {renderSortableTh('Người đang giữ / Ghi nhận', 'Holder', '14%')}
+                  {renderSortableTh('Ghi chú', 'Notes', '11%')}
+                  {renderSortableTh('Cập nhật', 'UpdatedAt', '10%')}
                   <th style={{ width: '11%', textAlign: 'right' }}>Thao tác</th>
                 </tr>
               </thead>
