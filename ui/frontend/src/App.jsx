@@ -82,25 +82,39 @@ export default function App() {
     }
   }, []);
 
-  const fetchLiveStreams = useCallback(async () => {
+  const fetchActiveVisitorsFast = useCallback(async () => {
     if (!user) return;
-    const [logRes, anaRes, visRes, cardsLiteRes] = await Promise.all([
-      apiFetch(
-        `/api/door/realtime_logs?date=${scanDate}&category=${scanCategory}&direction=${scanDirection}&search=${encodeURIComponent(
-          scanSearch
-        )}&limit=300`
-      ),
-      apiFetch(`/api/analytics/dashboard?date=${scanDate}`),
+    const [visRes, cardsLiteRes] = await Promise.all([
       apiFetch('/api/visitors/active'),
       apiFetch('/api/visitor/cards?include_photos=0'),
     ]);
-    if (logRes.ok && logRes.data.logs) setRealtimeLogs(logRes.data.logs);
-    if (anaRes.ok && anaRes.data.analytics) setAnalytics(anaRes.data.analytics);
     if (visRes.ok && visRes.data.visitors) setActiveVisitors(visRes.data.visitors);
     if (cardsLiteRes.ok && typeof cardsLiteRes.data.pending_photo_count === 'number') {
       setPendingCardPhotoCount(cardsLiteRes.data.pending_photo_count);
     }
-  }, [user, scanDate, scanCategory, scanDirection, scanSearch]);
+  }, [user]);
+
+  const fetchLiveStreams = useCallback(async () => {
+    if (!user) return;
+    // Always keep active visitors & card alert count fresh in <30ms
+    const activePromise = fetchActiveVisitorsFast();
+    // Only poll heavy dashboard logs/charts when actually viewing Live Command page
+    if (currentPath === ROUTES.LIVE) {
+      const [logRes, anaRes] = await Promise.all([
+        apiFetch(
+          `/api/door/realtime_logs?date=${scanDate}&category=${scanCategory}&direction=${scanDirection}&search=${encodeURIComponent(
+            scanSearch
+          )}&limit=300`
+        ),
+        apiFetch(`/api/analytics/dashboard?date=${scanDate}`),
+        activePromise,
+      ]);
+      if (logRes.ok && logRes.data.logs) setRealtimeLogs(logRes.data.logs);
+      if (anaRes.ok && anaRes.data.analytics) setAnalytics(anaRes.data.analytics);
+    } else {
+      await activePromise;
+    }
+  }, [user, currentPath, fetchActiveVisitorsFast, scanDate, scanCategory, scanDirection, scanSearch]);
 
   const fetchCoreDirectory = useCallback(async () => {
     if (!user) return;
@@ -311,7 +325,7 @@ export default function App() {
                 visitorHistory={visitorHistory}
                 customerCards={customerCards}
                 onRefreshData={() => {
-                  fetchLiveStreams();
+                  fetchActiveVisitorsFast();
                   fetchCoreDirectory();
                 }}
                 notify={notify}

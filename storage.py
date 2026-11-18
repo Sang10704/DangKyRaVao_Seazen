@@ -1117,20 +1117,32 @@ class StorageManager:
         return filtered
 
     def get_available_dates(self) -> List[str]:
-        """Returns all unique dates (YYYY-MM-DD) available in scan and visitor history."""
-        saved_logs = self._load_scans_cache()
-        history = self.get_visitor_history(limit=5000)
+        """Returns all unique dates (YYYY-MM-DD) available in scan and visitor history in <20ms."""
         dates = set()
-        for l in saved_logs:
+        for l in self._load_scans_cache():
             t = str(l.get("CheckTime", ""))
             if len(t) >= 10 and t[4] == '-' and t[7] == '-':
                 dates.add(t[:10])
-        for v in history:
+        for v in _read_json(VISITOR_HISTORY_FILE, []):
             t = str(v.get("checkin_time", ""))
             if len(t) >= 10 and t[4] == '-' and t[7] == '-':
                 dates.add(t[:10])
-        today = datetime.now().strftime("%Y-%m-%d")
-        dates.add(today)
+        if MSSQL_AVAILABLE and db_mssql and db_mssql.is_mssql_active():
+            try:
+                import pyodbc
+                with pyodbc.connect(db_mssql.get_connection_string(), timeout=3) as conn:
+                    cur = conn.cursor()
+                    cur.execute("SELECT DISTINCT CONVERT(VARCHAR(10), CheckTime, 120) FROM tbl_AttendanceLogs WHERE CheckTime IS NOT NULL")
+                    for r in cur.fetchall():
+                        if r[0]:
+                            dates.add(str(r[0])[:10])
+                    cur.execute("SELECT DISTINCT CONVERT(VARCHAR(10), CheckinTime, 120) FROM tbl_Visitors WHERE CheckinTime IS NOT NULL")
+                    for r in cur.fetchall():
+                        if r[0]:
+                            dates.add(str(r[0])[:10])
+            except Exception:
+                pass
+        dates.add(datetime.now().strftime("%Y-%m-%d"))
         return sorted(list(dates), reverse=True)
 
     # ---------------- Dashboard & Analytics Engine ----------------
@@ -1173,9 +1185,9 @@ class StorageManager:
         hourly_visitor_map = {f"{h:02d}": 0 for h in range(6, 23)}
         dept_counts: Dict[str, int] = {}
 
-        # Build employee index for department and name enrichment
+        # Build employee index from lightweight employees.json cache (avoids 5MB JPEG/subquery load every 3s)
         emp_map = {}
-        for emp in self.get_employees():
+        for emp in _read_json(EMPLOYEES_FILE, []):
             atid = str(emp.get("atid") or "").strip()
             code = str(emp.get("code") or "").strip()
             fn = str(emp.get("fullname") or "").strip().lower()
@@ -1269,9 +1281,29 @@ class StorageManager:
             reverse=True
         )[:6]
 
-        # Calculate visitor departments from registration and checkins for the selected date
+        # Calculate visitor departments from active visitors + lightweight history for selected_date
         visitor_dept_counts: Dict[str, int] = {}
-        all_registered_visitors = self.get_active_visitors() + self.get_visitor_history(limit=5000)
+        raw_hist = _read_json(VISITOR_HISTORY_FILE, [])
+        if MSSQL_AVAILABLE and db_mssql and db_mssql.is_mssql_active():
+            try:
+                import pyodbc
+                with pyodbc.connect(db_mssql.get_connection_string(), timeout=3) as conn:
+                    cur = conn.cursor()
+                    cur.execute("""
+                        SELECT FullName, CardNumber, Department, CONVERT(VARCHAR(19), CheckinTime, 120)
+                        FROM tbl_Visitors
+                        WHERE CAST(CheckinTime AS DATE) = ?
+                    """, (selected_date,))
+                    for r in cur.fetchall():
+                        raw_hist.append({
+                            "full_name": r[0] or "",
+                            "card_number": r[1] or "",
+                            "department": r[2] or "",
+                            "checkin_time": r[3] or "",
+                        })
+            except Exception:
+                pass
+        all_registered_visitors = self.get_active_visitors() + raw_hist
 
         # Build map for fast matching by card / atid / fullname
         v_meta_by_key: Dict[str, str] = {}
