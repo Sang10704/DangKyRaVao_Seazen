@@ -651,29 +651,108 @@ export default function CardManagementPage({
 
             <div className="v-field">
               <label>Ảnh bằng chứng thẻ</label>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <input
-                  ref={formFileRef}
-                  type="file"
-                  accept="image/*"
-                  className="v-input"
-                  style={{ padding: '4px 6px', fontSize: 11.5 }}
-                  onChange={handleFormFileChange}
-                />
-                {formData.CardPhotoBase64 && (
-                  <img
-                    src={formData.CardPhotoBase64}
-                    alt="Card"
+              <input
+                ref={formFileRef}
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={handleFormFileChange}
+              />
+              <div
+                className="v-input"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 6,
+                  padding: '0 6px 0 8px',
+                  height: 36,
+                  cursor: 'pointer',
+                  background: '#ffffff',
+                }}
+                onClick={() => formFileRef.current?.click()}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, overflow: 'hidden' }}>
+                  {formData.CardPhotoBase64 ? (
+                    <>
+                      <img
+                        src={formData.CardPhotoBase64}
+                        alt="Card"
+                        style={{
+                          width: 30,
+                          height: 22,
+                          objectFit: 'cover',
+                          borderRadius: 4,
+                          border: '1px solid var(--border-main)',
+                          flexShrink: 0,
+                        }}
+                      />
+                      <span
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 600,
+                          color: '#15803d',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
+                        Đã chọn ảnh
+                      </span>
+                    </>
+                  ) : (
+                    <span
+                      style={{
+                        fontSize: 12.5,
+                        color: 'var(--text-muted)',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      Chưa chọn ảnh...
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                  {formData.CardPhotoBase64 && (
+                    <button
+                      type="button"
+                      title="Xóa ảnh đã chọn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setFormData((prev) => ({ ...prev, CardPhotoBase64: '' }));
+                        if (formFileRef.current) formFileRef.current.value = '';
+                      }}
+                      style={{
+                        border: 'none',
+                        background: '#f1f5f9',
+                        color: '#475569',
+                        borderRadius: 4,
+                        width: 20,
+                        height: 22,
+                        cursor: 'pointer',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        lineHeight: 1,
+                      }}
+                    >
+                      ×
+                    </button>
+                  )}
+                  <span
+                    className="btn btn-sm"
                     style={{
-                      width: 38,
-                      height: 28,
-                      objectFit: 'cover',
-                      borderRadius: 4,
-                      border: '1px solid var(--border-main)',
-                      flexShrink: 0,
+                      padding: '3px 8px',
+                      fontSize: 11.5,
+                      height: 24,
+                      lineHeight: '16px',
+                      pointerEvents: 'none',
                     }}
-                  />
-                )}
+                  >
+                    {formData.CardPhotoBase64 ? 'Đổi ảnh' : 'Chọn ảnh'}
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -721,11 +800,28 @@ export default function CardManagementPage({
             </span>
           </div>
 
-          <div className="table-scroll">
-            <table className="data-table">
+          <div className="table-scroll" style={{ overflowX: 'hidden' }}>
+            <style>{`
+              .cards-no-scroll {
+                table-layout: fixed;
+                width: 100%;
+              }
+              .cards-no-scroll th,
+              .cards-no-scroll td {
+                white-space: normal;
+                word-break: break-word;
+                overflow-wrap: anywhere;
+                padding: 8px 6px;
+                vertical-align: middle;
+              }
+              .cards-no-scroll th {
+                font-size: 10.5px;
+              }
+            `}</style>
+            <table className="data-table cards-no-scroll">
               <thead>
                 <tr>
-                  <th style={{ width: 34 }}>
+                  <th style={{ width: '3%' }}>
                     <input
                       type="checkbox"
                       checked={
@@ -735,15 +831,15 @@ export default function CardManagementPage({
                       onChange={toggleSelectAllFiltered}
                     />
                   </th>
-                  <th>Tên thẻ</th>
-                  <th>Ảnh bằng chứng</th>
-                  <th>Mã thẻ</th>
-                  <th>Số RFID</th>
-                  <th>Trạng thái</th>
-                  <th>Người đang giữ / Ghi nhận</th>
-                  <th>Ghi chú</th>
-                  <th>Cập nhật</th>
-                  <th style={{ textAlign: 'right' }}>Thao tác</th>
+                  <th style={{ width: '10%' }}>Tên thẻ</th>
+                  <th style={{ width: '8%' }}>Ảnh bằng chứng</th>
+                  <th style={{ width: '13%' }}>Mã thẻ</th>
+                  <th style={{ width: '8%' }}>Số RFID</th>
+                  <th style={{ width: '12%' }}>Trạng thái</th>
+                  <th style={{ width: '14%' }}>Người đang giữ / Ghi nhận</th>
+                  <th style={{ width: '11%' }}>Ghi chú</th>
+                  <th style={{ width: '10%' }}>Cập nhật</th>
+                  <th style={{ width: '11%', textAlign: 'right' }}>Thao tác</th>
                 </tr>
               </thead>
               <tbody>
@@ -923,12 +1019,12 @@ export default function CardManagementPage({
                       </td>
 
                       {/* 8. Ghi chú */}
-                      <td style={{ color: 'var(--text-secondary)', maxWidth: 200, fontSize: 12.5 }}>
+                      <td style={{ color: 'var(--text-secondary)', fontSize: 12 }}>
                         {c.Notes || '—'}
                       </td>
 
                       {/* 9. Cập nhật */}
-                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--text-muted)' }}>
+                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>
                         <div>{String(c.UpdatedAt || c.CreatedAt || '').slice(0, 16)}</div>
                         {c.VerifiedBy && (
                           <div style={{ fontSize: 10.5, fontFamily: 'inherit' }}>
@@ -939,25 +1035,34 @@ export default function CardManagementPage({
 
                       {/* 10. Thao tác */}
                       <td style={{ textAlign: 'right' }}>
-                        <div style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
                           <button
                             type="button"
                             className="btn btn-sm"
+                            style={{ padding: '3px 5px', fontSize: 11, justifyContent: 'center' }}
                             onClick={() => openEvidenceModal(c)}
                           >
-                            {missing.incomplete ? 'Bổ sung Tên/Ảnh' : 'Sửa Tên/Ảnh'}
+                            {missing.incomplete ? 'Tên/Ảnh' : 'Sửa ảnh'}
                           </button>
-                          <button type="button" className="btn btn-sm" onClick={() => handleEditSelect(c)}>
+                          <button
+                            type="button"
+                            className="btn btn-sm"
+                            style={{ padding: '3px 5px', fontSize: 11, justifyContent: 'center' }}
+                            onClick={() => handleEditSelect(c)}
+                          >
                             Sửa
                           </button>
                           <button
                             type="button"
                             className="btn btn-sm"
-                            style={
-                              curStatus === 'LOST'
+                            style={{
+                              padding: '3px 5px',
+                              fontSize: 11,
+                              justifyContent: 'center',
+                              ...(curStatus === 'LOST'
                                 ? { borderColor: '#bbf7d0', background: '#f0fdf4', color: '#15803d' }
-                                : { borderColor: '#fde68a', background: '#fffbeb', color: '#b45309' }
-                            }
+                                : { borderColor: '#fde68a', background: '#fffbeb', color: '#b45309' }),
+                            }}
                             onClick={() => handleToggleLostStatus(c)}
                           >
                             {curStatus === 'LOST' ? 'Khôi phục' : 'Báo mất'}
@@ -965,7 +1070,14 @@ export default function CardManagementPage({
                           <button
                             type="button"
                             className="btn btn-sm"
-                            style={{ borderColor: '#fecaca', background: '#fef2f2', color: '#dc2626' }}
+                            style={{
+                              padding: '3px 5px',
+                              fontSize: 11,
+                              justifyContent: 'center',
+                              borderColor: '#fecaca',
+                              background: '#fef2f2',
+                              color: '#dc2626',
+                            }}
                             onClick={() => handleDeleteCard(c)}
                           >
                             Xóa
