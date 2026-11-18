@@ -35,14 +35,25 @@ export default function SidebarShell({
   };
   const navItems = [
     {
-      path: ROUTES.LIVE,
-      label: 'Tổng quan & Cửa',
+      path: ROUTES.OVERVIEW,
+      label: 'Tổng quan',
       svg: (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
           <rect x="3" y="3" width="7" height="7" rx="1.5"></rect>
           <rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
           <rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
           <rect x="3" y="14" width="7" height="7" rx="1.5"></rect>
+        </svg>
+      ),
+    },
+    {
+      path: ROUTES.DOORS,
+      label: 'Quản lý Cửa',
+      svg: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+          <path d="M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16"></path>
+          <path d="M3 21h18"></path>
+          <circle cx="15" cy="12" r="1"></circle>
         </svg>
       ),
     },

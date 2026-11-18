@@ -1,6 +1,8 @@
 export const ROUTES = {
   LOGIN: '/login',
-  LIVE: '/live',
+  OVERVIEW: '/overview',
+  DOORS: '/doors',
+  LIVE: '/doors',
   HISTORY: '/history',
   VISITORS: '/visitors',
   CARDS: '/cards',

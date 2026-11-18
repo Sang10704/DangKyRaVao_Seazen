@@ -4,6 +4,7 @@ import { apiFetch } from './services/apiClient';
 import SidebarShell from './components/shell/SidebarShell';
 import ClockSafetyModal from './components/common/ClockSafetyModal';
 import LoginPage from './pages/auth/LoginPage';
+import OverviewDashboardPage from './pages/overview/OverviewDashboardPage';
 import LiveCommandPage from './pages/live/LiveCommandPage';
 import AccessHistoryPage from './pages/history/AccessHistoryPage';
 import VisitorManagementPage from './pages/visitors/VisitorManagementPage';
@@ -17,7 +18,8 @@ export default function App() {
   const [gateReady, setGateReady] = useState(false);
   const [currentPath, setCurrentPath] = useState(() => {
     const p = window.location.pathname;
-    return Object.values(ROUTES).includes(p) && p !== ROUTES.LOGIN ? p : ROUTES.LIVE;
+    if (p === '/live') return ROUTES.DOORS;
+    return Object.values(ROUTES).includes(p) && p !== ROUTES.LOGIN ? p : ROUTES.OVERVIEW;
   });
 
   const [toasts, setToasts] = useState([]);
@@ -99,7 +101,7 @@ export default function App() {
     // Always keep active visitors & card alert count fresh in <30ms
     const activePromise = fetchActiveVisitorsFast();
     // Only poll heavy dashboard logs/charts when actually viewing Live Command page
-    if (currentPath === ROUTES.LIVE) {
+    if (currentPath === ROUTES.OVERVIEW || currentPath === ROUTES.DOORS) {
       const [logRes, anaRes] = await Promise.all([
         apiFetch(
           `/api/door/realtime_logs?date=${scanDate}&category=${scanCategory}&direction=${scanDirection}&search=${encodeURIComponent(
@@ -243,7 +245,7 @@ export default function App() {
           clockAudit={clockAudit}
           onLoginSuccess={(loggedInUser) => {
             setUser(loggedInUser);
-            const initRoute = loggedInUser.role !== 'admin' ? ROUTES.VISITORS : ROUTES.LIVE;
+            const initRoute = loggedInUser.role !== 'admin' ? ROUTES.VISITORS : ROUTES.OVERVIEW;
             setCurrentPath(initRoute);
             window.history.replaceState({}, '', initRoute);
             notify(`Xin chào ${loggedInUser.full_name}`, 'success');
@@ -290,7 +292,22 @@ export default function App() {
               </div>
             )}
 
-            {effectivePath === ROUTES.LIVE && (
+            {effectivePath === ROUTES.OVERVIEW && (
+              <OverviewDashboardPage
+                user={user}
+                analytics={analytics}
+                activeVisitors={activeVisitors}
+                customerCards={customerCards}
+                pendingCardPhotoCount={pendingCardPhotoCount}
+                realtimeLogs={realtimeLogs}
+                scanDate={scanDate}
+                setScanDate={setScanDate}
+                onNavigate={handleNavigate}
+                clockAudit={clockAudit}
+              />
+            )}
+
+            {effectivePath === ROUTES.DOORS && (
               <LiveCommandPage
                 user={user}
                 clockAudit={clockAudit}

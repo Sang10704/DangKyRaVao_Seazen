@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ROUTES } from '../../constants/routes';
+import { apiFetch } from '../../services/apiClient';
 
 export default function LiveCommandPage({
   user,
@@ -21,6 +22,25 @@ export default function LiveCommandPage({
   onDoorAll,
   doorLoading,
 }) {
+  const [doorTableTab, setDoorTableTab] = useState('SCANS');
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [loadingAudit, setLoadingAudit] = useState(false);
+
+  const loadDoorAuditLogs = useCallback(async () => {
+    setLoadingAudit(true);
+    try {
+      const { ok, data } = await apiFetch('/api/door/audit_logs?limit=100');
+      if (ok && data?.logs) setAuditLogs(data.logs);
+    } finally {
+      setLoadingAudit(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (doorTableTab === 'AUDIT') {
+      loadDoorAuditLogs();
+    }
+  }, [doorTableTab, loadDoorAuditLogs]);
   const lanes = [
     { sn: '1313244800040', name: 'Làn VÀO phải', ip: '172.16.56.139', doorId: 1, dirLabel: 'Cổng Làn VÀO', dark: false },
     { sn: '1313244800129', name: 'Làn VÀO trái', ip: '172.16.56.138', doorId: 1, dirLabel: 'Cổng Làn VÀO', dark: true },
@@ -51,11 +71,10 @@ export default function LiveCommandPage({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }}>
           <div>
             <div className="tino-greeting-sub">
-              Xin chào, {user?.full_name || 'Quản trị viên'}!
+              Điều khiển 4 Làn Cổng ZKTeco SenseFace · Giám sát đóng/mở trực tuyến
             </div>
             <h1 className="tino-greeting-title">
-              Hôm nay có {realtimeLogs.length} lượt ra vào
-              <br />& {staffInside} nhân sự đang tại văn phòng
+              Quản lý Cửa &amp; Làn Ra Vào (4/4 Online)
             </h1>
           </div>
 
@@ -206,26 +225,99 @@ export default function LiveCommandPage({
           })}
         </div>
 
-        {/* Real-time Access History Table (Both Staff & Visitors) */}
+        {/* Real-time Access History & Door Audit Logs Table */}
         <div className="card card-table-fill">
           <div className="card-header" style={{ flexShrink: 0 }}>
-            <div className="card-title">
-              Lịch sử Ra vào Trực tuyến — Nhân viên & Khách ({realtimeLogs.length} lượt)
-            </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span className="badge badge-gold">Tự động bắt sự kiện trực tiếp</span>
               <button
                 type="button"
-                className="btn btn-sm"
-                onClick={() => onNavigate(ROUTES.HISTORY)}
+                className={`btn btn-sm ${doorTableTab === 'SCANS' ? 'btn-primary' : ''}`}
+                onClick={() => setDoorTableTab('SCANS')}
               >
-                Xem trang Lịch sử chi tiết
+                Sự kiện quét tại 4 cổng ({realtimeLogs.length})
               </button>
+              <button
+                type="button"
+                className={`btn btn-sm ${doorTableTab === 'AUDIT' ? 'btn-primary' : ''}`}
+                onClick={() => setDoorTableTab('AUDIT')}
+              >
+                Nhật ký Lệnh Điều khiển Cửa
+              </button>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {doorTableTab === 'AUDIT' ? (
+                <button type="button" className="btn btn-sm" onClick={loadDoorAuditLogs}>
+                  {loadingAudit ? 'Đang tải...' : 'Làm mới nhật ký'}
+                </button>
+              ) : (
+                <>
+                  <span className="badge badge-gold">Tự động bắt sự kiện trực tiếp</span>
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    onClick={() => onNavigate(ROUTES.HISTORY)}
+                  >
+                    Xem trang Lịch sử chi tiết
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
           <div className="table-scroll">
-            <table className="data-table">
+            {doorTableTab === 'AUDIT' ? (
+              <table className="data-table" key="door-audit-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Thời gian</th>
+                    <th>Người thực hiện</th>
+                    <th>Làn cửa / Thiết bị</th>
+                    <th>Lệnh điều khiển</th>
+                    <th>Kết quả</th>
+                    <th>Chi tiết</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {auditLogs.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} style={{ textAlign: 'center', padding: 28, color: 'var(--text-muted)' }}>
+                        {loadingAudit ? 'Đang tải nhật ký điều khiển cửa...' : 'Chưa có lệnh điều khiển cửa nào được ghi nhận.'}
+                      </td>
+                    </tr>
+                  ) : (
+                    auditLogs.map((a, idx) => (
+                      <tr key={a.AuditID || idx}>
+                        <td style={{ color: 'var(--text-muted)' }}>{idx + 1}</td>
+                        <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+                          {String(a.CreatedAt || a.created_at || '').replace('T', ' ').slice(0, 19)}
+                        </td>
+                        <td style={{ fontWeight: 700 }}>{a.Operator || a.operator || 'Quản trị viên'}</td>
+                        <td>{a.DoorName || a.DeviceIP || a.door_name || 'Toàn bộ 4 làn'}</td>
+                        <td>
+                          <span className="badge badge-dark">{a.Action || a.action || 'CMD'}</span>
+                        </td>
+                        <td>
+                          <span
+                            className={`badge ${
+                              String(a.Status || a.status || '').toUpperCase() === 'SUCCESS' || a.Success
+                                ? 'badge-green'
+                                : 'badge-red'
+                            }`}
+                          >
+                            {a.Status || (a.Success ? 'SUCCESS' : 'FAILED')}
+                          </span>
+                        </td>
+                        <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                          {a.Detail || a.Message || a.detail || '—'}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            ) : (
+              <table className="data-table" key="door-scans-table">
               <thead>
                 <tr>
                   <th>#</th>
@@ -271,6 +363,7 @@ export default function LiveCommandPage({
                 )}
               </tbody>
             </table>
+            )}
           </div>
         </div>
       </div>
