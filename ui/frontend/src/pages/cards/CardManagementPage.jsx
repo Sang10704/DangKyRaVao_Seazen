@@ -920,19 +920,19 @@ export default function CardManagementPage({
 
           <div className="table-scroll" style={{ overflowX: 'hidden' }}>
             <style>{`
-              .cards-no-scroll {
+              table.data-table.cards-no-scroll {
                 table-layout: fixed;
                 width: 100%;
               }
-              .cards-no-scroll th,
-              .cards-no-scroll td {
+              table.data-table.cards-no-scroll th,
+              table.data-table.cards-no-scroll td {
                 white-space: normal;
-                word-break: break-word;
-                overflow-wrap: anywhere;
+                word-break: normal;
+                overflow-wrap: break-word;
                 padding: 8px 6px;
                 vertical-align: middle;
               }
-              .cards-no-scroll th {
+              table.data-table.cards-no-scroll th {
                 font-size: 10.5px;
               }
             `}</style>
