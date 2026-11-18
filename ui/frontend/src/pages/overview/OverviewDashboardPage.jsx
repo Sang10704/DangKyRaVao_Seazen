@@ -149,8 +149,9 @@ export default function OverviewDashboardPage({
     setLoadingInside(true);
     try {
       const { ok, data } = await apiFetch(`/api/analytics/present_details?type=staff&date=${encodeURIComponent(scanDate)}`);
-      if (ok && data?.inside) {
-        setInsideStaff(data.inside);
+      const list = data?.inside_items || data?.items || data?.inside || [];
+      if (ok && Array.isArray(list)) {
+        setInsideStaff(list);
       }
     } finally {
       setLoadingInside(false);
@@ -899,9 +900,9 @@ export default function OverviewDashboardPage({
             </div>
           </div>
 
-          <div style={{ maxHeight: 380, overflowY: 'auto' }}>
+          <div style={{ height: 380, overflowY: 'auto', border: '1px solid var(--border-main)', borderRadius: 10 }}>
             <table className="data-table" style={{ width: '100%' }}>
-              <thead>
+              <thead style={{ position: 'sticky', top: 0, zIndex: 1, background: '#f8fafc' }}>
                 <tr>
                   <th style={{ width: 48 }}>#</th>
                   <th>Họ và tên</th>
