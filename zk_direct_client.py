@@ -118,8 +118,14 @@ class ZkDirectClient:
                         is_staff = bool(row[5]) if row[5] is not None else True
                         if not fn:
                             continue
-                        if fn.lower().startswith("khach ") or dept.lower() == "khách":
-                            is_staff = False
+                        # Never let hardware guest slot placeholders (56235..56254) masquerade as staff
+                        if (
+                            (atid.isdigit() and 56200 <= int(atid) <= 56299)
+                            or fn.lower().startswith("khach ")
+                            or fn.lower().startswith("nv 000562")
+                            or dept.lower() == "khách"
+                        ):
+                            continue
                         existing = new_map.get(atid) or new_map.get(code)
                         if existing and existing.get("department") not in ("", "Khác", "--") and dept in ("", "Khác", "--"):
                             dept = existing["department"]
@@ -133,8 +139,28 @@ class ZkDirectClient:
         except Exception as ex:
             logger.debug("SQL person cache enrichment skipped: %s", ex)
 
-        # 3. Visitors from active_visitors.json, visitor_history.json & SQL tbl_Visitors
-        for v_file_name in ("active_visitors.json", "visitor_history.json"):
+        # 3. Visitors: load history first, then active visitors LAST so current slot/card holder wins
+        try:
+            import db_mssql
+            if db_mssql.is_mssql_active():
+                import pyodbc
+                with pyodbc.connect(db_mssql.get_connection_string(), timeout=3) as conn:
+                    cur = conn.cursor()
+                    cur.execute("SELECT VisitorID, FullName, Department, CardNumber, CCCDNumber, Status FROM tbl_Visitors ORDER BY CASE WHEN Status = 'ACTIVE' THEN 1 ELSE 0 END ASC, CheckinTime ASC")
+                    for r in cur.fetchall():
+                        vid = str(r[0] or "").strip()
+                        vname = str(r[1] or "").strip()
+                        vdept = str(r[2] or "Khách").strip()
+                        vcard = str(r[3] or "").strip()
+                        vcccd = str(r[4] or "").strip()
+                        if not vname or vid.startswith("vis_") or vname.lower().startswith("nv 000"):
+                            continue
+                        v_item = {"fullname": vname, "department": vdept, "is_staff": False, "atid": vid or vcard}
+                        self._index_person_entry(new_map, [vid, vcard, vcccd], v_item)
+        except Exception:
+            pass
+
+        for v_file_name in ("visitor_history.json", "active_visitors.json"):
             v_file = os.path.join(self.data_dir, v_file_name)
             if os.path.exists(v_file):
                 try:
@@ -142,11 +168,13 @@ class ZkDirectClient:
                         visitors = json.load(f)
                     for v in visitors:
                         v_name = str(v.get("full_name", "")).strip()
+                        v_id = str(v.get("id") or "").strip()
+                        if not v_name or v_id.startswith("vis_") or v_name.lower().startswith("nv 000"):
+                            continue
                         v_dept = str(v.get("department") or v.get("company") or "Khách").strip()
                         v_card = str(v.get("card_number", "")).strip()
                         v_cccd = str(v.get("cccd_number", "")).strip()
                         v_atid = str(v.get("epad_atid") or "").strip()
-                        v_id = str(v.get("id") or "").strip()
                         v_item = {
                             "fullname": v_name,
                             "department": v_dept,
@@ -156,25 +184,6 @@ class ZkDirectClient:
                         self._index_person_entry(new_map, [v_card, v_cccd, v_atid, v_id], v_item)
                 except Exception as ex:
                     logger.debug("Error loading visitors for person cache: %s", ex)
-
-        try:
-            import db_mssql
-            if db_mssql.is_mssql_active():
-                import pyodbc
-                with pyodbc.connect(db_mssql.get_connection_string(), timeout=3) as conn:
-                    cur = conn.cursor()
-                    cur.execute("SELECT VisitorID, FullName, Department, CardNumber, CCCDNumber FROM tbl_Visitors")
-                    for r in cur.fetchall():
-                        vid = str(r[0] or "").strip()
-                        vname = str(r[1] or "").strip()
-                        vdept = str(r[2] or "Khách").strip()
-                        vcard = str(r[3] or "").strip()
-                        vcccd = str(r[4] or "").strip()
-                        if vname:
-                            v_item = {"fullname": vname, "department": vdept, "is_staff": False, "atid": vid or vcard}
-                            self._index_person_entry(new_map, [vid, vcard, vcccd], v_item)
-        except Exception:
-            pass
 
         self._person_cache = new_map
         self._last_person_cache_time = time.time()

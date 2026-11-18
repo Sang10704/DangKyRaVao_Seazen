@@ -304,7 +304,20 @@ class StorageManager:
                     c_clean = c_card.lstrip("0")
                     c_cccd = str(dv.get("cccd_number") or "").strip().lower()
                     c_id = str(dv.get("id") or "").strip().lower()
-                    
+
+                    # Skip synthesized vis_ slot row if a real registered visitor already holds that epad_atid/card
+                    if c_id.startswith("vis_"):
+                        slot_clean = c_id[4:].lstrip("0") or c_clean
+                        dup_real = False
+                        for existing_v in active_map.values():
+                            ev_epad = str(existing_v.get("epad_atid") or "").strip().lstrip("0")
+                            ev_card = str(existing_v.get("card_number") or "").strip().lstrip("0")
+                            if slot_clean and (ev_epad == slot_clean or ev_card == slot_clean):
+                                dup_real = True
+                                break
+                        if dup_real:
+                            continue
+
                     matched_k = None
                     for k in [c_card, c_clean, c_cccd, c_id]:
                         if k and k in active_map:
@@ -331,12 +344,21 @@ class StorageManager:
                 clean_c = card_no.lstrip("0")
                 p_name = p.get("fullname") or f"Khách thẻ {card_no}"
                 
-                # Check if already in active_map
+                # Check if already in active_map (by card_number, epad_atid, id, or full_name)
                 matched = False
                 for k, v in active_map.items():
                     v_card = str(v.get("card_number") or "").strip()
                     v_clean = v_card.lstrip("0")
-                    if card_no and (v_card == card_no or (clean_c and v_clean == clean_c)):
+                    v_epad = str(v.get("epad_atid") or "").strip()
+                    v_epad_clean = v_epad.lstrip("0")
+                    v_id = str(v.get("id") or "").strip()
+                    v_id_clean = v_id.lstrip("0")
+                    if card_no and (
+                        v_card == card_no
+                        or (clean_c and v_clean == clean_c)
+                        or (v_epad and (v_epad == card_no or (clean_c and v_epad_clean == clean_c)))
+                        or (v_id and (v_id == card_no or (clean_c and v_id_clean == clean_c)))
+                    ):
                         matched = True
                         break
                     v_name = (v.get("full_name") or "").strip().lower()
