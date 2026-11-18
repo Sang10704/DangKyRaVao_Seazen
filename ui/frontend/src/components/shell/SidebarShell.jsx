@@ -187,17 +187,17 @@ export default function SidebarShell({
         </nav>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {user?.lan_url && (
           <div
             style={{
               background: '#f8fafc',
-              border: '1px solid var(--border-main)',
-              borderRadius: 10,
-              padding: '8px 10px',
+              border: '1px solid #e2e8f0',
+              borderRadius: 12,
+              padding: '9px 11px',
               display: 'flex',
               flexDirection: 'column',
-              gap: 4,
+              gap: 5,
             }}
           >
             <div
@@ -224,17 +224,15 @@ export default function SidebarShell({
                 onClick={handleCopyLanUrl}
                 title="Sao chép địa chỉ LAN"
                 style={{
-                  border: '1px solid var(--border-main)',
+                  border: '1px solid #cbd5e1',
                   background: copiedLan ? '#f0fdf4' : '#ffffff',
-                  color: copiedLan ? '#15803d' : 'var(--text-secondary)',
-                  borderRadius: 5,
-                  padding: '2px 7px',
+                  color: copiedLan ? '#15803d' : '#334155',
+                  borderRadius: 6,
+                  padding: '2px 8px',
                   fontSize: 10.5,
                   fontWeight: 700,
                   cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 3,
+                  flexShrink: 0,
                 }}
               >
                 {copiedLan ? 'Đã chép' : 'Sao chép'}
@@ -256,27 +254,29 @@ export default function SidebarShell({
         )}
         <div className="tino-workspace-box">
           <span className="tino-workspace-label">Không gian làm việc</span>
-          <div className="tino-workspace-row">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div className="tino-workspace-row" style={{ gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0, flex: 1 }}>
               <div
                 style={{
-                  width: 24,
-                  height: 24,
+                  width: 28,
+                  height: 28,
+                  minWidth: 28,
+                  flexShrink: 0,
                   borderRadius: '50%',
                   background: 'var(--jet)',
                   color: '#fff',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontSize: 10,
+                  fontSize: 10.5,
                   fontWeight: 700,
                 }}
               >
                 SZ
               </div>
-              <div>
-                <div className="tino-workspace-name">SeaZen Security</div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+              <div style={{ minWidth: 0 }}>
+                <div className="tino-workspace-name" style={{ lineHeight: 1.25 }}>SeaZen Security</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.3, marginTop: 1 }}>
                   {user?.full_name || 'Quản trị viên'}
                 </div>
               </div>
@@ -292,6 +292,7 @@ export default function SidebarShell({
                 cursor: 'pointer',
                 color: 'var(--text-secondary)',
                 padding: 4,
+                flexShrink: 0,
               }}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
