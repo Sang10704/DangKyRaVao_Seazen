@@ -255,7 +255,12 @@ def _background_scan_collector():
 
         time.sleep(4)
 
-threading.Thread(target=_background_scan_collector, daemon=True, name="ZkHardwareHarvester").start()
+
+_IS_DEV_MODE = os.environ.get("VMS_ENV", "").strip().lower() == "dev"
+if not _IS_DEV_MODE and os.environ.get("VMS_DISABLE_HARVESTER", "") != "1":
+    threading.Thread(target=_background_scan_collector, daemon=True, name="ZkHardwareHarvester").start()
+else:
+    logger.info("[Dev Mode] Đã tắt Harvester TCP 4370 để chạy song song an toàn với Server chính.")
 
 
 def _sharepoint_realtime_reconciler():
@@ -304,7 +309,42 @@ def _sharepoint_realtime_reconciler():
             logger.debug("[SharePoint Reconciler] Cycle warning: %s", e)
 
 
-threading.Thread(target=_sharepoint_realtime_reconciler, daemon=True, name="SharePointRealtimeReconciler").start()
+if not _IS_DEV_MODE and os.environ.get("VMS_DISABLE_SP_SYNC", "") != "1":
+    threading.Thread(target=_sharepoint_realtime_reconciler, daemon=True, name="SharePointRealtimeReconciler").start()
+else:
+    logger.info("[Dev Mode] Đã tắt SharePoint Reconciler để tránh ghi đè từ máy chỉnh sửa.")
+
+
+def _is_loopback_request() -> bool:
+    """Allows access ONLY from the local Server machine (127.0.0.1 / ::1), never over LAN."""
+    if request.headers.get("X-Forwarded-For") or request.headers.get("X-Real-IP"):
+        return False
+    remote = str(request.remote_addr or "").strip()
+    return remote in ("127.0.0.1", "::1", "::ffff:127.0.0.1")
+
+
+@app.route("/api/server/m365-status", methods=["GET"])
+def api_server_m365_status():
+    if not _is_loopback_request():
+        return jsonify({"success": False, "error": "Chỉ máy Server cục bộ mới được phép truy cập."}), 403
+    try:
+        import sharepoint_vms_sync
+        tok = sharepoint_vms_sync.get_sharepoint_tokens(allow_interactive=False)
+        return jsonify({"success": True, **tok})
+    except Exception as e:
+        return jsonify({"success": False, "ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/server/m365-auth", methods=["POST"])
+def api_server_m365_auth():
+    if not _is_loopback_request():
+        return jsonify({"success": False, "error": "Chỉ máy Server cục bộ mới được phép đăng nhập Token Microsoft."}), 403
+    try:
+        import sharepoint_vms_sync
+        tok = sharepoint_vms_sync.get_sharepoint_tokens(allow_interactive=True)
+        return jsonify({"success": bool(tok.get("ok")), **tok})
+    except Exception as e:
+        return jsonify({"success": False, "ok": False, "error": str(e)}), 500
 
 
 # ---------------- Built-in ZKTeco ADMS Push Receiver (/iclock/*) ----------------
