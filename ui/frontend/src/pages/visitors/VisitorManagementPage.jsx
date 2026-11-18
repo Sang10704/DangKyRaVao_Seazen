@@ -354,6 +354,43 @@ export default function VisitorManagementPage({
   const compCardConflict = useMemo(() => findActiveCardHolder(compForm.card_number), [compForm.card_number, findActiveCardHolder]);
   const mainCccdConflict = useMemo(() => findActiveCccdHolder(form.cccd_number), [form.cccd_number, findActiveCccdHolder]);
 
+  const cardNameLookup = useMemo(() => {
+    const map = {};
+    (inventoryCards || []).forEach((c) => {
+      const num = String(c.CardNumber || '').trim();
+      const cname = String(c.CardName || '').trim();
+      if (num && cname) {
+        map[num] = cname;
+        map[normCard(num)] = cname;
+      }
+    });
+    return map;
+  }, [inventoryCards]);
+
+  const renderCardCell = (cardNumber, displayName, pillClass = 'badge badge-gold') => {
+    const num = String(cardNumber || '').trim();
+    if (!num) {
+      return <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Không thẻ</span>;
+    }
+    const resolvedName =
+      (displayName && String(displayName).trim() !== num ? String(displayName).trim() : '') ||
+      cardNameLookup[num] ||
+      cardNameLookup[normCard(num)] ||
+      '';
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 3 }}>
+        {resolvedName && (
+          <div style={{ fontSize: 14.5, fontWeight: 800, color: '#111111', lineHeight: 1.2 }}>
+            {resolvedName}
+          </div>
+        )}
+        <span className={pillClass} style={{ fontFamily: 'var(--font-mono)', fontSize: resolvedName ? 11 : 12 }}>
+          {num}
+        </span>
+      </div>
+    );
+  };
+
   // Image 2 Live Quick Return / Lookup Matches
   const quickCheckoutMatches = useMemo(() => {
     const q = String(checkoutQuery || '').trim();
@@ -1963,7 +2000,7 @@ export default function VisitorManagementPage({
 
           <div className="table-scroll">
             {listTab === 'ACTIVE' ? (
-              <table className="data-table">
+              <table className="data-table" key="table-active">
                 <thead>
                   <tr>
                     <th style={{ width: 62 }}>#</th>
@@ -1993,7 +2030,7 @@ export default function VisitorManagementPage({
                         t.overdueAlert || (hasCompanions && v.companions.some((c) => c._timing?.overdueAlert));
 
                       return (
-                        <React.Fragment key={v.id || idx}>
+                        <React.Fragment key={`act_${v.id || idx}_${idx}`}>
                           <tr className={anyGroupOverdue ? 'visitor-row-overdue' : ''}>
                             <td>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -2043,13 +2080,7 @@ export default function VisitorManagementPage({
                             </td>
 
                             <td>
-                              {v.card_number ? (
-                                <span className="badge badge-gold" style={{ fontFamily: 'var(--font-mono)' }}>
-                                  {v.card_number}
-                                </span>
-                              ) : (
-                                <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Không thẻ</span>
-                              )}
+                              {renderCardCell(v.card_number, v.card_display_name, 'badge badge-gold')}
                               {(v.in_scan_count > 0 || v.out_scan_count > 0) && (
                                 <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 3 }}>
                                   Quẹt cổng: {v.in_scan_count} vào · {v.out_scan_count} ra
@@ -2188,9 +2219,7 @@ export default function VisitorManagementPage({
                                             <td style={{ fontFamily: 'var(--font-mono)' }}>{c.cccd_number || '—'}</td>
                                             <td>
                                               {c.card_number ? (
-                                                <span className="badge badge-gold" style={{ fontFamily: 'var(--font-mono)' }}>
-                                                  {c.card_number}
-                                                </span>
+                                                renderCardCell(c.card_number, c.card_display_name, 'badge badge-gold')
                                               ) : (
                                                 <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>Đi cùng đoàn</span>
                                               )}
@@ -2234,7 +2263,7 @@ export default function VisitorManagementPage({
                 </tbody>
               </table>
             ) : (
-              <table className="data-table">
+              <table className="data-table" key="table-history">
                 <thead>
                   <tr>
                     <th style={{ width: 58 }}>#</th>
@@ -2263,7 +2292,7 @@ export default function VisitorManagementPage({
                       const ht = evaluateVisitorTiming(v, nowMs);
 
                       return (
-                        <React.Fragment key={v.id || idx}>
+                        <React.Fragment key={`act_${v.id || idx}_${idx}`}>
                           <tr>
                             <td>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -2301,7 +2330,7 @@ export default function VisitorManagementPage({
                             </td>
                             <td>{v.company || '—'}</td>
                             <td>
-                              <span className="badge badge-dark">{v.card_number || 'Không thẻ'}</span>
+                              {renderCardCell(v.card_number, v.card_display_name, 'badge badge-dark')}
                             </td>
                             <td>
                               {v.department || '—'} {v.host_person ? `· ${v.host_person}` : ''}
