@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ROUTES } from '../../constants/routes';
 
 export default function SidebarShell({
@@ -9,6 +9,30 @@ export default function SidebarShell({
   activeVisitorsCount = 0,
   pendingCardPhotoCount = 0,
 }) {
+  const [copiedLan, setCopiedLan] = useState(false);
+
+  const handleCopyLanUrl = async () => {
+    const url = user?.lan_url;
+    if (!url) return;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = url;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      setCopiedLan(true);
+      setTimeout(() => setCopiedLan(false), 2000);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
   const navItems = [
     {
       path: ROUTES.LIVE,
@@ -152,7 +176,73 @@ export default function SidebarShell({
         </nav>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {user?.lan_url && (
+          <div
+            style={{
+              background: '#f8fafc',
+              border: '1px solid var(--border-main)',
+              borderRadius: 10,
+              padding: '8px 10px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 4,
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 6,
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: '0.04em',
+                  color: 'var(--text-muted)',
+                  textTransform: 'uppercase',
+                }}
+              >
+                Truy cập máy LAN
+              </span>
+              <button
+                type="button"
+                onClick={handleCopyLanUrl}
+                title="Sao chép địa chỉ LAN"
+                style={{
+                  border: '1px solid var(--border-main)',
+                  background: copiedLan ? '#f0fdf4' : '#ffffff',
+                  color: copiedLan ? '#15803d' : 'var(--text-secondary)',
+                  borderRadius: 5,
+                  padding: '2px 7px',
+                  fontSize: 10.5,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 3,
+                }}
+              >
+                {copiedLan ? 'Đã chép' : 'Sao chép'}
+              </button>
+            </div>
+            <div
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11.5,
+                fontWeight: 700,
+                color: '#111111',
+                wordBreak: 'break-all',
+                userSelect: 'all',
+              }}
+            >
+              {user.lan_url}
+            </div>
+          </div>
+        )}
         <div className="tino-workspace-box">
           <span className="tino-workspace-label">Không gian làm việc</span>
           <div className="tino-workspace-row">

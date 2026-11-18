@@ -7,6 +7,7 @@ Port: 6868
 import os
 import sys
 import json
+import socket
 import logging
 import threading
 from datetime import datetime
@@ -153,12 +154,30 @@ def auth_logout():
     return jsonify({"success": True, "message": "Đã đăng xuất thành công!"})
 
 
+def _get_server_lan_ip() -> str:
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("172.16.56.139", 4370))
+        ip = s.getsockname()[0]
+        s.close()
+        if ip and not ip.startswith("127."):
+            return ip
+    except Exception:
+        pass
+    try:
+        return socket.gethostbyname(socket.gethostname())
+    except Exception:
+        return "127.0.0.1"
+
+
 @app.route("/api/auth/me", methods=["GET"])
 def auth_me():
     """Checks session and returns logged-in user profile with role."""
     user = get_current_user()
     if not user:
         return jsonify({"authenticated": False})
+    host_port = request.host.split(":")[1] if ":" in str(request.host or "") else ("6869" if _IS_DEV_MODE else "6868")
+    lan_ip = _get_server_lan_ip()
     return jsonify({
         "authenticated": True,
         "user": {
@@ -167,7 +186,8 @@ def auth_me():
             "email": user.get("email", ""),
             "full_name": user["full_name"],
             "role": user["role"],
-            "allowed_pages": user.get("allowed_pages", ["ALL"] if user["role"] == "admin" else ["/visitors"])
+            "allowed_pages": user.get("allowed_pages", ["ALL"] if user["role"] == "admin" else ["/visitors"]),
+            "lan_url": f"http://{lan_ip}:{host_port}",
         }
     })
 
