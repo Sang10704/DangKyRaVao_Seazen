@@ -1297,26 +1297,29 @@ def upload_card_evidence_db(
             has_both = bool(final_name) and (bool(clean_photo) or had_photo)
             ev_status = "VERIFIED" if has_both else "PENDING_PHOTO"
 
-            cur.execute("""
-                UPDATE tbl_CustomerCards
-                SET CardPhotoBase64 = COALESCE(NULLIF(?, ''), CardPhotoBase64),
-                    CardName = CASE WHEN ? IS NOT NULL THEN NULLIF(?, '') ELSE CardName END,
-                    EvidenceStatus = ?,
-                    VerifiedBy = ?,
-                    VerifiedAt = GETDATE(),
-                    CardCode = ?,
-                    Notes = CASE WHEN ? IS NOT NULL AND ? <> '' THEN ? ELSE Notes END,
-                    UpdatedAt = GETDATE()
-                WHERE CardID = ?
-            """, (
-                clean_photo or "",
-                clean_name, clean_name or "",
+            set_clauses = [
+                "EvidenceStatus = ?",
+                "VerifiedBy = ?",
+                "VerifiedAt = GETDATE()",
+                "CardCode = ?",
+                "UpdatedAt = GETDATE()",
+            ]
+            params: List[Any] = [
                 ev_status,
                 str(verified_by or "Quản trị viên")[:100],
                 new_code[:50],
-                notes, notes, notes,
-                cid,
-            ))
+            ]
+            if clean_photo:
+                set_clauses.append("CardPhotoBase64 = ?")
+                params.append(clean_photo)
+            if clean_name is not None:
+                set_clauses.append("CardName = ?")
+                params.append(clean_name[:100] if clean_name else None)
+            if notes is not None and str(notes).strip() != "":
+                set_clauses.append("Notes = ?")
+                params.append(str(notes).strip()[:500])
+            params.append(cid)
+            cur.execute(f"UPDATE tbl_CustomerCards SET {', '.join(set_clauses)} WHERE CardID = ?", params)
             conn.commit()
             return {
                 "success": True,
@@ -1351,59 +1354,64 @@ def upsert_customer_card_db(data: Dict[str, Any]) -> Dict[str, Any]:
     try:
         with pyodbc.connect(get_connection_string(), timeout=5) as conn:
             cur = conn.cursor()
+            existing_row = None
             if card_id:
-                cur.execute("""
-                    UPDATE tbl_CustomerCards
-                    SET CardCode = ?, CardName = COALESCE(?, CardName), CardNumber = ?, CardType = ?, Status = ?, Notes = ?,
-                        CardPhotoBase64 = COALESCE(?, CardPhotoBase64),
-                        EvidenceStatus = CASE
-                            WHEN COALESCE(?, CardName) IS NOT NULL AND LTRIM(RTRIM(COALESCE(?, CardName))) <> ''
-                             AND (COALESCE(?, CardPhotoBase64) IS NOT NULL AND LEN(COALESCE(?, CardPhotoBase64)) > 20)
-                            THEN 'VERIFIED' ELSE 'PENDING_PHOTO'
-                        END,
-                        VerifiedBy = CASE WHEN ? IS NOT NULL OR ? IS NOT NULL THEN ? ELSE VerifiedBy END,
-                        VerifiedAt = CASE WHEN ? IS NOT NULL OR ? IS NOT NULL THEN GETDATE() ELSE VerifiedAt END,
-                        UpdatedAt = GETDATE()
-                    WHERE CardID = ?
-                """, (
-                    card_code, card_name, card_num, card_type, status, notes, photo_b64,
-                    card_name, card_name, photo_b64, photo_b64,
-                    photo_b64, card_name, verified_by, photo_b64, card_name, int(card_id),
-                ))
+                cur.execute(
+                    "SELECT CardID, CardName, CASE WHEN CardPhotoBase64 IS NOT NULL AND LEN(CardPhotoBase64) > 20 THEN 1 ELSE 0 END FROM tbl_CustomerCards WHERE CardID = ?",
+                    (int(card_id),),
+                )
+                existing_row = cur.fetchone()
             else:
-                cur.execute("SELECT CardID FROM tbl_CustomerCards WHERE CardNumber = ?", (card_num,))
-                if cur.fetchone():
-                    cur.execute("""
-                        UPDATE tbl_CustomerCards
-                        SET CardCode = ?, CardName = COALESCE(?, CardName), CardType = ?, Status = ?, Notes = ?,
-                            CardPhotoBase64 = COALESCE(?, CardPhotoBase64),
-                            EvidenceStatus = CASE
-                                WHEN COALESCE(?, CardName) IS NOT NULL AND LTRIM(RTRIM(COALESCE(?, CardName))) <> ''
-                                 AND (COALESCE(?, CardPhotoBase64) IS NOT NULL AND LEN(COALESCE(?, CardPhotoBase64)) > 20)
-                                THEN 'VERIFIED' ELSE 'PENDING_PHOTO'
-                            END,
-                            VerifiedBy = CASE WHEN ? IS NOT NULL OR ? IS NOT NULL THEN ? ELSE VerifiedBy END,
-                            VerifiedAt = CASE WHEN ? IS NOT NULL OR ? IS NOT NULL THEN GETDATE() ELSE VerifiedAt END,
-                            UpdatedAt = GETDATE()
-                        WHERE CardNumber = ?
-                    """, (
-                        card_code, card_name, card_type, status, notes, photo_b64,
-                        card_name, card_name, photo_b64, photo_b64,
-                        photo_b64, card_name, verified_by, photo_b64, card_name, card_num,
-                    ))
-                else:
-                    ev_st = "VERIFIED" if (photo_b64 and card_name) else "PENDING_PHOTO"
-                    cur.execute("""
-                        INSERT INTO tbl_CustomerCards (
-                            CardCode, CardName, CardNumber, CardType, Status, IsSyncedToDevices,
-                            CardPhotoBase64, EvidenceStatus, VerifiedBy, VerifiedAt, Notes
-                        )
-                        VALUES (?, ?, ?, ?, ?, 1, ?, ?, CASE WHEN ? IS NOT NULL OR ? IS NOT NULL THEN ? ELSE NULL END,
-                                CASE WHEN ? IS NOT NULL OR ? IS NOT NULL THEN GETDATE() ELSE NULL END, ?)
-                    """, (
-                        card_code, card_name, card_num, card_type, status, photo_b64, ev_st,
-                        photo_b64, card_name, verified_by, photo_b64, card_name, notes,
-                    ))
+                cur.execute(
+                    "SELECT CardID, CardName, CASE WHEN CardPhotoBase64 IS NOT NULL AND LEN(CardPhotoBase64) > 20 THEN 1 ELSE 0 END FROM tbl_CustomerCards WHERE CardNumber = ?",
+                    (card_num,),
+                )
+                existing_row = cur.fetchone()
+
+            if existing_row:
+                target_cid = int(existing_row[0])
+                existing_name = str(existing_row[1] or "").strip()
+                had_photo = bool(existing_row[2])
+                final_name = card_name if card_name is not None else existing_name
+                has_both = bool(final_name) and (bool(photo_b64) or had_photo)
+                ev_st = "VERIFIED" if has_both else "PENDING_PHOTO"
+
+                set_clauses = [
+                    "CardCode = ?",
+                    "CardNumber = ?",
+                    "CardType = ?",
+                    "Status = ?",
+                    "Notes = ?",
+                    "EvidenceStatus = ?",
+                    "UpdatedAt = GETDATE()",
+                ]
+                params: List[Any] = [card_code, card_num, card_type, status, notes, ev_st]
+                if card_name is not None:
+                    set_clauses.append("CardName = ?")
+                    params.append(card_name[:100])
+                if photo_b64 is not None:
+                    set_clauses.append("CardPhotoBase64 = ?")
+                    params.append(photo_b64)
+                if photo_b64 is not None or card_name is not None:
+                    set_clauses.extend(["VerifiedBy = ?", "VerifiedAt = GETDATE()"])
+                    params.append(verified_by)
+                params.append(target_cid)
+                cur.execute(f"UPDATE tbl_CustomerCards SET {', '.join(set_clauses)} WHERE CardID = ?", params)
+            else:
+                ev_st = "VERIFIED" if (photo_b64 and card_name) else "PENDING_PHOTO"
+                has_ev = bool(photo_b64 or card_name)
+                cur.execute("""
+                    INSERT INTO tbl_CustomerCards (
+                        CardCode, CardName, CardNumber, CardType, Status, IsSyncedToDevices,
+                        CardPhotoBase64, EvidenceStatus, VerifiedBy, VerifiedAt, Notes
+                    )
+                    VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, CASE WHEN ? = 1 THEN GETDATE() ELSE NULL END, ?)
+                """, (
+                    card_code, card_name, card_num, card_type, status, photo_b64, ev_st,
+                    verified_by if has_ev else None,
+                    1 if has_ev else 0,
+                    notes,
+                ))
             conn.commit()
             return {
                 "success": True,
