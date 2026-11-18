@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-cd /d "%~dp0"
+cd /d "%~dp0.."
 echo ============================================================================
 echo   SEAZEN VMS - CAI DAT MOI TRUONG MAY SERVER
 echo ============================================================================
@@ -31,5 +31,5 @@ if errorlevel 1 (
 
 echo.
 echo [HOAN TAT] May Server da san sang!
-echo Hay chay file "Start_SeaZen_Server.vbs" de bat Server ngam (khong cua so console).
+echo Hay chay file "run\Start_SeaZen_Server.vbs" de bat Server ngam (khong cua so console).
 pause
