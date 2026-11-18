@@ -1,5 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { ROUTES } from '../../constants/routes';
+import { apiFetch } from '../../services/apiClient';
 
 function formatSmoothPath(points) {
   if (!points || points.length === 0) return '';
@@ -139,6 +140,69 @@ export default function OverviewDashboardPage({
 }) {
   const [hoverHourIdx, setHoverHourIdx] = useState(null);
   const [deptTab, setDeptTab] = useState('staff');
+  const [insideStaff, setInsideStaff] = useState([]);
+  const [insideFilter, setInsideFilter] = useState('ALL');
+  const [insideSearch, setInsideSearch] = useState('');
+  const [loadingInside, setLoadingInside] = useState(false);
+
+  const loadPresentInside = useCallback(async () => {
+    setLoadingInside(true);
+    try {
+      const { ok, data } = await apiFetch(`/api/analytics/present_details?type=staff&date=${encodeURIComponent(scanDate)}`);
+      if (ok && data?.inside) {
+        setInsideStaff(data.inside);
+      }
+    } finally {
+      setLoadingInside(false);
+    }
+  }, [scanDate]);
+
+  useEffect(() => {
+    loadPresentInside();
+  }, [loadPresentInside, analytics?.currently_inside_staff]);
+
+  const combinedInside = useMemo(() => {
+    const staffRows = (insideStaff || []).map((s) => ({
+      key: `staff_${s.atid}`,
+      name: s.fullname || s.atid,
+      code: s.atid,
+      isStaff: true,
+      department: s.department || '—',
+      time: s.time_only || String(s.check_time || '').slice(11, 19),
+      device: s.device_name || 'Cổng chính',
+      verify: s.verify_mode || 'Khuôn mặt',
+    }));
+    const visitorRows = (activeVisitors || []).map((v) => ({
+      key: `vis_${v.id || v.card_number}`,
+      name: v.full_name || 'Khách',
+      code: v.card_display_name || v.card_number || v.cccd_number || '—',
+      isStaff: false,
+      department: v.department || 'Khách',
+      time: String(v.checkin_time || '').slice(11, 19) || String(v.checkin_time || ''),
+      device: v.gate_last_in_device || 'Lễ tân / Cổng',
+      verify: v.card_number ? 'Thẻ NFC' : 'Đăng ký',
+    }));
+
+    let merged =
+      insideFilter === 'STAFF'
+        ? staffRows
+        : insideFilter === 'VISITOR'
+        ? visitorRows
+        : [...visitorRows, ...staffRows];
+
+    if (insideSearch.trim()) {
+      const q = insideSearch.toLowerCase();
+      merged = merged.filter((r) =>
+        `${r.name} ${r.code} ${r.department} ${r.device}`.toLowerCase().includes(q)
+      );
+    }
+    return {
+      rows: merged,
+      staffCount: staffRows.length,
+      visitorCount: visitorRows.length,
+      totalCount: staffRows.length + visitorRows.length,
+    };
+  }, [insideStaff, activeVisitors, insideFilter, insideSearch]);
 
   const kpi = analytics?.kpi || {};
   const hourly = analytics?.hourly || { labels: [], staff: [], visitors: [] };
@@ -324,7 +388,7 @@ export default function OverviewDashboardPage({
           <div
             className="card"
             style={{ padding: '14px 16px', cursor: 'pointer' }}
-            onClick={() => onNavigate(ROUTES.TIMEKEEPING)}
+            onClick={() => document.getElementById('present-inside-section')?.scrollIntoView({ behavior: 'smooth' })}
           >
             <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
               Nhân sự đang có mặt
@@ -688,7 +752,7 @@ export default function OverviewDashboardPage({
         </div>
 
         {/* ROW 4: ACTIONABLE ALERTS */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
           <div className="card" style={{ padding: '14px 18px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <div style={{ fontSize: 14, fontWeight: 800, color: '#111111' }}>
@@ -775,6 +839,109 @@ export default function OverviewDashboardPage({
                 })}
               </div>
             )}
+          </div>
+        </div>
+
+        {/* ROW 5: CURRENTLY INSIDE OFFICE LIST */}
+        <div id="present-inside-section" className="card" style={{ padding: '16px 18px' }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 10,
+              marginBottom: 12,
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: '#111111' }}>
+                Danh sách Đang có mặt trong Văn phòng ({combinedInside.totalCount})
+              </div>
+              <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
+                Tổng hợp nhân sự quét Làn VÀO chưa ra &amp; khách đang giữ thẻ ngày {scanDate}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className={`btn btn-sm ${insideFilter === 'ALL' ? 'btn-primary' : ''}`}
+                onClick={() => setInsideFilter('ALL')}
+              >
+                Tất cả ({combinedInside.totalCount})
+              </button>
+              <button
+                type="button"
+                className={`btn btn-sm ${insideFilter === 'STAFF' ? 'btn-primary' : ''}`}
+                onClick={() => setInsideFilter('STAFF')}
+              >
+                Nhân viên ({combinedInside.staffCount})
+              </button>
+              <button
+                type="button"
+                className={`btn btn-sm ${insideFilter === 'VISITOR' ? 'btn-primary' : ''}`}
+                onClick={() => setInsideFilter('VISITOR')}
+              >
+                Khách ({combinedInside.visitorCount})
+              </button>
+              <input
+                type="text"
+                className="v-input"
+                style={{ width: 210, height: 32, fontSize: 12 }}
+                placeholder="Tìm tên, mã, phòng ban..."
+                value={insideSearch}
+                onChange={(e) => setInsideSearch(e.target.value)}
+              />
+              <button type="button" className="btn btn-sm" onClick={loadPresentInside}>
+                {loadingInside ? 'Đang tải...' : 'Làm mới'}
+              </button>
+            </div>
+          </div>
+
+          <div style={{ maxHeight: 380, overflowY: 'auto' }}>
+            <table className="data-table" style={{ width: '100%' }}>
+              <thead>
+                <tr>
+                  <th style={{ width: 48 }}>#</th>
+                  <th>Họ và tên</th>
+                  <th>Mã ATID / Thẻ</th>
+                  <th>Đối tượng</th>
+                  <th>Phòng ban</th>
+                  <th>Giờ vào gần nhất</th>
+                  <th>Cửa vào</th>
+                  <th>Xác thực</th>
+                </tr>
+              </thead>
+              <tbody>
+                {combinedInside.rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} style={{ textAlign: 'center', padding: 28, color: 'var(--text-muted)' }}>
+                      Không có ai khớp bộ lọc hiện tại.
+                    </td>
+                  </tr>
+                ) : (
+                  combinedInside.rows.map((r, idx) => (
+                    <tr key={r.key}>
+                      <td style={{ color: 'var(--text-muted)' }}>{idx + 1}</td>
+                      <td style={{ fontWeight: 700, color: '#111111' }}>{r.name}</td>
+                      <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{r.code}</td>
+                      <td>
+                        <span className={`badge ${r.isStaff ? 'badge-dark' : 'badge-gold'}`}>
+                          {r.isStaff ? 'Nhân viên' : 'Khách'}
+                        </span>
+                      </td>
+                      <td>{r.department}</td>
+                      <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: '#15803d' }}>
+                        {r.time || '—'}
+                      </td>
+                      <td>{r.device}</td>
+                      <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{r.verify}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
