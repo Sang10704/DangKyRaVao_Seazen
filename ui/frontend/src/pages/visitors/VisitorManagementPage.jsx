@@ -1238,6 +1238,11 @@ export default function VisitorManagementPage({
         {isFormOpen && (
           <form
             onSubmit={handleSubmitRegistration}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && e.target?.tagName === 'INPUT') {
+                e.preventDefault();
+              }
+            }}
             noValidate
             className="visitor-sheet"
             style={{
@@ -1580,6 +1585,12 @@ export default function VisitorManagementPage({
                     onChange={(e) => {
                       setForm({ ...form, card_number: e.target.value });
                       setFocusedField('main_card');
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        setFocusedField(null);
+                      }
                     }}
                   />
                   {renderCardPickerPopover(mainCardOptions, (num) => {

@@ -1139,7 +1139,7 @@ def register_visitor():
                 "parent_visitor_id": record.get("id"),
                 "parent_visitor_name": full_name or cccd_num,
             }
-            if comp_payload.get("card_number") and not EPAD_ENABLED:
+            if comp_payload.get("card_number") and not is_future_scheduled:
                 c_hw = zk_client.enroll_visitor_card(comp_payload)
                 if c_hw.get("success"):
                     comp_payload["epad_atid"] = c_hw.get("employee_atid")
