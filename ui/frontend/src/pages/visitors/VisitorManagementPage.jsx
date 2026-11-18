@@ -356,7 +356,7 @@ export default function VisitorManagementPage({
 
   const cardNameLookup = useMemo(() => {
     const map = {};
-    (inventoryCards || []).forEach((c) => {
+    (customerCards || []).forEach((c) => {
       const num = String(c.CardNumber || '').trim();
       const cname = String(c.CardName || '').trim();
       if (num && cname) {
@@ -365,7 +365,7 @@ export default function VisitorManagementPage({
       }
     });
     return map;
-  }, [inventoryCards]);
+  }, [customerCards]);
 
   const renderCardCell = (cardNumber, displayName, pillClass = 'badge badge-gold') => {
     const num = String(cardNumber || '').trim();
