@@ -335,6 +335,28 @@ else:
     logger.info("[Dev Mode] Đã tắt SharePoint Reconciler để tránh ghi đè từ máy chỉnh sửa.")
 
 
+def _card_expiry_scheduler():
+    """
+    Runs every 30s in Production:
+    - Enrolls SCHEDULED visitor cards when ValidFrom arrives.
+    - Keeps cards valid until 23:59:59 of ValidTo calendar day, then revokes on 4 ZKTeco devices
+      past 23:59:59 so cards cannot be reused the next day.
+    """
+    time.sleep(10)
+    while True:
+        try:
+            import db_mssql
+            if db_mssql.is_mssql_active():
+                db_mssql.process_card_expiry_and_schedule_db(zk_client=zk_client)
+        except Exception as e:
+            logger.debug("[CardExpiryScheduler] warning: %s", e)
+        time.sleep(30)
+
+
+if not _IS_DEV_MODE and os.environ.get("VMS_DISABLE_HARVESTER", "") != "1":
+    threading.Thread(target=_card_expiry_scheduler, daemon=True, name="CardExpiryScheduler").start()
+
+
 def _is_loopback_request() -> bool:
     """Allows access ONLY from the local Server machine (127.0.0.1 / ::1), never over LAN."""
     if request.headers.get("X-Forwarded-For") or request.headers.get("X-Real-IP"):
@@ -1005,9 +1027,31 @@ def register_visitor():
 
     # 1. Register customer & sync permissions to door devices (TCP 4370 parallel across 4 devices)
     # SharePoint sync runs strictly asynchronously via storage.add_visitor() & push_table_async() so check-in never stalls.
+    def _combine_dt_str(d_part, t_part, fallback_str=""):
+        s_t = str(t_part or "").strip()
+        if len(s_t) >= 16 and "-" in s_t[:10]:
+            return s_t.replace("T", " ")[:19]
+        s_d = str(d_part or "").strip()
+        if s_d and s_t:
+            return f"{s_d} {s_t}"[:19]
+        return str(fallback_str or "").replace("T", " ")[:19]
+
+    valid_from_str = _combine_dt_str(data.get("from_date"), data.get("from_time"), data.get("checkin_time"))
+    valid_to_str = _combine_dt_str(data.get("to_date"), data.get("expected_checkout_time"), data.get("expected_checkout_time"))
+    is_future_scheduled = False
+    if valid_from_str:
+        try:
+            vf_parsed = datetime.strptime(valid_from_str[:16], "%Y-%m-%d %H:%M")
+            if (vf_parsed - datetime.now()).total_seconds() > 60:
+                is_future_scheduled = True
+        except Exception:
+            pass
+
     epad_sync_info = "Đã lưu hồ sơ (không cấp thẻ)"
     epad_sync_ok = True
-    if card_number:
+    if card_number and is_future_scheduled:
+        epad_sync_info = f"ĐÃ ĐẶT LỊCH HẸN ({valid_from_str}) — Sẽ tự động nạp thẻ vào 4 máy cửa khi đến giờ"
+    elif card_number:
         direct_res = zk_client.enroll_visitor_card(data)
         if direct_res.get("success"):
             epad_sync_ok = True
@@ -1114,13 +1158,44 @@ def register_visitor():
         if db_mssql.is_mssql_active():
             card_assign_jobs = []
             if card_number:
-                card_assign_jobs.append((card_number, full_name or cccd_num, cccd_num))
+                card_assign_jobs.append((
+                    card_number,
+                    full_name or cccd_num,
+                    cccd_num,
+                    data.get("phone") or "",
+                    data.get("company") or "",
+                    data.get("host_person") or "",
+                    data.get("host_phone") or "",
+                    valid_from_str or record.get("checkin_time"),
+                    valid_to_str or record.get("expected_checkout_time"),
+                    "SCHEDULED" if is_future_scheduled else "ACTIVE_ON_DEVICE",
+                ))
             for cr in companion_records:
                 if cr.get("card_number"):
-                    card_assign_jobs.append((cr["card_number"], cr.get("full_name") or full_name, cr.get("cccd_number") or ""))
+                    card_assign_jobs.append((
+                        cr["card_number"],
+                        cr.get("full_name") or full_name,
+                        cr.get("cccd_number") or "",
+                        cr.get("phone") or data.get("phone") or "",
+                        cr.get("company") or data.get("company") or "",
+                        data.get("host_person") or "",
+                        data.get("host_phone") or "",
+                        valid_from_str or cr.get("checkin_time"),
+                        cr.get("expected_checkout_time") or valid_to_str,
+                        "SCHEDULED" if is_future_scheduled else "ACTIVE_ON_DEVICE",
+                    ))
             op_name = data.get("operator") or "Lễ tân"
-            for c_num, c_holder, c_cccd in card_assign_jobs:
-                res_card = db_mssql.sync_card_assignment_on_checkin(c_num, c_holder, c_cccd, op_name)
+            for c_num, c_holder, c_cccd, c_phone, c_comp, c_host, c_hphone, c_vf, c_vt, c_sync_st in card_assign_jobs:
+                res_card = db_mssql.sync_card_assignment_on_checkin(
+                    c_num, c_holder, c_cccd, op_name,
+                    holder_phone=c_phone,
+                    holder_company=c_comp,
+                    contact_person=c_host,
+                    contact_phone=c_hphone,
+                    valid_from=c_vf,
+                    valid_to=c_vt,
+                    device_sync_state=c_sync_st,
+                )
                 cards_touched = True
                 if res_card.get("is_new"):
                     new_cards_detected.append(res_card.get("card_number") or c_num)
@@ -1580,7 +1655,70 @@ def visitor_checkout():
 @app.route("/api/visitors/active", methods=["GET"])
 @require_role(["admin", "staff"])
 def get_active_visitors():
-    return jsonify({"visitors": storage.get_active_visitors()})
+    visitors = storage.get_active_visitors()
+    now_dt = datetime.now()
+    card_name_map = {}
+    try:
+        import db_mssql
+        if db_mssql.is_mssql_active():
+            cards_res = db_mssql.get_customer_cards_db(limit=500, include_photos=False)
+            for cr in cards_res.get("rows", []):
+                cnum = str(cr.get("CardNumber") or "").strip()
+                cname = str(cr.get("CardName") or "").strip()
+                if cnum and cname:
+                    card_name_map[cnum] = cname
+                    card_name_map[cnum.lstrip("0") or "0"] = cname
+    except Exception:
+        pass
+
+    for v in visitors:
+        v["expiry_alert_type"] = None
+        v["expiry_alert_message"] = ""
+        exp_raw = str(v.get("expected_checkout_time") or "").strip()
+        if not exp_raw:
+            continue
+        exp_dt = None
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+            try:
+                exp_dt = datetime.strptime(exp_raw.replace("T", " ")[:len(fmt) + 2], fmt)
+                break
+            except Exception:
+                continue
+        if not exp_dt or now_dt < exp_dt:
+            continue
+
+        cnum = str(v.get("card_number") or "").strip()
+        card_label = card_name_map.get(cnum) or card_name_map.get(cnum.lstrip("0") or "0") or cnum or "không gắn thẻ"
+        v["card_display_name"] = card_label
+        fname = str(v.get("full_name") or "Khách").strip()
+        out_count = int(v.get("gate_out_count") or 0)
+        last_out = str(v.get("gate_last_out_time") or v.get("last_gate_out_time") or v.get("gate_out_time") or "").strip()
+        if out_count > 0 or last_out:
+            out_hhmm = last_out[11:16] if len(last_out) >= 16 else (last_out[:5] or "đã quẹt cổng RA")
+            v["expiry_alert_type"] = "EXITED_UNRETURNED"
+            v["expiry_alert_message"] = (
+                f"Thẻ {card_label} khách {fname} đã ra về lúc {out_hhmm} nhưng chưa check-out, "
+                "kiểm tra lý do hoặc check-out. Lưu ý: Nếu kho không có thẻ đó nghĩa là có thể khách đã cầm về."
+            )
+        else:
+            exp_hhmm = exp_dt.strftime("%H:%M")
+            v["expiry_alert_type"] = "STILL_INSIDE_OVERDUE"
+            v["expiry_alert_message"] = (
+                f"Khách {fname} (Thẻ {card_label}) đã đến hạn {exp_hhmm} nhưng chưa check-out "
+                "và chưa quẹt Làn RA — có thể vẫn đang ở trong công ty."
+            )
+    return jsonify({"visitors": visitors})
+
+
+@app.route("/api/visitor/card/<card_key>/history", methods=["GET"])
+@require_role(["admin", "staff"])
+def api_visitor_card_history(card_key):
+    try:
+        import db_mssql
+        rows = db_mssql.get_card_history_db(card_key, limit=40)
+        return jsonify({"success": True, "rows": rows})
+    except Exception as e:
+        return jsonify({"success": False, "rows": [], "error": str(e)}), 500
 
 
 @app.route("/api/visitors/history", methods=["GET"])

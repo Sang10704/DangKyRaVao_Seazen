@@ -53,6 +53,9 @@ export default function CardManagementPage({
   const [evidenceNotes, setEvidenceNotes] = useState('');
   const [uploadingEvidence, setUploadingEvidence] = useState(false);
   const [previewLightbox, setPreviewLightbox] = useState(null);
+  const [historyModalCard, setHistoryModalCard] = useState(null);
+  const [historyRows, setHistoryRows] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   const [sortKey, setSortKey] = useState('CardName');
   const [sortDir, setSortDir] = useState('asc');
 
@@ -223,6 +226,20 @@ export default function CardManagementPage({
     setEvidenceCode(card.CardCode || `THE-KHACH-${card.CardNumber}`);
     setEvidenceNotes(card.Notes || '');
     if (modalFileRef.current) modalFileRef.current.value = '';
+  };
+
+  const openHistoryModal = async (card) => {
+    setHistoryModalCard(card);
+    setHistoryRows([]);
+    setLoadingHistory(true);
+    try {
+      const { ok, data } = await apiFetch(`/api/visitor/card/${encodeURIComponent(card.CardNumber)}/history`);
+      if (ok && data?.success) {
+        setHistoryRows(data.rows || []);
+      }
+    } finally {
+      setLoadingHistory(false);
+    }
   };
 
   const handleModalFileChange = async (e) => {
@@ -1113,25 +1130,67 @@ export default function CardManagementPage({
                         {holder ? (
                           <div>
                             <div style={{ fontWeight: 700 }}>{holder.full_name}</div>
-                            <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
-                              CCCD: {holder.cccd_number || '—'} · Vào: {holder.checkin_time}
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                              CCCD: {holder.cccd_number || '—'} · Vào: {String(holder.checkin_time || '').slice(11, 16) || holder.checkin_time}
                             </div>
+                            {(c.ValidTo || holder.expected_checkout_time) && (
+                              <div style={{ fontSize: 10.5, color: '#b45309', fontWeight: 600 }}>
+                                Hẹn ra: {String(c.ValidTo || holder.expected_checkout_time || '').slice(11, 16)} (Hiệu lực hết ngày)
+                              </div>
+                            )}
                           </div>
                         ) : c.CurrentHolderName ? (
                           <div>
                             <div style={{ fontWeight: 600 }}>{c.CurrentHolderName}</div>
-                            <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                               CCCD: {c.CurrentHolderCCCD || '—'}
                             </div>
+                            {c.ValidTo && (
+                              <div style={{ fontSize: 10.5, color: '#b45309', fontWeight: 600 }}>
+                                Hẹn ra: {String(c.ValidTo).slice(0, 16)}
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <div>
-                            <span style={{ color: 'var(--text-muted)' }}>Trong kho lễ tân</span>
-                            {c.DetectedBy && (
-                              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                                Nguồn: {c.DetectedBy}
+                            <span style={{ color: 'var(--text-muted)' }}>
+                              {curStatus === 'LOST' ? 'Đã báo mất' : 'Trong kho lễ tân'}
+                            </span>
+                            {c.LastHolderName && (
+                              <div style={{ fontSize: 11, color: '#334155', marginTop: 2 }}>
+                                <strong>Lần cuối:</strong> {c.LastHolderName}
+                                {c.LastHolderPhone ? ` (${c.LastHolderPhone})` : ''}
                               </div>
                             )}
+                            {c.LastContactPerson && (
+                              <div style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>
+                                Liên hệ: {c.LastContactPerson}
+                                {c.LastContactPhone ? ` · ${c.LastContactPhone}` : ''}
+                              </div>
+                            )}
+                            {(c.LastReturnedAt || c.LastGateOutAt) && (
+                              <div style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>
+                                {c.LastReturnedAt
+                                  ? `Trả: ${String(c.LastReturnedAt).slice(0, 16)}`
+                                  : `Ra cổng: ${String(c.LastGateOutAt).slice(0, 16)}`}
+                              </div>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => openHistoryModal(c)}
+                              style={{
+                                marginTop: 3,
+                                border: 'none',
+                                background: 'none',
+                                padding: 0,
+                                color: '#2563eb',
+                                fontSize: 10.5,
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              Xem lịch sử thẻ
+                            </button>
                           </div>
                         )}
                       </td>
@@ -1419,6 +1478,105 @@ export default function CardManagementPage({
                 Ghi chú: {previewLightbox.Notes}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* CARD HISTORY & LAST HOLDER AUDIT MODAL */}
+      {historyModalCard && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(17, 17, 17, 0.55)',
+            zIndex: 1250,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+          }}
+          onClick={() => setHistoryModalCard(null)}
+        >
+          <div
+            className="card"
+            style={{ width: '100%', maxWidth: 640, maxHeight: '82vh', display: 'flex', flexDirection: 'column', padding: 20 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>
+                  LỊCH SỬ LUÂN CHUYỂN &amp; TRUY VẾT THẺ
+                </div>
+                <h2 style={{ fontSize: 17, fontWeight: 800, margin: '2px 0 0' }}>
+                  {historyModalCard.CardName || historyModalCard.CardCode} (RFID: {historyModalCard.CardNumber})
+                </h2>
+              </div>
+              <button type="button" className="btn btn-sm" onClick={() => setHistoryModalCard(null)}>
+                Đóng
+              </button>
+            </div>
+
+            {historyModalCard.LastHolderName && (
+              <div
+                style={{
+                  background: '#f8fafc',
+                  border: '1px solid var(--border-main)',
+                  borderRadius: 8,
+                  padding: '10px 12px',
+                  marginBottom: 12,
+                  fontSize: 12.5,
+                }}
+              >
+                <div style={{ fontWeight: 700, marginBottom: 2 }}>
+                  Người sở hữu cuối cùng: {historyModalCard.LastHolderName}
+                  {historyModalCard.LastHolderPhone ? ` · ${historyModalCard.LastHolderPhone}` : ''}
+                </div>
+                <div style={{ color: 'var(--text-muted)', fontSize: 11.5 }}>
+                  CCCD: {historyModalCard.LastHolderCCCD || '—'} · Công ty: {historyModalCard.LastHolderCompany || '—'} ·
+                  Người liên hệ nội bộ: {historyModalCard.LastContactPerson || '—'}
+                  {historyModalCard.LastContactPhone ? ` (${historyModalCard.LastContactPhone})` : ''}
+                </div>
+              </div>
+            )}
+
+            <div style={{ overflowY: 'auto', flex: 1 }}>
+              {loadingHistory ? (
+                <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)' }}>Đang tải lịch sử...</div>
+              ) : historyRows.length === 0 ? (
+                <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)' }}>Chưa có lịch sử ghi nhận cho thẻ này.</div>
+              ) : (
+                <table className="data-table" style={{ width: '100%' }}>
+                  <thead>
+                    <tr>
+                      <th>Thời gian</th>
+                      <th>Sự kiện</th>
+                      <th>Khách / Người giữ</th>
+                      <th>Người liên hệ</th>
+                      <th>Ghi chú</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {historyRows.map((h) => (
+                      <tr key={h.HistoryID}>
+                        <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{String(h.EventTime || '').slice(0, 16)}</td>
+                        <td>
+                          <span className="badge">{h.EventType}</span>
+                        </td>
+                        <td style={{ fontSize: 12 }}>
+                          <div style={{ fontWeight: 600 }}>{h.HolderName || '—'}</div>
+                          {h.HolderPhone && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{h.HolderPhone}</div>}
+                        </td>
+                        <td style={{ fontSize: 12 }}>
+                          <div>{h.ContactPerson || '—'}</div>
+                          {h.ContactPhone && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{h.ContactPhone}</div>}
+                        </td>
+                        <td style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>{h.Notes || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </div>
         </div>
       )}

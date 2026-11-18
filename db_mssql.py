@@ -207,6 +207,48 @@ def ensure_extended_schema() -> None:
                     ALTER TABLE tbl_CustomerCards ADD VerifiedBy NVARCHAR(100) NULL;
                 IF COL_LENGTH('tbl_CustomerCards', 'VerifiedAt') IS NULL
                     ALTER TABLE tbl_CustomerCards ADD VerifiedAt DATETIME NULL;
+                IF COL_LENGTH('tbl_CustomerCards', 'LastHolderName') IS NULL
+                    ALTER TABLE tbl_CustomerCards ADD LastHolderName NVARCHAR(255) NULL;
+                IF COL_LENGTH('tbl_CustomerCards', 'LastHolderCCCD') IS NULL
+                    ALTER TABLE tbl_CustomerCards ADD LastHolderCCCD NVARCHAR(50) NULL;
+                IF COL_LENGTH('tbl_CustomerCards', 'LastHolderPhone') IS NULL
+                    ALTER TABLE tbl_CustomerCards ADD LastHolderPhone NVARCHAR(50) NULL;
+                IF COL_LENGTH('tbl_CustomerCards', 'LastHolderCompany') IS NULL
+                    ALTER TABLE tbl_CustomerCards ADD LastHolderCompany NVARCHAR(255) NULL;
+                IF COL_LENGTH('tbl_CustomerCards', 'LastContactPerson') IS NULL
+                    ALTER TABLE tbl_CustomerCards ADD LastContactPerson NVARCHAR(255) NULL;
+                IF COL_LENGTH('tbl_CustomerCards', 'LastContactPhone') IS NULL
+                    ALTER TABLE tbl_CustomerCards ADD LastContactPhone NVARCHAR(50) NULL;
+                IF COL_LENGTH('tbl_CustomerCards', 'LastAssignedAt') IS NULL
+                    ALTER TABLE tbl_CustomerCards ADD LastAssignedAt DATETIME NULL;
+                IF COL_LENGTH('tbl_CustomerCards', 'LastGateOutAt') IS NULL
+                    ALTER TABLE tbl_CustomerCards ADD LastGateOutAt DATETIME NULL;
+                IF COL_LENGTH('tbl_CustomerCards', 'LastReturnedAt') IS NULL
+                    ALTER TABLE tbl_CustomerCards ADD LastReturnedAt DATETIME NULL;
+                IF COL_LENGTH('tbl_CustomerCards', 'ValidFrom') IS NULL
+                    ALTER TABLE tbl_CustomerCards ADD ValidFrom DATETIME NULL;
+                IF COL_LENGTH('tbl_CustomerCards', 'ValidTo') IS NULL
+                    ALTER TABLE tbl_CustomerCards ADD ValidTo DATETIME NULL;
+                IF COL_LENGTH('tbl_CustomerCards', 'DeviceSyncState') IS NULL
+                    ALTER TABLE tbl_CustomerCards ADD DeviceSyncState NVARCHAR(50) NULL;
+                IF OBJECT_ID(N'tbl_CardHistory', N'U') IS NULL
+                BEGIN
+                    CREATE TABLE tbl_CardHistory (
+                        HistoryID INT IDENTITY(1,1) PRIMARY KEY,
+                        CardID INT NULL,
+                        CardNumber NVARCHAR(50) NOT NULL,
+                        EventType NVARCHAR(50) NOT NULL,
+                        HolderName NVARCHAR(255) NULL,
+                        HolderCCCD NVARCHAR(50) NULL,
+                        HolderPhone NVARCHAR(50) NULL,
+                        ContactPerson NVARCHAR(255) NULL,
+                        ContactPhone NVARCHAR(50) NULL,
+                        EventTime DATETIME DEFAULT GETDATE(),
+                        Operator NVARCHAR(100) NULL,
+                        Notes NVARCHAR(500) NULL
+                    );
+                    CREATE INDEX IX_CardHistory_CardNumber ON tbl_CardHistory(CardNumber, EventTime DESC);
+                END
             """)
             conn.commit()
             _EXTENDED_SCHEMA_READY = True
@@ -1089,7 +1131,11 @@ def get_customer_cards_db(limit: int = 500, include_photos: bool = True) -> Dict
                         THEN 'VERIFIED'
                         ELSE 'PENDING_PHOTO'
                     END AS EvidenceStatus,
-                    AutoDetectedAt, DetectedBy, VerifiedBy, VerifiedAt, Notes, CreatedAt, UpdatedAt
+                    AutoDetectedAt, DetectedBy, VerifiedBy, VerifiedAt,
+                    LastHolderName, LastHolderCCCD, LastHolderPhone, LastHolderCompany,
+                    LastContactPerson, LastContactPhone, LastAssignedAt, LastGateOutAt, LastReturnedAt,
+                    ValidFrom, ValidTo, DeviceSyncState,
+                    Notes, CreatedAt, UpdatedAt
                 FROM tbl_CustomerCards
                 ORDER BY
                     CASE
@@ -1142,21 +1188,114 @@ def check_card_not_blocked_db(card_number: str) -> Dict[str, Any]:
     return {"blocked": False}
 
 
+def _parse_dt_sql(raw: Any) -> Optional[datetime]:
+    if not raw:
+        return None
+    if isinstance(raw, datetime):
+        return raw
+    s = str(raw).strip().replace("T", " ")
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(s[:len(fmt) + 2], fmt)
+        except Exception:
+            continue
+    return None
+
+
+def log_card_history_db(
+    card_number: str,
+    event_type: str,
+    card_id: Optional[int] = None,
+    holder_name: str = "",
+    holder_cccd: str = "",
+    holder_phone: str = "",
+    contact_person: str = "",
+    contact_phone: str = "",
+    operator: str = "Hệ thống",
+    notes: str = "",
+) -> None:
+    clean_num = _normalize_card_number(card_number)
+    if not clean_num or not is_mssql_active():
+        return
+    try:
+        ensure_extended_schema()
+        with pyodbc.connect(get_connection_string(), timeout=4) as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO tbl_CardHistory (
+                    CardID, CardNumber, EventType, HolderName, HolderCCCD, HolderPhone,
+                    ContactPerson, ContactPhone, EventTime, Operator, Notes
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, GETDATE(), ?, ?)
+            """, (
+                int(card_id) if card_id else None,
+                clean_num[:50],
+                str(event_type or "EVENT")[:50],
+                str(holder_name or "")[:250] or None,
+                str(holder_cccd or "")[:50] or None,
+                str(holder_phone or "")[:50] or None,
+                str(contact_person or "")[:250] or None,
+                str(contact_phone or "")[:50] or None,
+                str(operator or "Hệ thống")[:100],
+                str(notes or "")[:500] or None,
+            ))
+            conn.commit()
+    except Exception as e:
+        logger.debug("log_card_history_db warning: %s", e)
+
+
+def get_card_history_db(card_number: str, limit: int = 30) -> List[Dict[str, Any]]:
+    clean_num = _normalize_card_number(card_number)
+    if not clean_num or not is_mssql_active():
+        return []
+    try:
+        ensure_extended_schema()
+        with pyodbc.connect(get_connection_string(), timeout=5) as conn:
+            cur = conn.cursor()
+            cur.execute(f"""
+                SELECT TOP ({int(limit)})
+                    HistoryID, CardID, CardNumber, EventType, HolderName, HolderCCCD, HolderPhone,
+                    ContactPerson, ContactPhone, EventTime, Operator, Notes
+                FROM tbl_CardHistory
+                WHERE CardNumber = ? OR CardNumber = ?
+                ORDER BY EventTime DESC, HistoryID DESC
+            """, (str(card_number).strip(), clean_num))
+            cols = [c[0] for c in cur.description]
+            return [_serialize_row(cols, r) for r in cur.fetchall()]
+    except Exception as e:
+        logger.debug("get_card_history_db warning: %s", e)
+        return []
+
+
 def sync_card_assignment_on_checkin(
     card_number: str,
     holder_name: str,
     holder_cccd: str = "",
     operator: str = "Lễ tân",
+    holder_phone: str = "",
+    holder_company: str = "",
+    contact_person: str = "",
+    contact_phone: str = "",
+    valid_from: Any = None,
+    valid_to: Any = None,
+    device_sync_state: str = "ACTIVE_ON_DEVICE",
 ) -> Dict[str, Any]:
     """
-    Progressive Card Onboarding (Cách 1):
-    - If card is missing from tbl_CustomerCards -> auto-insert with EvidenceStatus='PENDING_PHOTO'
-      so Admin sees an immediate alert badge to attach evidence photo.
-    - If card exists -> update holder & IN_USE state while preserving photo/evidence status.
+    Progressive Card Onboarding + Persistent Last Holder + Time-Bound Validity:
+    - Always stores both CurrentHolder* and LastHolder* (never wiped on checkout).
+    - Records ValidFrom / ValidTo & DeviceSyncState so cards expire cleanly after 23:59:59 of ValidTo date.
     """
     clean_num = _normalize_card_number(card_number)
     if not clean_num or not is_mssql_active():
         return {"is_new": False, "needs_photo": False}
+    vf_dt = _parse_dt_sql(valid_from)
+    vt_dt = _parse_dt_sql(valid_to)
+    h_name = str(holder_name or "Khách")[:250]
+    h_cccd = str(holder_cccd or "")[:50]
+    h_phone = str(holder_phone or "")[:50]
+    h_comp = str(holder_company or "")[:250]
+    c_person = str(contact_person or "")[:250]
+    c_phone = str(contact_phone or "")[:50]
+    sync_st = str(device_sync_state or "ACTIVE_ON_DEVICE")[:50]
     try:
         ensure_extended_schema()
         with pyodbc.connect(get_connection_string(), timeout=5) as conn:
@@ -1180,11 +1319,34 @@ def sync_card_assignment_on_checkin(
                         CurrentHolderName = ?,
                         CurrentHolderCCCD = ?,
                         AssignedAt = GETDATE(),
-                        IsSyncedToDevices = 1,
+                        LastHolderName = ?,
+                        LastHolderCCCD = ?,
+                        LastHolderPhone = ?,
+                        LastHolderCompany = ?,
+                        LastContactPerson = ?,
+                        LastContactPhone = ?,
+                        LastAssignedAt = GETDATE(),
+                        LastGateOutAt = NULL,
+                        LastReturnedAt = NULL,
+                        ValidFrom = ?,
+                        ValidTo = ?,
+                        DeviceSyncState = ?,
+                        IsSyncedToDevices = ?,
                         UpdatedAt = GETDATE()
                     WHERE CardID = ?
-                """, (str(holder_name or "Khách")[:250], str(holder_cccd or "")[:50], int(cid)))
+                """, (
+                    h_name, h_cccd,
+                    h_name, h_cccd, h_phone or None, h_comp or None, c_person or None, c_phone or None,
+                    vf_dt, vt_dt, sync_st, 0 if sync_st == "SCHEDULED" else 1,
+                    int(cid),
+                ))
                 conn.commit()
+                log_card_history_db(
+                    cnum, "SCHEDULED" if sync_st == "SCHEDULED" else "ASSIGNED",
+                    card_id=int(cid), holder_name=h_name, holder_cccd=h_cccd, holder_phone=h_phone,
+                    contact_person=c_person, contact_phone=c_phone, operator=operator,
+                    notes=f"Hiệu lực: {valid_from or 'Ngay lập tức'} -> {valid_to or '23:59 hôm nay'}",
+                )
                 needs_photo = (not bool(has_photo)) or (str(ev_status) == "PENDING_PHOTO")
                 return {
                     "blocked": False,
@@ -1201,17 +1363,27 @@ def sync_card_assignment_on_checkin(
                 INSERT INTO tbl_CustomerCards (
                     CardCode, CardNumber, CardType, Status,
                     CurrentHolderName, CurrentHolderCCCD, AssignedAt,
+                    LastHolderName, LastHolderCCCD, LastHolderPhone, LastHolderCompany,
+                    LastContactPerson, LastContactPhone, LastAssignedAt,
+                    ValidFrom, ValidTo, DeviceSyncState,
                     IsSyncedToDevices, EvidenceStatus, AutoDetectedAt, DetectedBy, Notes
-                ) VALUES (?, ?, 'VISITOR', 'IN_USE', ?, ?, GETDATE(), 1, 'PENDING_PHOTO', GETDATE(), ?, ?)
+                ) VALUES (?, ?, 'VISITOR', 'IN_USE', ?, ?, GETDATE(), ?, ?, ?, ?, ?, ?, GETDATE(), ?, ?, ?, ?, 'PENDING_PHOTO', GETDATE(), ?, ?)
             """, (
                 new_code,
                 clean_num[:50],
-                str(holder_name or "Khách")[:250],
-                str(holder_cccd or "")[:50],
+                h_name, h_cccd,
+                h_name, h_cccd, h_phone or None, h_comp or None, c_person or None, c_phone or None,
+                vf_dt, vt_dt, sync_st, 0 if sync_st == "SCHEDULED" else 1,
                 str(operator or "Lễ tân")[:100],
                 note_txt,
             ))
             conn.commit()
+            log_card_history_db(
+                clean_num, "ASSIGNED",
+                holder_name=h_name, holder_cccd=h_cccd, holder_phone=h_phone,
+                contact_person=c_person, contact_phone=c_phone, operator=operator,
+                notes=f"Thẻ mới tự động ghi nhận · Hiệu lực đến {valid_to or '23:59 hôm nay'}",
+            )
             return {
                 "blocked": False,
                 "is_new": True,
@@ -1224,8 +1396,12 @@ def sync_card_assignment_on_checkin(
         return {"is_new": False, "needs_photo": False, "error": str(e)}
 
 
-def release_card_on_checkout(card_number: str) -> bool:
-    """Marks visitor card AVAILABLE on checkout unless marked LOST or LOCKED."""
+def release_card_on_checkout(card_number: str, operator: str = "Lễ tân", notes: str = "") -> bool:
+    """
+    Marks visitor card AVAILABLE on checkout unless marked LOST or LOCKED.
+    IMPORTANT: Preserves LastHolder* columns permanently so lost cards discovered
+    after checkout can still be traced back to the last holder.
+    """
     clean_num = _normalize_card_number(card_number)
     if not clean_num or not is_mssql_active():
         return False
@@ -1234,19 +1410,133 @@ def release_card_on_checkout(card_number: str) -> bool:
         with pyodbc.connect(get_connection_string(), timeout=4) as conn:
             cur = conn.cursor()
             cur.execute("""
+                SELECT TOP 1 CardID, LastHolderName, LastHolderCCCD, LastHolderPhone, LastContactPerson, LastContactPhone
+                FROM tbl_CustomerCards
+                WHERE CardNumber = ? OR CardNumber = ?
+            """, (str(card_number).strip(), clean_num))
+            prev = cur.fetchone()
+            cur.execute("""
                 UPDATE tbl_CustomerCards
                 SET Status = 'AVAILABLE',
                     CurrentHolderName = NULL,
                     CurrentHolderCCCD = NULL,
+                    LastReturnedAt = GETDATE(),
+                    DeviceSyncState = 'REVOKED_CHECKOUT',
+                    IsSyncedToDevices = 0,
                     UpdatedAt = GETDATE()
                 WHERE (CardNumber = ? OR CardNumber = ?)
                   AND ISNULL(Status, 'AVAILABLE') NOT IN ('LOST', 'LOCKED')
             """, (str(card_number).strip(), clean_num))
             conn.commit()
-            return cur.rowcount > 0
+            updated = cur.rowcount > 0
+            if updated and prev:
+                log_card_history_db(
+                    clean_num, "CHECKED_OUT",
+                    card_id=int(prev[0]),
+                    holder_name=str(prev[1] or ""),
+                    holder_cccd=str(prev[2] or ""),
+                    holder_phone=str(prev[3] or ""),
+                    contact_person=str(prev[4] or ""),
+                    contact_phone=str(prev[5] or ""),
+                    operator=operator,
+                    notes=notes or "Đã trả thẻ & Check-out",
+                )
+            return updated
     except Exception as e:
         logger.debug("release_card_on_checkout warning: %s", e)
         return False
+
+
+def process_card_expiry_and_schedule_db(zk_client: Any = None) -> Dict[str, Any]:
+    """
+    Enforces time-bound validity on 4 ZKTeco devices:
+    1. Enrolls SCHEDULED cards once NOW >= ValidFrom.
+    2. Allows access through 23:59:59 of the ValidTo calendar day (warnings only at ValidTo),
+       then automatically revokes on all 4 ZKTeco devices once past 23:59:59 (next day 00:00+).
+    3. Keeps LastGateOutAt updated whenever the visitor swipes Làn RA.
+    """
+    res = {"enrolled": 0, "revoked": 0}
+    if not is_mssql_active():
+        return res
+    try:
+        ensure_extended_schema()
+        now_dt = datetime.now()
+        with pyodbc.connect(get_connection_string(), timeout=6) as conn:
+            cur = conn.cursor()
+            # 1. Activate SCHEDULED cards whose ValidFrom has arrived
+            cur.execute("""
+                SELECT c.CardID, c.CardNumber, c.LastHolderName, c.LastHolderCCCD, c.ValidFrom, c.ValidTo
+                FROM tbl_CustomerCards c
+                WHERE c.Status = 'IN_USE'
+                  AND c.DeviceSyncState = 'SCHEDULED'
+                  AND c.ValidFrom IS NOT NULL
+                  AND c.ValidFrom <= GETDATE()
+                  AND (c.ValidTo IS NULL OR CAST(c.ValidTo AS DATE) >= CAST(GETDATE() AS DATE))
+            """)
+            to_enroll = cur.fetchall()
+            for cid, cnum, hname, hcccd, vf, vt in to_enroll:
+                if zk_client:
+                    try:
+                        zk_client.register_customer_epad(
+                            {"card_number": str(cnum), "full_name": str(hname or f"Khach {cnum}"), "cccd_number": str(hcccd or "")},
+                            auto_sync=True,
+                        )
+                    except Exception:
+                        pass
+                cur.execute(
+                    "UPDATE tbl_CustomerCards SET DeviceSyncState = 'ACTIVE_ON_DEVICE', IsSyncedToDevices = 1, UpdatedAt = GETDATE() WHERE CardID = ?",
+                    (int(cid),),
+                )
+                log_card_history_db(str(cnum), "ENROLLED", card_id=int(cid), holder_name=str(hname or ""), notes="Tự động kích hoạt thẻ đúng giờ hẹn ValidFrom")
+                res["enrolled"] += 1
+
+            # 2. Update LastGateOutAt and revoke cards past 23:59:59 of their ValidTo calendar day
+            cur.execute("""
+                SELECT c.CardID, c.CardNumber, c.CurrentHolderName, c.CurrentHolderCCCD,
+                       c.LastAssignedAt, c.ValidTo, c.LastGateOutAt,
+                       (
+                           SELECT MAX(a.CheckTime)
+                           FROM tbl_AttendanceLogs a
+                           WHERE (a.EmployeeATID = c.CardNumber OR a.EmployeeATID = RIGHT('0000000000' + c.CardNumber, 10))
+                             AND a.DeviceName LIKE N'%RA%'
+                             AND a.CheckTime >= ISNULL(c.LastAssignedAt, DATEADD(hour, -24, GETDATE()))
+                       ) AS GateOutTime
+                FROM tbl_CustomerCards c
+                WHERE c.Status = 'IN_USE'
+                  AND ISNULL(c.DeviceSyncState, 'ACTIVE_ON_DEVICE') = 'ACTIVE_ON_DEVICE'
+                  AND c.ValidTo IS NOT NULL
+            """)
+            active_rows = cur.fetchall()
+            for cid, cnum, hname, hcccd, assigned_at, vt_dt, prev_out_dt, gate_out_dt in active_rows:
+                if gate_out_dt is not None and prev_out_dt != gate_out_dt:
+                    cur.execute(
+                        "UPDATE tbl_CustomerCards SET LastGateOutAt = ? WHERE CardID = ?",
+                        (gate_out_dt, int(cid)),
+                    )
+                if vt_dt is not None and now_dt.date() > vt_dt.date():
+                    if zk_client:
+                        try:
+                            zk_client.return_or_delete_card(str(cnum))
+                        except Exception:
+                            pass
+                    cur.execute("""
+                        UPDATE tbl_CustomerCards
+                        SET DeviceSyncState = 'REVOKED_EXPIRED',
+                            IsSyncedToDevices = 0,
+                            LastGateOutAt = COALESCE(?, LastGateOutAt),
+                            UpdatedAt = GETDATE()
+                        WHERE CardID = ?
+                    """, (gate_out_dt, int(cid)))
+                    log_card_history_db(
+                        str(cnum), "EXPIRED_REVOKED",
+                        card_id=int(cid), holder_name=str(hname or ""), holder_cccd=str(hcccd or ""),
+                        notes=f"Đã qua 23:59 ngày {vt_dt.strftime('%Y-%m-%d')} — tự động thu hồi quyền mở cửa trên 4 máy ZKTeco",
+                    )
+                    res["revoked"] += 1
+            conn.commit()
+    except Exception as e:
+        logger.debug("process_card_expiry_and_schedule_db warning: %s", e)
+    return res
 
 
 def upload_card_evidence_db(
@@ -1413,6 +1703,24 @@ def upsert_customer_card_db(data: Dict[str, Any]) -> Dict[str, Any]:
                     notes,
                 ))
             conn.commit()
+            if existing_row and status in ("LOST", "LOCKED"):
+                cur.execute(
+                    "SELECT LastHolderName, LastHolderCCCD, LastHolderPhone, LastContactPerson, LastContactPhone FROM tbl_CustomerCards WHERE CardID = ?",
+                    (target_cid,),
+                )
+                lh = cur.fetchone()
+                cur.execute("UPDATE tbl_CustomerCards SET DeviceSyncState = ?, IsSyncedToDevices = 0 WHERE CardID = ?", (status, target_cid))
+                conn.commit()
+                log_card_history_db(
+                    card_num, status, card_id=target_cid,
+                    holder_name=str((lh[0] if lh else "") or ""),
+                    holder_cccd=str((lh[1] if lh else "") or ""),
+                    holder_phone=str((lh[2] if lh else "") or ""),
+                    contact_person=str((lh[3] if lh else "") or ""),
+                    contact_phone=str((lh[4] if lh else "") or ""),
+                    operator=verified_by,
+                    notes=notes or f"Đánh dấu trạng thái {status}",
+                )
             return {
                 "success": True,
                 "card_number": card_num,

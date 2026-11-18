@@ -251,6 +251,18 @@ BEGIN
         DetectedBy NVARCHAR(100) NULL,
         VerifiedBy NVARCHAR(100) NULL,
         VerifiedAt DATETIME NULL,
+        LastHolderName NVARCHAR(255) NULL,
+        LastHolderCCCD NVARCHAR(50) NULL,
+        LastHolderPhone NVARCHAR(50) NULL,
+        LastHolderCompany NVARCHAR(255) NULL,
+        LastContactPerson NVARCHAR(255) NULL,
+        LastContactPhone NVARCHAR(50) NULL,
+        LastAssignedAt DATETIME NULL,
+        LastGateOutAt DATETIME NULL,
+        LastReturnedAt DATETIME NULL,
+        ValidFrom DATETIME NULL,
+        ValidTo DATETIME NULL,
+        DeviceSyncState NVARCHAR(50) NULL,
         Notes NVARCHAR(500) NULL,
         CreatedAt DATETIME DEFAULT GETDATE(),
         UpdatedAt DATETIME DEFAULT GETDATE()
@@ -263,6 +275,53 @@ BEGIN
         ALTER TABLE tbl_CustomerCards ADD CardName NVARCHAR(100) NULL;
     IF COL_LENGTH('tbl_CustomerCards', 'CardPhotoBase64') IS NULL
         ALTER TABLE tbl_CustomerCards ADD CardPhotoBase64 NVARCHAR(MAX) NULL;
+    IF COL_LENGTH('tbl_CustomerCards', 'LastHolderName') IS NULL
+        ALTER TABLE tbl_CustomerCards ADD LastHolderName NVARCHAR(255) NULL;
+    IF COL_LENGTH('tbl_CustomerCards', 'LastHolderCCCD') IS NULL
+        ALTER TABLE tbl_CustomerCards ADD LastHolderCCCD NVARCHAR(50) NULL;
+    IF COL_LENGTH('tbl_CustomerCards', 'LastHolderPhone') IS NULL
+        ALTER TABLE tbl_CustomerCards ADD LastHolderPhone NVARCHAR(50) NULL;
+    IF COL_LENGTH('tbl_CustomerCards', 'LastHolderCompany') IS NULL
+        ALTER TABLE tbl_CustomerCards ADD LastHolderCompany NVARCHAR(255) NULL;
+    IF COL_LENGTH('tbl_CustomerCards', 'LastContactPerson') IS NULL
+        ALTER TABLE tbl_CustomerCards ADD LastContactPerson NVARCHAR(255) NULL;
+    IF COL_LENGTH('tbl_CustomerCards', 'LastContactPhone') IS NULL
+        ALTER TABLE tbl_CustomerCards ADD LastContactPhone NVARCHAR(50) NULL;
+    IF COL_LENGTH('tbl_CustomerCards', 'LastAssignedAt') IS NULL
+        ALTER TABLE tbl_CustomerCards ADD LastAssignedAt DATETIME NULL;
+    IF COL_LENGTH('tbl_CustomerCards', 'LastGateOutAt') IS NULL
+        ALTER TABLE tbl_CustomerCards ADD LastGateOutAt DATETIME NULL;
+    IF COL_LENGTH('tbl_CustomerCards', 'LastReturnedAt') IS NULL
+        ALTER TABLE tbl_CustomerCards ADD LastReturnedAt DATETIME NULL;
+    IF COL_LENGTH('tbl_CustomerCards', 'ValidFrom') IS NULL
+        ALTER TABLE tbl_CustomerCards ADD ValidFrom DATETIME NULL;
+    IF COL_LENGTH('tbl_CustomerCards', 'ValidTo') IS NULL
+        ALTER TABLE tbl_CustomerCards ADD ValidTo DATETIME NULL;
+    IF COL_LENGTH('tbl_CustomerCards', 'DeviceSyncState') IS NULL
+        ALTER TABLE tbl_CustomerCards ADD DeviceSyncState NVARCHAR(50) NULL;
+END
+GO
+
+-- 9b. Bảng Lịch sử Luân chuyển & Mất Thẻ (tbl_CardHistory)
+IF OBJECT_ID(N'tbl_CardHistory', N'U') IS NULL
+BEGIN
+    CREATE TABLE tbl_CardHistory (
+        HistoryID INT IDENTITY(1,1) PRIMARY KEY,
+        CardID INT NULL,
+        CardNumber NVARCHAR(50) NOT NULL,
+        EventType NVARCHAR(50) NOT NULL, -- ASSIGNED, SCHEDULED, ENROLLED, GATE_OUT, EXPIRED_REVOKED, CHECKED_OUT, LOST, RECOVERED
+        HolderName NVARCHAR(255) NULL,
+        HolderCCCD NVARCHAR(50) NULL,
+        HolderPhone NVARCHAR(50) NULL,
+        ContactPerson NVARCHAR(255) NULL,
+        ContactPhone NVARCHAR(50) NULL,
+        EventTime DATETIME DEFAULT GETDATE(),
+        Operator NVARCHAR(100) NULL,
+        Notes NVARCHAR(500) NULL
+    );
+    CREATE INDEX IX_CardHistory_CardNumber ON tbl_CardHistory(CardNumber, EventTime DESC);
+END
+GO
     IF COL_LENGTH('tbl_CustomerCards', 'EvidenceStatus') IS NULL
         ALTER TABLE tbl_CustomerCards ADD EvidenceStatus NVARCHAR(50) DEFAULT 'PENDING_PHOTO';
     IF COL_LENGTH('tbl_CustomerCards', 'AutoDetectedAt') IS NULL

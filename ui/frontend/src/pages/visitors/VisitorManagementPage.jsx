@@ -121,7 +121,24 @@ function evaluateVisitorTiming(v, nowMs) {
 
   if (!coutMs && String(v.status || v.Status || 'ACTIVE').toUpperCase() === 'ACTIVE') {
     const outGateMs = parseDtMs(v.gate_last_out_time);
-    if (outGateMs && String(v.gate_last_scan_direction || '').toUpperCase() === 'OUT') {
+    const cardLabel = v.card_display_name || v.card_number || 'không gắn thẻ';
+    const fname = v.full_name || 'Khách';
+
+    if (v.expiry_alert_message) {
+      overdueAlert = true;
+      overdueMins = expMs ? Math.max(0, Math.floor((nowMs - expMs) / 60000)) : 0;
+      alertMessage = v.expiry_alert_message;
+    } else if (expMs && nowMs >= expMs) {
+      overdueAlert = true;
+      overdueMins = Math.max(0, Math.floor((nowMs - expMs) / 60000));
+      if (outGateMs) {
+        const outHhmm = new Date(outGateMs).toTimeString().slice(0, 5);
+        alertMessage = `Thẻ ${cardLabel} khách ${fname} đã ra về lúc ${outHhmm} nhưng chưa check-out, kiểm tra lý do hoặc check-out. Lưu ý: Nếu kho không có thẻ đó nghĩa là có thể khách đã cầm về.`;
+      } else {
+        const expHhmm = new Date(expMs).toTimeString().slice(0, 5);
+        alertMessage = `Khách ${fname} (Thẻ ${cardLabel}) đã đến hạn ${expHhmm} nhưng chưa check-out và chưa quẹt Làn RA — có thể vẫn đang ở trong công ty.`;
+      }
+    } else if (outGateMs && String(v.gate_last_scan_direction || '').toUpperCase() === 'OUT') {
       const minsSinceOut = Math.max(0, Math.floor((nowMs - outGateMs) / 60000));
       if (minsSinceOut >= 15) {
         overdueAlert = true;
@@ -129,16 +146,10 @@ function evaluateVisitorTiming(v, nowMs) {
         const hhmm = new Date(outGateMs).toTimeString().slice(0, 5);
         alertMessage = `Đã quét ${v.gate_last_out_device || 'cổng RA'} lúc ${hhmm} (${minsSinceOut} phút trước) chưa trả thẻ — Yêu cầu Check-out!`;
       }
-    } else if (expMs && nowMs > expMs + 15 * 60000) {
-      const minsPast = Math.floor((nowMs - expMs) / 60000);
-      overdueAlert = true;
-      overdueMins = minsPast;
-      const hhmm = new Date(expMs).toTimeString().slice(0, 5);
-      alertMessage = `Quá giờ dự kiến ra (${hhmm}) ${minsPast} phút chưa trả thẻ — Yêu cầu Check-out!`;
     } else {
       const cinDateStr = new Date(cinMs).toISOString().slice(0, 10);
       const nowDateStr = new Date(nowMs).toISOString().slice(0, 10);
-      if (cinDateStr < nowDateStr && elapsedMins >= 15) {
+      if (cinDateStr < nowDateStr && elapsedMins >= 1) {
         overdueAlert = true;
         overdueMins = elapsedMins;
         alertMessage = alertMessage || 'Khách từ ngày trước chưa trả thẻ — Yêu cầu Check-out!';
