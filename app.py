@@ -943,31 +943,17 @@ def register_visitor():
     except Exception:
         pass
 
-    # 1. Create SharePoint Item in 'VMS SEAZEN - KHÁCH RA VÀO' to get 1-to-1 bridged ATID (80000000 + SharePoint Item ID)
-    try:
-        import sharepoint_vms_sync
-        sp_vis = sharepoint_vms_sync.create_visitor_on_sharepoint_and_get_bridged_atid(data)
-        if sp_vis.get("ok"):
-            data["sp_item_id"] = sp_vis["sp_item_id"]
-            data["epad_atid"] = sp_vis["bridged_atid"]
-            data["id"] = sp_vis["bridged_atid"]
-    except Exception as sp_ex:
-        logger.debug("SharePoint visitor bridge fallback: %s", sp_ex)
-
-    # 2. Register customer & sync permissions to door devices (Dual-Provisioning: TCP 4370 + ADMS userauthorize)
-    epad_sync_info = "Đã nạp thẻ & phân quyền cửa"
+    # 1. Register customer & sync permissions to door devices (TCP 4370 parallel across 4 devices)
+    # SharePoint sync runs strictly asynchronously via storage.add_visitor() & push_table_async() so check-in never stalls.
+    epad_sync_info = "Đã lưu hồ sơ (không cấp thẻ)"
     epad_sync_ok = True
-    epad_atid = data.get("epad_atid")
     if card_number:
-        # 2a. Direct TCP 4370 hardware enrollment to 4 ZKTeco terminals (using bridged 80000000 + SharePoint ID)
         direct_res = zk_client.enroll_visitor_card(data)
         if direct_res.get("success"):
             epad_sync_ok = True
             epad_atid = direct_res.get("employee_atid")
-            epad_sync_info = f"ĐÃ NẠP THẺ VÀO 4 MÁY CỬA TRỰC TIẾP (Mã định danh: {epad_atid}, Phân quyền Làn Vào/Ra: 2,1)"
+            epad_sync_info = f"ĐÃ NẠP THẺ VÀO 4 MÁY CỬA TRỰC TIẾP (Khe: {epad_atid}, Phân quyền Làn Vào/Ra: 2,1)"
             data["epad_atid"] = epad_atid
-            if not data.get("id"):
-                data["id"] = epad_atid
         else:
             epad_sync_ok = False
             epad_sync_info = f"Lỗi nạp thẻ phần cứng TCP 4370: {direct_res.get('error')}"
@@ -1049,21 +1035,10 @@ def register_visitor():
                 "parent_visitor_id": record.get("id"),
                 "parent_visitor_name": full_name or cccd_num,
             }
-            try:
-                import sharepoint_vms_sync
-                sp_c = sharepoint_vms_sync.create_visitor_on_sharepoint_and_get_bridged_atid(comp_payload)
-                if sp_c.get("ok"):
-                    comp_payload["sp_item_id"] = sp_c["sp_item_id"]
-                    comp_payload["epad_atid"] = sp_c["bridged_atid"]
-                    comp_payload["id"] = sp_c["bridged_atid"]
-            except Exception:
-                pass
             if comp_payload.get("card_number") and not EPAD_ENABLED:
                 c_hw = zk_client.enroll_visitor_card(comp_payload)
                 if c_hw.get("success"):
                     comp_payload["epad_atid"] = c_hw.get("employee_atid")
-                    if not comp_payload.get("id"):
-                        comp_payload["id"] = c_hw.get("employee_atid")
             try:
                 c_rec = storage.add_visitor(comp_payload)
                 companion_records.append(c_rec)
@@ -1160,23 +1135,27 @@ def fast_checkout():
         print(f"\n>>> [DATABASE CHECKOUT FAILED] Không tìm thấy khách tương ứng mã: '{query}'", flush=True)
         return jsonify({"success": False, "error": f"Không tìm thấy lượt vào của khách tương ứng với '{query}' trong danh sách đang có mặt"}), 404
 
-    # If visitor was holding an RFID card, release / return card
+    # If visitor was holding an RFID card, release in SQL immediately and revoke on 4 terminals in background
     target_card = record.get("card_number")
     epad_return_msg = "Không dùng thẻ"
     if target_card:
-        ret_res = zk_client.return_or_delete_card(target_card)
-        epad_return_msg = f"Đã thu hồi thẻ {target_card} trên 4 máy cửa trực tiếp thành công" if ret_res.get("success") else f"Lỗi thu hồi thẻ phần cứng: {ret_res.get('error')}"
-        if EPAD_ENABLED:
-            try:
-                epad_client.return_or_delete_card(target_card)
-            except Exception:
-                pass
         try:
             import db_mssql, sharepoint_vms_sync
             if db_mssql.release_card_on_checkout(target_card):
                 sharepoint_vms_sync.push_table_async("tbl_CustomerCards", 200)
         except Exception:
             pass
+
+        def _bg_revoke_card(c_num: str) -> None:
+            try:
+                zk_client.return_or_delete_card(c_num)
+                if EPAD_ENABLED:
+                    epad_client.return_or_delete_card(c_num)
+            except Exception as ex:
+                logger.debug("Background hardware revoke warning: %s", ex)
+
+        threading.Thread(target=_bg_revoke_card, args=(target_card,), daemon=True).start()
+        epad_return_msg = f"Đã giải phóng thẻ {target_card} trong SQL & đang thu hồi ngầm trên 4 máy cửa"
 
     # Async update SharePoint List 'VMS SEAZEN - KHÁCH RA VÀO' to CHECKED_OUT
     try:

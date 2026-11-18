@@ -12,7 +12,7 @@ import logging
 import threading
 import time
 from datetime import datetime
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from zk import ZK, const
 
 logger = logging.getLogger("zk_direct")
@@ -60,6 +60,8 @@ class ZkDirectClient:
         self._live_uid_to_user: Dict[str, Dict[int, Any]] = {}
         self._live_userid_to_user: Dict[str, Dict[str, Any]] = {}
         self._device_capacities: Dict[str, Dict[str, Any]] = {}
+        self._card_op_gen: Dict[int, int] = {}
+        self._card_gen_lock = threading.Lock()
 
         self._load_person_cache()
         logger.info("Initialized ZkDirectClient with %d terminals across %d doors (person cache: %d keys)",
@@ -614,6 +616,10 @@ class ZkDirectClient:
         slot_index = (card_int % 20) if card_int else 0
         guest_user_id = str(56235 + slot_index)
 
+        if card_int:
+            with self._card_gen_lock:
+                self._card_op_gen[card_int] = self._card_op_gen.get(card_int, 0) + 1
+
         # Immediately update in-memory person cache so live_capture resolves the visitor in <10ms
         dept_label = str(visitor_data.get("department") or visitor_data.get("company") or "Khách").strip()
         vis_cache_entry = {
@@ -625,54 +631,56 @@ class ZkDirectClient:
         }
         self._index_person_entry(self._person_cache, [guest_user_id, card_num_str, str(card_int)], vis_cache_entry)
 
-        success_count = 0
-        terminal_errors = []
+        from concurrent.futures import ThreadPoolExecutor, as_completed
 
-        for dev in self.devices:
+        def _enroll_one(dev: Dict[str, Any]) -> Tuple[bool, str, str]:
             ip = dev.get("ip")
             name = dev.get("name", ip)
             lock = self._locks.get(ip)
-
             if not ip:
-                continue
-
-            lock_acquired = lock.acquire(timeout=4) if lock else True
+                return False, "", ""
+            lock_acquired = lock.acquire(timeout=2.5) if lock else True
             if not lock_acquired:
-                terminal_errors.append(f"{name}: device busy")
-                continue
-
+                return False, f"{name}: device busy", guest_user_id
             try:
                 zk = self._get_device_connection(ip, dev.get("port", 4370))
                 conn = zk.connect()
-                existing_users = conn.get_users()
 
-                # 1. Find if this card is already bound to a 562xx pre-authorized slot, or find the target 562xx slot
-                target_slot = None
-                fallback_slot = None
-                for eu in existing_users:
-                    eu_id_str = str(eu.user_id).strip()
-                    if eu_id_str.startswith("562"):
-                        if card_int and eu.card == card_int:
-                            target_slot = eu
-                        elif eu_id_str == guest_user_id:
-                            fallback_slot = eu
-                    elif card_int and (eu.card == card_int or eu_id_str.startswith("803") or eu_id_str.startswith("809")):
-                        # Delete any 80xxxxxx record holding the same card so it never shadows the 562xx slot
-                        conn.delete_user(uid=eu.uid, user_id=eu.user_id)
-                        logger.info("[ZK DIRECT] Đã xóa bản ghi 80xxxxxx cũ (uid=%s, user_id=%s) trùng thẻ %s trên %s",
-                                    eu.uid, eu.user_id, card_num_str, name)
+                # Fast path: use cached 562xx slot UID map if already warmed by live listener
+                cached_by_uid = self._live_userid_to_user.get(ip, {})
+                chosen_slot = None
+                if cached_by_uid:
+                    for eu in cached_by_uid.values():
+                        eu_id_str = str(getattr(eu, "user_id", "") or "").strip()
+                        if eu_id_str.startswith("562"):
+                            if card_int and getattr(eu, "card", None) == card_int:
+                                chosen_slot = eu
+                                break
+                            if eu_id_str == guest_user_id and not chosen_slot:
+                                chosen_slot = eu
 
-                chosen_slot = target_slot or fallback_slot
+                if not chosen_slot:
+                    existing_users = conn.get_users()
+                    target_slot = None
+                    fallback_slot = None
+                    for eu in existing_users:
+                        eu_id_str = str(eu.user_id).strip()
+                        if eu_id_str.startswith("562"):
+                            if card_int and eu.card == card_int:
+                                target_slot = eu
+                            elif eu_id_str == guest_user_id:
+                                fallback_slot = eu
+                        elif card_int and (eu.card == card_int or eu_id_str.startswith("803") or eu_id_str.startswith("809")):
+                            conn.delete_user(uid=eu.uid, user_id=eu.user_id)
+                    chosen_slot = target_slot or fallback_slot
+
                 if chosen_slot:
                     slot_uid = int(chosen_slot.uid)
                     slot_user_id = str(chosen_slot.user_id).strip()
-                    guest_user_id = slot_user_id
                 else:
                     slot_uid = 1720 + slot_index
                     slot_user_id = guest_user_id
 
-                # 2. Write exact 72-byte Access Control struct with TZ1=1 (01 00 00 01 00 00 00 00 00)
-                # onto the pre-authorized 562xx slot (satisfies BOTH FCT_USER.TZ1=1 and Linux userauthorize!)
                 self._set_access_user_tz(
                     conn=conn,
                     uid=slot_uid,
@@ -684,9 +692,7 @@ class ZkDirectClient:
                     tz1=1
                 )
                 conn.disconnect()
-                success_count += 1
 
-                # Inject into live listener maps so EF_VERIFY / EF_ATTLOG recognizes this visitor immediately
                 class _DynamicGuestObj:
                     def __init__(self, u_id, u_uid, u_name, u_card):
                         self.user_id = u_id
@@ -698,15 +704,27 @@ class ZkDirectClient:
                 self._live_uid_to_user.setdefault(ip, {})[slot_uid] = dyn_u
                 self._live_userid_to_user.setdefault(ip, {})[slot_user_id] = dyn_u
                 self._index_person_entry(self._person_cache, [slot_user_id, card_num_str, str(card_int)], vis_cache_entry)
-
-                logger.info("[ZK DIRECT] Đã nạp thẻ %s vào khe phân quyền sẵn %s (uid=%s - %s) trên máy %s thành công",
+                logger.info("[ZK DIRECT] Đã nạp thẻ %s vào khe %s (uid=%s - %s) trên %s",
                             card_num_str, slot_user_id, slot_uid, full_name, name)
+                return True, "", slot_user_id
             except Exception as e:
                 logger.error("[ZK DIRECT] Lỗi nạp thẻ vào máy %s: %s", name, e)
-                terminal_errors.append(f"{name}: {e}")
+                return False, f"{name}: {e}", guest_user_id
             finally:
                 if lock and lock_acquired:
                     lock.release()
+
+        success_count = 0
+        terminal_errors = []
+        with ThreadPoolExecutor(max_workers=max(1, len(self.devices))) as pool:
+            futs = [pool.submit(_enroll_one, dev) for dev in self.devices]
+            for fut in as_completed(futs):
+                ok, err_txt, resolved_slot = fut.result()
+                if ok:
+                    success_count += 1
+                    guest_user_id = resolved_slot
+                elif err_txt:
+                    terminal_errors.append(err_txt)
 
         if success_count > 0:
             return {
@@ -725,7 +743,8 @@ class ZkDirectClient:
 
     def return_or_delete_card(self, card_number: str) -> Dict[str, Any]:
         """
-        Revokes / deletes visitor card from all 4 terminals immediately upon checkout.
+        Revokes / deletes visitor card from all 4 terminals in parallel upon checkout.
+        Uses per-card generation guard so a newer check-in on the same card is never overwritten.
         """
         clean_card = str(card_number).strip()
         if not clean_card:
@@ -735,53 +754,82 @@ class ZkDirectClient:
             clean_digits = "".join(filter(str.isdigit, clean_card))
             card_int = int(clean_digits) if clean_digits else 0
         except Exception:
+            clean_digits = ""
             card_int = 0
 
-        deleted_count = 0
-        for dev in self.devices:
+        with self._card_gen_lock:
+            my_gen = self._card_op_gen.get(card_int, 0) if card_int else 0
+
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        def _revoke_one(dev: Dict[str, Any]) -> int:
             ip = dev.get("ip")
             name = dev.get("name", ip)
             lock = self._locks.get(ip)
-
             if not ip:
-                continue
-
-            lock_acquired = lock.acquire(timeout=4) if lock else True
+                return 0
+            lock_acquired = lock.acquire(timeout=2.5) if lock else True
             if not lock_acquired:
-                continue
-
+                return 0
             try:
+                if card_int and self._card_op_gen.get(card_int, 0) != my_gen:
+                    logger.info("[ZK DIRECT] Bỏ qua thu hồi thẻ %s trên %s vì đã có lượt gán mới hơn.", clean_card, name)
+                    return 0
+
                 zk = self._get_device_connection(ip, dev.get("port", 4370))
                 conn = zk.connect()
-                users = conn.get_users()
-                for u in users:
-                    if u.card == card_int or (card_int and str(u.card) == str(card_int)) or u.user_id == clean_digits[-8:]:
-                        u_id_str = str(u.user_id).strip()
-                        if u_id_str.startswith("562"):
-                            # Pre-authorized 562xx slot: NEVER delete the user (preserves permanent userauthorize),
-                            # unbind card=0 while keeping TZ1=1 (01 00 00 01 00 00 00 00 00) intact!
-                            self._set_access_user_tz(
-                                conn=conn,
-                                uid=int(u.uid),
-                                name=f"Khach {u_id_str[-2:]}",
-                                user_id=u_id_str,
-                                card=0,
-                                privilege=0,
-                                password="",
-                                tz1=1
-                            )
-                            deleted_count += 1
-                            logger.info("[ZK DIRECT] Đã giải phóng thẻ %s khỏi khe phân quyền %s (giữ TZ1=1) trên %s", clean_card, u_id_str, name)
-                        else:
-                            conn.delete_user(uid=u.uid, user_id=u.user_id)
-                            deleted_count += 1
-                            logger.info("[ZK DIRECT] Đã xóa/thu hồi thẻ %s (user_id=%s) khỏi máy %s", clean_card, u_id_str, name)
+
+                # Fast lookup in live user map first; fallback to conn.get_users() only if needed
+                cached_users = list(self._live_userid_to_user.get(ip, {}).values())
+                matched_users = [
+                    u for u in cached_users
+                    if getattr(u, "card", None) == card_int
+                    or (card_int and str(getattr(u, "card", "")) == str(card_int))
+                    or (clean_digits and str(getattr(u, "user_id", "")).strip() == clean_digits[-8:])
+                ]
+                if not matched_users:
+                    matched_users = [
+                        u for u in conn.get_users()
+                        if u.card == card_int
+                        or (card_int and str(u.card) == str(card_int))
+                        or (clean_digits and u.user_id == clean_digits[-8:])
+                    ]
+
+                revoked = 0
+                for u in matched_users:
+                    if card_int and self._card_op_gen.get(card_int, 0) != my_gen:
+                        break
+                    u_id_str = str(u.user_id).strip()
+                    if u_id_str.startswith("562"):
+                        self._set_access_user_tz(
+                            conn=conn,
+                            uid=int(u.uid),
+                            name=f"Khach {u_id_str[-2:]}",
+                            user_id=u_id_str,
+                            card=0,
+                            privilege=0,
+                            password="",
+                            tz1=1
+                        )
+                        u.card = 0
+                        revoked += 1
+                    else:
+                        conn.delete_user(uid=u.uid, user_id=u.user_id)
+                        revoked += 1
                 conn.disconnect()
+                return 1 if revoked > 0 else 0
             except Exception as e:
                 logger.warning("[ZK DIRECT] Thu hồi thẻ tại %s: %s", name, e)
+                return 0
             finally:
                 if lock and lock_acquired:
                     lock.release()
+
+        deleted_count = 0
+        with ThreadPoolExecutor(max_workers=max(1, len(self.devices))) as pool:
+            futs = [pool.submit(_revoke_one, dev) for dev in self.devices]
+            for fut in as_completed(futs):
+                deleted_count += fut.result()
 
         logger.info("[ZK DIRECT] Thu hồi thẻ %s hoàn tất trên %d thiết bị", clean_card, deleted_count)
         return {

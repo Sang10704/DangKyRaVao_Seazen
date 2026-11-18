@@ -253,6 +253,7 @@ export default function VisitorManagementPage({
   const [checkoutQuery, setCheckoutQuery] = useState('');
   const [releasingKey, setReleasingKey] = useState('');
   const [justReleasedInfo, setJustReleasedInfo] = useState({ card: '', holder: '' });
+  const [submitting, setSubmitting] = useState(false);
 
   const [form, setForm] = useState({
     full_name: '',
@@ -368,7 +369,7 @@ export default function VisitorManagementPage({
 
   // Inline Quick Check-out from Card Conflict Alert or Image 2 Lookup
   const handleQuickReleaseHolder = async (holderVisitor, targetField = 'main') => {
-    if (!holderVisitor) return;
+    if (!holderVisitor || releasingKey) return;
     const key = holderVisitor.id || holderVisitor.card_number || holderVisitor.cccd_number;
     const holderName = holderVisitor.full_name || holderVisitor.card_number;
     const cardReleased = holderVisitor.card_number || '';
@@ -705,6 +706,19 @@ export default function VisitorManagementPage({
 
   const handleSubmitRegistration = async (e) => {
     e.preventDefault();
+    if (submitting) return;
+    if (!String(form.full_name || '').trim() && !String(form.cccd_number || '').trim()) {
+      notify('Vui lòng nhập Họ tên khách hoặc quét Số CCCD trước khi lưu.', 'error');
+      return;
+    }
+    if (!String(form.full_name || '').trim()) {
+      notify('Vui lòng nhập Họ tên khách.', 'error');
+      return;
+    }
+    if (!String(form.cccd_number || '').trim()) {
+      notify('Vui lòng nhập hoặc quét Số CCCD / CMND của khách.', 'error');
+      return;
+    }
     if (mainCardConflict) {
       notify(
         `Thẻ ${form.card_number} đang gắn cho ${mainCardConflict.full_name}. Hãy bấm "Trả thẻ & Check-out nhanh" ngay dưới ô Mã thẻ rồi lưu lại.`,
@@ -712,23 +726,44 @@ export default function VisitorManagementPage({
       );
       return;
     }
-    const payload = {
-      ...form,
-      expected_checkout_time: `${form.to_date} ${form.to_time}:00`,
-      companions,
-    };
-    const { ok, data } = await apiFetch('/api/visitor/register', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
-    if (ok && data.success) {
-      notify(data.message || 'Đã đăng ký khách và nạp thẻ thành công.', 'success');
-      handleResetForm();
-      setIsFormOpen(false);
-      onRefreshData();
-      loadFrequentVisitors();
-    } else {
-      notify(data.error || 'Không thể đăng ký khách.', 'error');
+    const typedNormCard = normCard(form.card_number);
+    const blockedCard = typedNormCard
+      ? customerCards.find(
+          (c) =>
+            normCard(c.CardNumber) === typedNormCard &&
+            ['LOST', 'LOCKED'].includes(String(c.Status || '').toUpperCase())
+        )
+      : null;
+    if (blockedCard) {
+      notify(
+        `Thẻ ${blockedCard.CardNumber} đang ở trạng thái ${blockedCard.Status}. Không thể cấp cho khách.`,
+        'error'
+      );
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const payload = {
+        ...form,
+        expected_checkout_time: `${form.to_date} ${form.to_time}:00`,
+        companions,
+      };
+      const { ok, data } = await apiFetch('/api/visitor/register', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      if (ok && data.success) {
+        notify(data.message || 'Đã đăng ký khách thành công.', 'success');
+        handleResetForm();
+        setIsFormOpen(false);
+        onRefreshData();
+        loadFrequentVisitors();
+      } else {
+        notify(data.error || 'Không thể đăng ký khách.', 'error');
+      }
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -1185,6 +1220,7 @@ export default function VisitorManagementPage({
         {isFormOpen && (
           <form
             onSubmit={handleSubmitRegistration}
+            noValidate
             className="visitor-sheet"
             style={{
               marginBottom: 14,
@@ -1845,8 +1881,13 @@ export default function VisitorManagementPage({
                 >
                   Hủy bỏ &amp; Thu gọn
                 </button>
-                <button type="submit" className="btn-qr-navy" style={{ padding: '0 26px', height: 36 }}>
-                  Đồng ý lưu &amp; Nạp thẻ
+                <button
+                  type="submit"
+                  className="btn-qr-navy"
+                  style={{ padding: '0 26px', height: 36, opacity: submitting ? 0.7 : 1 }}
+                  disabled={submitting}
+                >
+                  {submitting ? 'Đang lưu & nạp thẻ...' : 'Đồng ý lưu & Nạp thẻ'}
                 </button>
               </div>
             </div>
