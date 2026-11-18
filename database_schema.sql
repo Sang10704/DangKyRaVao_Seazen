@@ -237,6 +237,7 @@ BEGIN
     CREATE TABLE tbl_CustomerCards (
         CardID INT IDENTITY(1,1) PRIMARY KEY,
         CardCode NVARCHAR(50) NOT NULL,
+        CardName NVARCHAR(100) NULL,
         CardNumber NVARCHAR(50) NOT NULL UNIQUE,
         CardType NVARCHAR(50) DEFAULT 'VISITOR',          -- VISITOR, CONTRACTOR, VIP, TEMP_STAFF
         Status NVARCHAR(50) DEFAULT 'AVAILABLE',          -- AVAILABLE, IN_USE, LOST, LOCKED
@@ -258,6 +259,8 @@ BEGIN
 END
 ELSE
 BEGIN
+    IF COL_LENGTH('tbl_CustomerCards', 'CardName') IS NULL
+        ALTER TABLE tbl_CustomerCards ADD CardName NVARCHAR(100) NULL;
     IF COL_LENGTH('tbl_CustomerCards', 'CardPhotoBase64') IS NULL
         ALTER TABLE tbl_CustomerCards ADD CardPhotoBase64 NVARCHAR(MAX) NULL;
     IF COL_LENGTH('tbl_CustomerCards', 'EvidenceStatus') IS NULL

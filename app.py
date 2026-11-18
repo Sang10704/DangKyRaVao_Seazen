@@ -2050,6 +2050,7 @@ def api_upload_card_evidence():
         card_id_or_number=target,
         photo_b64=photo_b64,
         verified_by=verified_by,
+        card_name=data.get("CardName"),
         card_code=data.get("CardCode"),
         notes=data.get("Notes"),
     )
@@ -2057,12 +2058,15 @@ def api_upload_card_evidence():
         try:
             import sharepoint_vms_sync
             sharepoint_vms_sync.push_table_async("tbl_CustomerCards", 200)
-            sharepoint_vms_sync.upload_card_evidence_attachment_async(
-                card_number=res["card_number"],
-                card_code=res["card_code"],
-                photo_b64=photo_b64,
-                verified_by=verified_by,
-            )
+            if photo_b64 and len(str(photo_b64).strip()) > 25:
+                sharepoint_vms_sync.upload_card_evidence_attachment_async(
+                    card_number=res["card_number"],
+                    card_code=res["card_code"],
+                    photo_b64=photo_b64,
+                    verified_by=verified_by,
+                    card_name=res.get("card_name") or "",
+                    evidence_status=res.get("evidence_status") or "VERIFIED",
+                )
         except Exception:
             pass
     return jsonify(res), (200 if res.get("success") else 400)

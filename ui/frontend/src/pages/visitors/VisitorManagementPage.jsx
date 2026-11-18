@@ -410,6 +410,7 @@ export default function VisitorManagementPage({
           const holder = findActiveCardHolder(num);
           return {
             cardNumber: num,
+            cardName: c.CardName || '',
             cardCode: c.CardCode || num,
             cardType: c.CardType || 'VISITOR',
             holder,
@@ -421,6 +422,7 @@ export default function VisitorManagementPage({
             (item) =>
               normCard(item.cardNumber).includes(q) ||
               item.cardNumber.toLowerCase().includes(qRaw) ||
+              item.cardName.toLowerCase().includes(qRaw) ||
               item.cardCode.toLowerCase().includes(qRaw) ||
               (item.holder && foldVn(item.holder.full_name).includes(foldVn(cardInput)))
           );
@@ -914,6 +916,11 @@ export default function VisitorManagementPage({
             >
               <div style={{ minWidth: 0 }}>
                 <div className="guest-suggest-name" style={{ fontFamily: 'var(--font-mono)' }}>
+                  {opt.cardName && (
+                    <span style={{ fontFamily: 'inherit', fontWeight: 800, marginRight: 6 }}>
+                      {opt.cardName} ·
+                    </span>
+                  )}
                   {opt.cardNumber}
                   {opt.cardCode && opt.cardCode !== opt.cardNumber && (
                     <span style={{ fontWeight: 500, color: 'var(--text-muted)', marginLeft: 6 }}>

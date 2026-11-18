@@ -193,6 +193,8 @@ def ensure_extended_schema() -> None:
                     ALTER TABLE tbl_Visitors ADD ParentVisitorID NVARCHAR(50) NULL;
                 IF COL_LENGTH('tbl_Visitors', 'ParentVisitorName') IS NULL
                     ALTER TABLE tbl_Visitors ADD ParentVisitorName NVARCHAR(255) NULL;
+                IF COL_LENGTH('tbl_CustomerCards', 'CardName') IS NULL
+                    ALTER TABLE tbl_CustomerCards ADD CardName NVARCHAR(100) NULL;
                 IF COL_LENGTH('tbl_CustomerCards', 'CardPhotoBase64') IS NULL
                     ALTER TABLE tbl_CustomerCards ADD CardPhotoBase64 NVARCHAR(MAX) NULL;
                 IF COL_LENGTH('tbl_CustomerCards', 'EvidenceStatus') IS NULL
@@ -1076,20 +1078,30 @@ def get_customer_cards_db(limit: int = 500, include_photos: bool = True) -> Dict
             cur = conn.cursor()
             cur.execute(f"""
                 SELECT TOP ({int(limit)})
-                    CardID, CardCode, CardNumber, CardType, Status,
+                    CardID, CardCode, CardName, CardNumber, CardType, Status,
                     CurrentHolderName, CurrentHolderCCCD, AssignedAt, IsSyncedToDevices,
                     {photo_expr},
                     CASE WHEN CardPhotoBase64 IS NOT NULL AND LEN(CardPhotoBase64) > 20 THEN 1 ELSE 0 END AS HasPhoto,
-                    ISNULL(EvidenceStatus, CASE WHEN CardPhotoBase64 IS NOT NULL AND LEN(CardPhotoBase64) > 20 THEN 'VERIFIED' ELSE 'PENDING_PHOTO' END) AS EvidenceStatus,
+                    CASE WHEN CardName IS NOT NULL AND LTRIM(RTRIM(CardName)) <> '' THEN 1 ELSE 0 END AS HasName,
+                    CASE
+                        WHEN CardPhotoBase64 IS NOT NULL AND LEN(CardPhotoBase64) > 20
+                         AND CardName IS NOT NULL AND LTRIM(RTRIM(CardName)) <> ''
+                        THEN 'VERIFIED'
+                        ELSE 'PENDING_PHOTO'
+                    END AS EvidenceStatus,
                     AutoDetectedAt, DetectedBy, VerifiedBy, VerifiedAt, Notes, CreatedAt, UpdatedAt
                 FROM tbl_CustomerCards
                 ORDER BY
-                    CASE WHEN ISNULL(EvidenceStatus, 'PENDING_PHOTO') = 'PENDING_PHOTO' AND (CardPhotoBase64 IS NULL OR LEN(CardPhotoBase64) <= 20) THEN 0 ELSE 1 END,
+                    CASE
+                        WHEN CardPhotoBase64 IS NOT NULL AND LEN(CardPhotoBase64) > 20
+                         AND CardName IS NOT NULL AND LTRIM(RTRIM(CardName)) <> ''
+                        THEN 1 ELSE 0
+                    END,
                     UpdatedAt DESC, CardID DESC
             """)
             cols = [c[0] for c in cur.description]
             rows = [_serialize_row(cols, r) for r in cur.fetchall()]
-            pending_cnt = sum(1 for r in rows if not r.get("HasPhoto") or r.get("EvidenceStatus") == "PENDING_PHOTO")
+            pending_cnt = sum(1 for r in rows if not r.get("HasPhoto") or not r.get("HasName"))
             lost_cnt = sum(1 for r in rows if str(r.get("Status") or "").upper() in ("LOST", "LOCKED"))
             return {
                 "rows": rows,
@@ -1239,20 +1251,27 @@ def release_card_on_checkout(card_number: str) -> bool:
 
 def upload_card_evidence_db(
     card_id_or_number: Any,
-    photo_b64: str,
+    photo_b64: Optional[str] = None,
     verified_by: str = "Quản trị viên",
+    card_name: Optional[str] = None,
     card_code: Optional[str] = None,
     notes: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Attaches physical card evidence photo and marks card VERIFIED."""
+    """
+    Updates CardName and/or physical card evidence photo (neither is strictly mandatory).
+    Marks EvidenceStatus='VERIFIED' only when BOTH CardName and CardPhotoBase64 are present.
+    """
     key_str = str(card_id_or_number or "").strip()
     clean_photo = str(photo_b64 or "").strip()
+    clean_name = str(card_name or "").strip() if card_name is not None else None
     if not key_str:
-        return {"success": False, "error": "Thiếu thông tin thẻ cần cập nhật ảnh."}
-    if len(clean_photo) < 25:
-        return {"success": False, "error": "Vui lòng chọn hoặc dán ảnh bằng chứng thẻ hợp lệ."}
-    if not clean_photo.startswith("data:image/"):
+        return {"success": False, "error": "Thiếu thông tin thẻ cần cập nhật."}
+    if clean_photo and len(clean_photo) < 25:
+        return {"success": False, "error": "Ảnh bằng chứng thẻ không hợp lệ."}
+    if clean_photo and not clean_photo.startswith("data:image/"):
         clean_photo = f"data:image/jpeg;base64,{clean_photo}"
+    if not clean_photo and not clean_name and card_code is None and notes is None:
+        return {"success": False, "error": "Vui lòng nhập Tên thẻ hoặc chọn Ảnh bằng chứng."}
 
     try:
         ensure_extended_schema()
@@ -1261,37 +1280,52 @@ def upload_card_evidence_db(
             cur = conn.cursor()
             if key_str.isdigit() and len(key_str) <= 6:
                 cur.execute(
-                    "SELECT CardID, CardNumber, CardCode FROM tbl_CustomerCards WHERE CardID = ? OR CardNumber = ? OR CardNumber = ?",
+                    "SELECT CardID, CardNumber, CardCode, CardName, CASE WHEN CardPhotoBase64 IS NOT NULL AND LEN(CardPhotoBase64) > 20 THEN 1 ELSE 0 END FROM tbl_CustomerCards WHERE CardID = ? OR CardNumber = ? OR CardNumber = ?",
                     (int(key_str), key_str, clean_num),
                 )
             else:
                 cur.execute(
-                    "SELECT CardID, CardNumber, CardCode FROM tbl_CustomerCards WHERE CardNumber = ? OR CardNumber = ? OR CardCode = ?",
+                    "SELECT CardID, CardNumber, CardCode, CardName, CASE WHEN CardPhotoBase64 IS NOT NULL AND LEN(CardPhotoBase64) > 20 THEN 1 ELSE 0 END FROM tbl_CustomerCards WHERE CardNumber = ? OR CardNumber = ? OR CardCode = ?",
                     (key_str, clean_num, key_str),
                 )
             row = cur.fetchone()
             if not row:
                 return {"success": False, "error": f"Không tìm thấy thẻ '{key_str}' trong kho thẻ."}
-            cid, cnum, ccode = int(row[0]), str(row[1]), str(row[2])
+            cid, cnum, ccode, existing_name, had_photo = int(row[0]), str(row[1]), str(row[2]), str(row[3] or "").strip(), bool(row[4])
             new_code = str(card_code or "").strip() or ccode
+            final_name = clean_name if clean_name is not None else existing_name
+            has_both = bool(final_name) and (bool(clean_photo) or had_photo)
+            ev_status = "VERIFIED" if has_both else "PENDING_PHOTO"
+
             cur.execute("""
                 UPDATE tbl_CustomerCards
-                SET CardPhotoBase64 = ?,
-                    EvidenceStatus = 'VERIFIED',
+                SET CardPhotoBase64 = COALESCE(NULLIF(?, ''), CardPhotoBase64),
+                    CardName = CASE WHEN ? IS NOT NULL THEN NULLIF(?, '') ELSE CardName END,
+                    EvidenceStatus = ?,
                     VerifiedBy = ?,
                     VerifiedAt = GETDATE(),
                     CardCode = ?,
                     Notes = CASE WHEN ? IS NOT NULL AND ? <> '' THEN ? ELSE Notes END,
                     UpdatedAt = GETDATE()
                 WHERE CardID = ?
-            """, (clean_photo, str(verified_by or "Quản trị viên")[:100], new_code[:50], notes, notes, notes, cid))
+            """, (
+                clean_photo or "",
+                clean_name, clean_name or "",
+                ev_status,
+                str(verified_by or "Quản trị viên")[:100],
+                new_code[:50],
+                notes, notes, notes,
+                cid,
+            ))
             conn.commit()
             return {
                 "success": True,
                 "card_id": cid,
                 "card_number": cnum,
                 "card_code": new_code,
-                "message": f"Đã lưu ảnh bằng chứng cho thẻ {cnum} ({new_code}).",
+                "card_name": final_name,
+                "evidence_status": ev_status,
+                "message": f"Đã cập nhật thẻ {final_name or cnum}" + (" (đủ Tên thẻ & Ảnh bằng chứng)." if has_both else " (vẫn đang thiếu Tên thẻ hoặc Ảnh)."),
             }
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -1302,6 +1336,7 @@ def upsert_customer_card_db(data: Dict[str, Any]) -> Dict[str, Any]:
     card_id = data.get("CardID")
     card_num = _normalize_card_number(data.get("CardNumber"))
     card_code = str(data.get("CardCode") or f"THE-KHACH-{card_num}").strip()
+    card_name = str(data.get("CardName") or "").strip() or None
     card_type = str(data.get("CardType") or "VISITOR").strip()
     status = str(data.get("Status") or "AVAILABLE").strip().upper()
     notes = str(data.get("Notes") or "").strip()
@@ -1319,44 +1354,64 @@ def upsert_customer_card_db(data: Dict[str, Any]) -> Dict[str, Any]:
             if card_id:
                 cur.execute("""
                     UPDATE tbl_CustomerCards
-                    SET CardCode = ?, CardNumber = ?, CardType = ?, Status = ?, Notes = ?,
+                    SET CardCode = ?, CardName = COALESCE(?, CardName), CardNumber = ?, CardType = ?, Status = ?, Notes = ?,
                         CardPhotoBase64 = COALESCE(?, CardPhotoBase64),
-                        EvidenceStatus = CASE WHEN ? IS NOT NULL THEN 'VERIFIED' ELSE EvidenceStatus END,
-                        VerifiedBy = CASE WHEN ? IS NOT NULL THEN ? ELSE VerifiedBy END,
-                        VerifiedAt = CASE WHEN ? IS NOT NULL THEN GETDATE() ELSE VerifiedAt END,
+                        EvidenceStatus = CASE
+                            WHEN COALESCE(?, CardName) IS NOT NULL AND LTRIM(RTRIM(COALESCE(?, CardName))) <> ''
+                             AND (COALESCE(?, CardPhotoBase64) IS NOT NULL AND LEN(COALESCE(?, CardPhotoBase64)) > 20)
+                            THEN 'VERIFIED' ELSE 'PENDING_PHOTO'
+                        END,
+                        VerifiedBy = CASE WHEN ? IS NOT NULL OR ? IS NOT NULL THEN ? ELSE VerifiedBy END,
+                        VerifiedAt = CASE WHEN ? IS NOT NULL OR ? IS NOT NULL THEN GETDATE() ELSE VerifiedAt END,
                         UpdatedAt = GETDATE()
                     WHERE CardID = ?
-                """, (card_code, card_num, card_type, status, notes, photo_b64, photo_b64, photo_b64, verified_by, photo_b64, int(card_id)))
+                """, (
+                    card_code, card_name, card_num, card_type, status, notes, photo_b64,
+                    card_name, card_name, photo_b64, photo_b64,
+                    photo_b64, card_name, verified_by, photo_b64, card_name, int(card_id),
+                ))
             else:
                 cur.execute("SELECT CardID FROM tbl_CustomerCards WHERE CardNumber = ?", (card_num,))
                 if cur.fetchone():
                     cur.execute("""
                         UPDATE tbl_CustomerCards
-                        SET CardCode = ?, CardType = ?, Status = ?, Notes = ?,
+                        SET CardCode = ?, CardName = COALESCE(?, CardName), CardType = ?, Status = ?, Notes = ?,
                             CardPhotoBase64 = COALESCE(?, CardPhotoBase64),
-                            EvidenceStatus = CASE WHEN ? IS NOT NULL THEN 'VERIFIED' ELSE EvidenceStatus END,
-                            VerifiedBy = CASE WHEN ? IS NOT NULL THEN ? ELSE VerifiedBy END,
-                            VerifiedAt = CASE WHEN ? IS NOT NULL THEN GETDATE() ELSE VerifiedAt END,
+                            EvidenceStatus = CASE
+                                WHEN COALESCE(?, CardName) IS NOT NULL AND LTRIM(RTRIM(COALESCE(?, CardName))) <> ''
+                                 AND (COALESCE(?, CardPhotoBase64) IS NOT NULL AND LEN(COALESCE(?, CardPhotoBase64)) > 20)
+                                THEN 'VERIFIED' ELSE 'PENDING_PHOTO'
+                            END,
+                            VerifiedBy = CASE WHEN ? IS NOT NULL OR ? IS NOT NULL THEN ? ELSE VerifiedBy END,
+                            VerifiedAt = CASE WHEN ? IS NOT NULL OR ? IS NOT NULL THEN GETDATE() ELSE VerifiedAt END,
                             UpdatedAt = GETDATE()
                         WHERE CardNumber = ?
-                    """, (card_code, card_type, status, notes, photo_b64, photo_b64, photo_b64, verified_by, photo_b64, card_num))
+                    """, (
+                        card_code, card_name, card_type, status, notes, photo_b64,
+                        card_name, card_name, photo_b64, photo_b64,
+                        photo_b64, card_name, verified_by, photo_b64, card_name, card_num,
+                    ))
                 else:
-                    ev_st = "VERIFIED" if photo_b64 else "PENDING_PHOTO"
+                    ev_st = "VERIFIED" if (photo_b64 and card_name) else "PENDING_PHOTO"
                     cur.execute("""
                         INSERT INTO tbl_CustomerCards (
-                            CardCode, CardNumber, CardType, Status, IsSyncedToDevices,
+                            CardCode, CardName, CardNumber, CardType, Status, IsSyncedToDevices,
                             CardPhotoBase64, EvidenceStatus, VerifiedBy, VerifiedAt, Notes
                         )
-                        VALUES (?, ?, ?, ?, 1, ?, ?, CASE WHEN ? IS NOT NULL THEN ? ELSE NULL END,
-                                CASE WHEN ? IS NOT NULL THEN GETDATE() ELSE NULL END, ?)
-                    """, (card_code, card_num, card_type, status, photo_b64, ev_st, photo_b64, verified_by, photo_b64, notes))
+                        VALUES (?, ?, ?, ?, ?, 1, ?, ?, CASE WHEN ? IS NOT NULL OR ? IS NOT NULL THEN ? ELSE NULL END,
+                                CASE WHEN ? IS NOT NULL OR ? IS NOT NULL THEN GETDATE() ELSE NULL END, ?)
+                    """, (
+                        card_code, card_name, card_num, card_type, status, photo_b64, ev_st,
+                        photo_b64, card_name, verified_by, photo_b64, card_name, notes,
+                    ))
             conn.commit()
             return {
                 "success": True,
                 "card_number": card_num,
                 "card_code": card_code,
+                "card_name": card_name or "",
                 "has_photo": bool(photo_b64),
-                "message": f"Đã lưu thẻ {card_num} ({card_code}) vào CSDL Kho thẻ.",
+                "message": f"Đã lưu thẻ {card_name or card_num} ({card_code}) vào CSDL Kho thẻ.",
             }
     except Exception as e:
         return {"success": False, "error": str(e)}

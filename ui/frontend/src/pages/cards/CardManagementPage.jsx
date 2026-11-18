@@ -45,8 +45,9 @@ export default function CardManagementPage({
   const [saving, setSaving] = useState(false);
   const [selectedNumbers, setSelectedNumbers] = useState([]);
 
-  // Quick evidence upload modal & lightbox state
+  // Quick Name & Evidence Photo modal + Lightbox state
   const [evidenceModalCard, setEvidenceModalCard] = useState(null);
+  const [evidenceName, setEvidenceName] = useState('');
   const [evidencePhoto, setEvidencePhoto] = useState('');
   const [evidenceCode, setEvidenceCode] = useState('');
   const [evidenceNotes, setEvidenceNotes] = useState('');
@@ -58,6 +59,7 @@ export default function CardManagementPage({
 
   const [formData, setFormData] = useState({
     CardID: null,
+    CardName: '',
     CardCode: '',
     CardNumber: '',
     CardType: 'VISITOR',
@@ -96,13 +98,24 @@ export default function CardManagementPage({
     return map;
   }, [activeVisitors]);
 
-  const isPendingPhoto = useCallback((c) => {
-    return !c?.HasPhoto || c?.EvidenceStatus === 'PENDING_PHOTO';
+  const getMissingInfo = useCallback((c) => {
+    const hasName = Boolean(String(c?.CardName || '').trim()) || Boolean(c?.HasName);
+    const hasPhoto = Boolean(c?.HasPhoto) || Boolean(c?.CardPhotoBase64 && String(c.CardPhotoBase64).length > 25);
+    let label = '';
+    if (!hasName && !hasPhoto) label = 'Thiếu Tên thẻ & Ảnh';
+    else if (!hasName) label = 'Thiếu Tên thẻ';
+    else if (!hasPhoto) label = 'Thiếu Ảnh bằng chứng';
+    return {
+      hasName,
+      hasPhoto,
+      incomplete: !hasName || !hasPhoto,
+      label,
+    };
   }, []);
 
-  const pendingPhotoCount = useMemo(
-    () => cards.filter((c) => isPendingPhoto(c)).length,
-    [cards, isPendingPhoto]
+  const pendingIncompleteCount = useMemo(
+    () => cards.filter((c) => getMissingInfo(c).incomplete).length,
+    [cards, getMissingInfo]
   );
 
   const lostCount = useMemo(
@@ -110,7 +123,7 @@ export default function CardManagementPage({
     [cards]
   );
 
-  // Support Ctrl+V image paste directly when Evidence Modal is open
+  // Support Ctrl+V image paste directly when Modal is open
   useEffect(() => {
     if (!evidenceModalCard) return undefined;
     const onPaste = async (e) => {
@@ -135,6 +148,7 @@ export default function CardManagementPage({
   const resetForm = () => {
     setFormData({
       CardID: null,
+      CardName: '',
       CardCode: '',
       CardNumber: '',
       CardType: 'VISITOR',
@@ -160,7 +174,7 @@ export default function CardManagementPage({
     e.preventDefault();
     const num = String(formData.CardNumber || '').trim();
     if (!num) {
-      if (notify) notify('Vui lòng nhập hoặc quẹt Số thẻ từ RFID/NFC.', 'error');
+      if (notify) notify('Vui lòng nhập hoặc quẹt Số RFID/NFC.', 'error');
       return;
     }
     setSaving(true);
@@ -168,6 +182,7 @@ export default function CardManagementPage({
       const payload = {
         ...formData,
         CardNumber: num,
+        CardName: String(formData.CardName || '').trim(),
         CardCode: String(formData.CardCode || '').trim() || `THE-KHACH-${num}`,
       };
       const { ok, data } = await apiFetch('/api/visitor/card', {
@@ -189,6 +204,7 @@ export default function CardManagementPage({
   const handleEditSelect = (card) => {
     setFormData({
       CardID: card.CardID || null,
+      CardName: card.CardName || '',
       CardCode: card.CardCode || '',
       CardNumber: card.CardNumber || '',
       CardType: card.CardType || 'VISITOR',
@@ -200,6 +216,7 @@ export default function CardManagementPage({
 
   const openEvidenceModal = (card) => {
     setEvidenceModalCard(card);
+    setEvidenceName(card.CardName || '');
     setEvidencePhoto(card.CardPhotoBase64 || '');
     setEvidenceCode(card.CardCode || `THE-KHACH-${card.CardNumber}`);
     setEvidenceNotes(card.Notes || '');
@@ -220,8 +237,10 @@ export default function CardManagementPage({
   const handleSubmitEvidence = async (e) => {
     e.preventDefault();
     if (!evidenceModalCard) return;
-    if (!evidencePhoto || evidencePhoto.length < 25) {
-      if (notify) notify('Vui lòng chọn tệp hoặc dán ảnh (Ctrl+V) mặt thẻ thực tế.', 'error');
+    const cleanName = evidenceName.trim();
+    const hasPhoto = Boolean(evidencePhoto && evidencePhoto.length >= 25);
+    if (!cleanName && !hasPhoto) {
+      if (notify) notify('Vui lòng nhập Tên thẻ hoặc chọn/dán Ảnh bằng chứng.', 'error');
       return;
     }
     setUploadingEvidence(true);
@@ -231,17 +250,18 @@ export default function CardManagementPage({
         body: JSON.stringify({
           CardID: evidenceModalCard.CardID,
           CardNumber: evidenceModalCard.CardNumber,
+          CardName: cleanName,
           CardCode: evidenceCode.trim(),
           Notes: evidenceNotes.trim(),
-          CardPhotoBase64: evidencePhoto,
+          CardPhotoBase64: hasPhoto ? evidencePhoto : '',
         }),
       });
       if (ok && data?.success) {
-        if (notify) notify(data.message || 'Đã lưu ảnh bằng chứng & đồng bộ SharePoint.', 'success');
+        if (notify) notify(data.message || 'Đã cập nhật thông tin thẻ.', 'success');
         setEvidenceModalCard(null);
         await loadCards();
       } else {
-        if (notify) notify(data?.error || 'Không thể lưu ảnh bằng chứng.', 'error');
+        if (notify) notify(data?.error || 'Không thể cập nhật thông tin thẻ.', 'error');
       }
     } finally {
       setUploadingEvidence(false);
@@ -253,14 +273,15 @@ export default function CardManagementPage({
     const nextStatus = curStatus === 'LOST' ? 'AVAILABLE' : 'LOST';
     const msg =
       nextStatus === 'LOST'
-        ? `Xác nhận đánh dấu MẤT THẺ ${card.CardNumber} (${card.CardCode})? Hệ thống sẽ khóa thẻ và thu hồi quyền mở cửa trên 4 máy ZKTeco.`
-        : `Xác nhận tìm lại được thẻ ${card.CardNumber} và khôi phục về trạng thái Sẵn sàng cấp?`;
+        ? `Xác nhận đánh dấu MẤT THẺ ${card.CardName || card.CardNumber} (RFID: ${card.CardNumber})? Hệ thống sẽ khóa thẻ và thu hồi quyền mở cửa trên 4 máy ZKTeco.`
+        : `Xác nhận tìm lại được thẻ ${card.CardName || card.CardNumber} và khôi phục về trạng thái Sẵn sàng cấp?`;
     if (!window.confirm(msg)) return;
 
     const { ok, data } = await apiFetch('/api/visitor/card', {
       method: 'POST',
       body: JSON.stringify({
         CardID: card.CardID,
+        CardName: card.CardName || '',
         CardCode: card.CardCode,
         CardNumber: card.CardNumber,
         CardType: card.CardType || 'VISITOR',
@@ -275,8 +296,8 @@ export default function CardManagementPage({
       if (notify) {
         notify(
           nextStatus === 'LOST'
-            ? `Đã khóa thẻ ${card.CardNumber} và thu hồi quyền mở cổng trên 4 thiết bị.`
-            : `Đã khôi phục thẻ ${card.CardNumber} về trạng thái Sẵn sàng.`,
+            ? `Đã khóa thẻ ${card.CardName || card.CardNumber} và thu hồi quyền mở cổng trên 4 thiết bị.`
+            : `Đã khôi phục thẻ ${card.CardName || card.CardNumber} về trạng thái Sẵn sàng.`,
           'success'
         );
       }
@@ -297,7 +318,7 @@ export default function CardManagementPage({
       }
       return;
     }
-    const confirmMsg = `Xóa thẻ "${card.CardCode || card.CardNumber}" (RFID: ${card.CardNumber}) khỏi SQL Server & SharePoint (không xóa cấu hình máy cửa)?`;
+    const confirmMsg = `Xóa thẻ "${card.CardName || card.CardCode || card.CardNumber}" (RFID: ${card.CardNumber}) khỏi SQL Server & SharePoint (không xóa cấu hình máy cửa)?`;
     if (!window.confirm(confirmMsg)) return;
 
     const { ok, data } = await apiFetch('/api/visitor/card/delete', {
@@ -361,23 +382,24 @@ export default function CardManagementPage({
         (/^\d+$/.test(cleanNum) ? activeCardHolderMap[cleanNum.replace(/^0+/, '') || '0'] : null);
       const curStatus = String(c.Status || 'AVAILABLE').toUpperCase();
       const effectiveStatus = holder ? 'IN_USE' : curStatus;
+      const missingInfo = getMissingInfo(c);
 
       if (statusFilter === 'PENDING_PHOTO') {
-        if (!isPendingPhoto(c)) return false;
+        if (!missingInfo.incomplete) return false;
       } else if (statusFilter !== 'ALL' && effectiveStatus !== statusFilter) {
         return false;
       }
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
-        const hay = `${c.CardCode || ''} ${c.CardNumber || ''} ${c.CardType || ''} ${c.Notes || ''} ${
-          holder?.full_name || ''
-        } ${c.CurrentHolderName || ''} ${c.DetectedBy || ''}`.toLowerCase();
+        const hay = `${c.CardName || ''} ${c.CardCode || ''} ${c.CardNumber || ''} ${c.CardType || ''} ${
+          c.Notes || ''
+        } ${holder?.full_name || ''} ${c.CurrentHolderName || ''} ${c.DetectedBy || ''}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [cards, activeCardHolderMap, statusFilter, searchQuery, isPendingPhoto]);
+  }, [cards, activeCardHolderMap, statusFilter, searchQuery, getMissingInfo]);
 
   const toggleSelectRow = (cardNum) => {
     setSelectedNumbers((prev) =>
@@ -418,7 +440,7 @@ export default function CardManagementPage({
               CSDL SQL Server (tbl_CustomerCards) · SharePoint (VMS SEAZEN - KHO THẺ KHÁCH)
             </div>
             <h1 className="tino-greeting-title" style={{ fontSize: 22 }}>
-              Quản lý Kho Thẻ RFID & Ảnh Bằng Chứng ({cards.length} thẻ)
+              Quản lý Kho Thẻ RFID &amp; Ảnh Bằng Chứng ({cards.length} thẻ)
             </h1>
           </div>
 
@@ -427,12 +449,12 @@ export default function CardManagementPage({
             <span
               className="badge"
               style={{
-                background: pendingPhotoCount > 0 ? '#fef2f2' : '#f0fdf4',
-                color: pendingPhotoCount > 0 ? '#b91c1c' : '#15803d',
-                border: `1px solid ${pendingPhotoCount > 0 ? '#fecaca' : '#bbf7d0'}`,
+                background: pendingIncompleteCount > 0 ? '#fef2f2' : '#f0fdf4',
+                color: pendingIncompleteCount > 0 ? '#b91c1c' : '#15803d',
+                border: `1px solid ${pendingIncompleteCount > 0 ? '#fecaca' : '#bbf7d0'}`,
               }}
             >
-              Chờ ảnh bằng chứng: {pendingPhotoCount}
+              Thiếu Tên / Ảnh: {pendingIncompleteCount}
             </span>
             <span className="badge badge-gold">
               Đang cấp cho khách: {Object.keys(activeCardHolderMap).length}
@@ -464,8 +486,8 @@ export default function CardManagementPage({
           </div>
         </div>
 
-        {/* ALERT BANNER WHEN NEW AUTO-DETECTED CARDS NEED EVIDENCE PHOTO */}
-        {pendingPhotoCount > 0 && (
+        {/* ALERT BANNER WHEN CARDS ARE MISSING TEN THE OR ANH BANG CHUNG */}
+        {pendingIncompleteCount > 0 && (
           <div
             style={{
               background: '#fffbeb',
@@ -495,8 +517,8 @@ export default function CardManagementPage({
                 <line x1="12" y1="17" x2="12.01" y2="17"></line>
               </svg>
               <div style={{ fontSize: 13, color: '#78350f', fontWeight: 600 }}>
-                Có <strong>{pendingPhotoCount} thẻ mới</strong> phát hiện từ tiếp đón khách đang chờ bổ sung{' '}
-                <strong>ảnh bằng chứng mặt thẻ</strong> để kiểm soát mất/hỏng.
+                Có <strong>{pendingIncompleteCount} thẻ</strong> đang thiếu <strong>Tên thẻ</strong> hoặc{' '}
+                <strong>Ảnh bằng chứng</strong> — Bổ sung đủ cả 2 thông tin để tắt cảnh báo.
               </div>
             </div>
             <button
@@ -514,7 +536,7 @@ export default function CardManagementPage({
             >
               {statusFilter === 'PENDING_PHOTO'
                 ? 'Hiện tất cả thẻ'
-                : `Lọc ${pendingPhotoCount} thẻ chờ ảnh`}
+                : `Lọc ${pendingIncompleteCount} thẻ cần bổ sung`}
             </button>
           </div>
         )}
@@ -536,7 +558,7 @@ export default function CardManagementPage({
             <div style={{ fontWeight: 700, fontSize: 13 }}>
               {formData.CardID
                 ? `Chỉnh sửa thẻ #${formData.CardID} (RFID: ${formData.CardNumber})`
-                : 'Thêm mới / Đăng ký Thẻ từ RFID kèm Ảnh bằng chứng'}
+                : 'Thêm mới / Cập nhật Thẻ từ RFID (Tên thẻ & Ảnh bằng chứng)'}
             </div>
             {formData.CardID && (
               <button type="button" className="btn btn-sm" onClick={resetForm}>
@@ -548,14 +570,25 @@ export default function CardManagementPage({
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: '1.1fr 1fr 0.85fr 0.85fr 1.1fr 1.1fr auto',
+              gridTemplateColumns: '1fr 1fr 0.95fr 0.8fr 0.8fr 1fr 1.05fr auto',
               gap: 10,
               alignItems: 'end',
             }}
           >
             <div className="v-field">
+              <label>Tên thẻ (in trên thẻ)</label>
+              <input
+                type="text"
+                className="v-input"
+                placeholder="VD: VISITOR 25"
+                value={formData.CardName}
+                onChange={(e) => setFormData({ ...formData, CardName: e.target.value })}
+              />
+            </div>
+
+            <div className="v-field">
               <label>
-                <span className="req">*</span>Số thẻ RFID / NFC
+                <span className="req">*</span>Số RFID / NFC
               </label>
               <input
                 type="text"
@@ -567,11 +600,11 @@ export default function CardManagementPage({
             </div>
 
             <div className="v-field">
-              <label>Mã nhãn thẻ</label>
+              <label>Mã thẻ</label>
               <input
                 type="text"
                 className="v-input"
-                placeholder="VD: THE-KHACH-01"
+                placeholder="VD: THE-KHACH-25"
                 value={formData.CardCode}
                 onChange={(e) => setFormData({ ...formData, CardCode: e.target.value })}
               />
@@ -606,11 +639,11 @@ export default function CardManagementPage({
             </div>
 
             <div className="v-field">
-              <label>Ghi chú nhận dạng</label>
+              <label>Ghi chú</label>
               <input
                 type="text"
                 className="v-input"
-                placeholder="Số in trên thẻ..."
+                placeholder="Đặc điểm thẻ..."
                 value={formData.Notes}
                 onChange={(e) => setFormData({ ...formData, Notes: e.target.value })}
               />
@@ -645,7 +678,7 @@ export default function CardManagementPage({
             </div>
 
             <button type="submit" className="btn btn-gold" style={{ height: 36 }} disabled={saving}>
-              {saving ? 'Đang lưu...' : formData.CardID ? 'Cập nhật thẻ' : '+ Lưu thẻ'}
+              {saving ? 'Đang lưu...' : formData.CardID ? 'Cập nhật' : '+ Lưu thẻ'}
             </button>
           </div>
         </form>
@@ -662,7 +695,7 @@ export default function CardManagementPage({
                 </svg>
                 <input
                   type="text"
-                  placeholder="Tìm số RFID, mã thẻ, khách giữ..."
+                  placeholder="Tìm tên thẻ, mã thẻ, RFID, khách..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
@@ -670,12 +703,12 @@ export default function CardManagementPage({
 
               <select
                 className="v-input"
-                style={{ width: 210, height: 32 }}
+                style={{ width: 225, height: 32 }}
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
               >
                 <option value="ALL">Tất cả trạng thái ({cards.length})</option>
-                <option value="PENDING_PHOTO">Chờ ảnh bằng chứng ({pendingPhotoCount})</option>
+                <option value="PENDING_PHOTO">Thiếu Tên / Ảnh ({pendingIncompleteCount})</option>
                 <option value="AVAILABLE">Sẵn sàng cấp</option>
                 <option value="IN_USE">Đang cấp cho khách</option>
                 <option value="LOST">Đã báo mất</option>
@@ -684,7 +717,7 @@ export default function CardManagementPage({
             </div>
 
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-              Thẻ mới phát hiện tự động khi đăng ký khách sẽ ưu tiên xếp lên đầu để Admin bổ sung ảnh
+              Đủ Tên thẻ và Ảnh bằng chứng sẽ tự tắt cảnh báo
             </span>
           </div>
 
@@ -702,9 +735,10 @@ export default function CardManagementPage({
                       onChange={toggleSelectAllFiltered}
                     />
                   </th>
+                  <th>Tên thẻ</th>
                   <th>Ảnh bằng chứng</th>
-                  <th>Mã nhãn thẻ</th>
-                  <th>Số RFID / NFC</th>
+                  <th>Mã thẻ</th>
+                  <th>Số RFID</th>
                   <th>Trạng thái</th>
                   <th>Người đang giữ / Ghi nhận</th>
                   <th>Ghi chú</th>
@@ -722,13 +756,14 @@ export default function CardManagementPage({
                       : null);
                   const curStatus = String(c.Status || 'AVAILABLE').toUpperCase();
                   const isUsed = Boolean(holder) || curStatus === 'IN_USE';
-                  const missingPhoto = isPendingPhoto(c);
+                  const missing = getMissingInfo(c);
 
                   return (
                     <tr
                       key={c.CardID || cleanNum}
-                      style={missingPhoto ? { background: '#fffdf5' } : undefined}
+                      style={missing.incomplete ? { background: '#fffdf5' } : undefined}
                     >
+                      {/* 1. Checkbox */}
                       <td>
                         <input
                           type="checkbox"
@@ -736,6 +771,41 @@ export default function CardManagementPage({
                           onChange={() => toggleSelectRow(cleanNum)}
                         />
                       </td>
+
+                      {/* 2. Tên thẻ (font chữ to và đậm) */}
+                      <td>
+                        {c.CardName ? (
+                          <div
+                            style={{
+                              fontSize: 16.5,
+                              fontWeight: 800,
+                              color: '#111111',
+                              letterSpacing: '0.01em',
+                              lineHeight: 1.25,
+                            }}
+                          >
+                            {c.CardName}
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn btn-sm"
+                            style={{
+                              borderColor: '#f59e0b',
+                              background: '#fffbeb',
+                              color: '#b45309',
+                              fontWeight: 700,
+                              fontSize: 11.5,
+                              whiteSpace: 'nowrap',
+                            }}
+                            onClick={() => openEvidenceModal(c)}
+                          >
+                            + Nhập tên thẻ
+                          </button>
+                        )}
+                      </td>
+
+                      {/* 3. Ảnh bằng chứng */}
                       <td>
                         {c.CardPhotoBase64 ? (
                           <button
@@ -754,8 +824,8 @@ export default function CardManagementPage({
                           >
                             <img
                               src={c.CardPhotoBase64}
-                              alt={c.CardCode || cleanNum}
-                              style={{ width: 58, height: 38, objectFit: 'cover', display: 'block' }}
+                              alt={c.CardName || c.CardCode || cleanNum}
+                              style={{ width: 64, height: 42, objectFit: 'cover', display: 'block' }}
                             />
                           </button>
                         ) : (
@@ -772,19 +842,25 @@ export default function CardManagementPage({
                             }}
                             onClick={() => openEvidenceModal(c)}
                           >
-                            + Ảnh thẻ
+                            + Ảnh bằng chứng
                           </button>
                         )}
                       </td>
+
+                      {/* 4. Mã thẻ */}
                       <td>
                         <div style={{ fontWeight: 700 }}>{c.CardCode || `THE-KHACH-${cleanNum}`}</div>
                         <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                           #{c.CardID} · {c.CardType || 'VISITOR'}
                         </div>
                       </td>
+
+                      {/* 5. Số RFID */}
                       <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 13.5 }}>
                         {cleanNum}
                       </td>
+
+                      {/* 6. Trạng thái */}
                       <td>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
                           {curStatus === 'LOST' ? (
@@ -796,7 +872,7 @@ export default function CardManagementPage({
                           ) : (
                             <span className="badge badge-green">Sẵn sàng cấp</span>
                           )}
-                          {missingPhoto ? (
+                          {missing.incomplete ? (
                             <span
                               style={{
                                 fontSize: 11,
@@ -808,15 +884,17 @@ export default function CardManagementPage({
                                 borderRadius: 4,
                               }}
                             >
-                              Chờ ảnh bằng chứng
+                              {missing.label}
                             </span>
                           ) : (
                             <span style={{ fontSize: 11, color: '#15803d', fontWeight: 600 }}>
-                              Đã xác minh ảnh
+                              Đủ Tên thẻ &amp; Ảnh
                             </span>
                           )}
                         </div>
                       </td>
+
+                      {/* 7. Người đang giữ / Ghi nhận */}
                       <td>
                         {holder ? (
                           <div>
@@ -843,17 +921,23 @@ export default function CardManagementPage({
                           </div>
                         )}
                       </td>
-                      <td style={{ color: 'var(--text-secondary)', maxWidth: 210, fontSize: 12.5 }}>
+
+                      {/* 8. Ghi chú */}
+                      <td style={{ color: 'var(--text-secondary)', maxWidth: 200, fontSize: 12.5 }}>
                         {c.Notes || '—'}
                       </td>
+
+                      {/* 9. Cập nhật */}
                       <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--text-muted)' }}>
                         <div>{String(c.UpdatedAt || c.CreatedAt || '').slice(0, 16)}</div>
                         {c.VerifiedBy && (
                           <div style={{ fontSize: 10.5, fontFamily: 'inherit' }}>
-                            Xác minh: {c.VerifiedBy}
+                            Bởi: {c.VerifiedBy}
                           </div>
                         )}
                       </td>
+
+                      {/* 10. Thao tác */}
                       <td style={{ textAlign: 'right' }}>
                         <div style={{ display: 'inline-flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                           <button
@@ -861,7 +945,7 @@ export default function CardManagementPage({
                             className="btn btn-sm"
                             onClick={() => openEvidenceModal(c)}
                           >
-                            {c.CardPhotoBase64 ? 'Đổi ảnh' : 'Bổ sung ảnh'}
+                            {missing.incomplete ? 'Bổ sung Tên/Ảnh' : 'Sửa Tên/Ảnh'}
                           </button>
                           <button type="button" className="btn btn-sm" onClick={() => handleEditSelect(c)}>
                             Sửa
@@ -893,9 +977,9 @@ export default function CardManagementPage({
                 })}
                 {filteredCards.length === 0 && (
                   <tr>
-                    <td colSpan={9} style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
+                    <td colSpan={10} style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
                       {cards.length === 0
-                        ? 'Kho thẻ hiện đang trống. Mỗi khi lễ tân đăng ký khách với thẻ RFID mới, hệ thống sẽ tự động thêm thẻ vào đây và yêu cầu ảnh bằng chứng.'
+                        ? 'Kho thẻ hiện đang trống. Mỗi khi lễ tân đăng ký khách với thẻ RFID mới, hệ thống sẽ tự động thêm thẻ vào đây và cảnh báo bổ sung Tên thẻ + Ảnh bằng chứng.'
                         : 'Không có thẻ nào khớp bộ lọc hiện tại.'}
                     </td>
                   </tr>
@@ -906,7 +990,7 @@ export default function CardManagementPage({
         </div>
       </div>
 
-      {/* EVIDENCE PHOTO UPLOAD MODAL */}
+      {/* NAME & EVIDENCE PHOTO MODAL */}
       {evidenceModalCard && (
         <div
           style={{
@@ -924,13 +1008,13 @@ export default function CardManagementPage({
           <form
             onSubmit={handleSubmitEvidence}
             className="card"
-            style={{ width: '100%', maxWidth: 480, padding: 20 }}
+            style={{ width: '100%', maxWidth: 490, padding: 20 }}
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <div>
                 <div style={{ fontSize: 11.5, color: 'var(--text-muted)', fontWeight: 600 }}>
-                  XÁC MINH ẢNH BẰNG CHỨNG THẺ VẬT LÝ
+                  BỔ SUNG TÊN THẺ &amp; ẢNH BẰNG CHỨNG
                 </div>
                 <h2 style={{ fontSize: 17, fontWeight: 800, margin: '2px 0 0' }}>
                   Thẻ RFID: {evidenceModalCard.CardNumber}
@@ -947,31 +1031,41 @@ export default function CardManagementPage({
             </div>
 
             <div className="v-field" style={{ marginBottom: 10 }}>
-              <label>Mã nhãn / Số thứ tự in trên thẻ</label>
+              <label>Tên thẻ (số hoặc ký hiệu in trên thẻ, VD: VISITOR 25)</label>
+              <input
+                type="text"
+                className="v-input"
+                style={{ fontWeight: 700, fontSize: 15 }}
+                value={evidenceName}
+                onChange={(e) => setEvidenceName(e.target.value)}
+                placeholder="VD: VISITOR 25"
+              />
+            </div>
+
+            <div className="v-field" style={{ marginBottom: 10 }}>
+              <label>Mã thẻ</label>
               <input
                 type="text"
                 className="v-input"
                 value={evidenceCode}
                 onChange={(e) => setEvidenceCode(e.target.value)}
-                placeholder="VD: THE-KHACH-03"
+                placeholder="VD: THE-KHACH-25"
               />
             </div>
 
             <div className="v-field" style={{ marginBottom: 10 }}>
-              <label>Ghi chú nhận dạng (màu sắc, số tem dán, tình trạng...)</label>
+              <label>Ghi chú nhận dạng</label>
               <input
                 type="text"
                 className="v-input"
                 value={evidenceNotes}
                 onChange={(e) => setEvidenceNotes(e.target.value)}
-                placeholder="VD: Thẻ nhựa trắng mặt trước dán số 03"
+                placeholder="VD: Thẻ nhựa cam-xám số 25"
               />
             </div>
 
             <div className="v-field" style={{ marginBottom: 14 }}>
-              <label>
-                <span className="req">*</span>Ảnh chụp thẻ (Chọn tệp hoặc bấm Ctrl+V để dán trực tiếp)
-              </label>
+              <label>Ảnh chụp thẻ (Chọn tệp hoặc bấm Ctrl+V — có thể lưu trước 1 trong 2)</label>
               <div
                 style={{
                   border: '1.5px dashed #cbd5e1',
@@ -988,7 +1082,7 @@ export default function CardManagementPage({
                       alt="Evidence preview"
                       style={{
                         maxWidth: '100%',
-                        maxHeight: 220,
+                        maxHeight: 210,
                         borderRadius: 8,
                         border: '1px solid var(--border-main)',
                       }}
@@ -1004,7 +1098,7 @@ export default function CardManagementPage({
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
                     <div style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}>
-                      Dán ảnh trực tiếp bằng <strong>Ctrl + V</strong> hoặc chọn file ảnh chụp mặt thẻ
+                      Dán ảnh trực tiếp bằng <strong>Ctrl + V</strong> hoặc chọn ảnh chụp mặt thẻ
                     </div>
                     <button
                       type="button"
@@ -1036,7 +1130,7 @@ export default function CardManagementPage({
                 Hủy
               </button>
               <button type="submit" className="btn btn-gold" disabled={uploadingEvidence}>
-                {uploadingEvidence ? 'Đang tải lên...' : 'Lưu ảnh & Đồng bộ SharePoint'}
+                {uploadingEvidence ? 'Đang lưu...' : 'Lưu thông tin & Đồng bộ SharePoint'}
               </button>
             </div>
           </form>
@@ -1065,12 +1159,12 @@ export default function CardManagementPage({
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <div>
-                <div style={{ fontWeight: 800, fontSize: 15 }}>
-                  {previewLightbox.CardCode} (RFID: {previewLightbox.CardNumber})
+                <div style={{ fontWeight: 800, fontSize: 17 }}>
+                  {previewLightbox.CardName || previewLightbox.CardCode} (RFID: {previewLightbox.CardNumber})
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                   {previewLightbox.VerifiedBy
-                    ? `Xác minh bởi ${previewLightbox.VerifiedBy} lúc ${String(previewLightbox.VerifiedAt || '').slice(0, 19)}`
+                    ? `Cập nhật bởi ${previewLightbox.VerifiedBy} lúc ${String(previewLightbox.VerifiedAt || '').slice(0, 19)}`
                     : 'Ảnh bằng chứng thẻ vật lý'}
                 </div>
               </div>
@@ -1080,7 +1174,7 @@ export default function CardManagementPage({
             </div>
             <img
               src={previewLightbox.CardPhotoBase64}
-              alt={previewLightbox.CardCode}
+              alt={previewLightbox.CardName || previewLightbox.CardCode}
               style={{
                 width: '100%',
                 maxHeight: 420,

@@ -171,6 +171,7 @@ VMS_SHAREPOINT_LIST_SCHEMAS: Dict[str, Dict[str, Any]] = {
         "title_sql_col": "CardCode",
         "columns": [
             {"internal": "MaDinhDanhThe", "display": "Mã Định Danh Thẻ", "type": "text", "sql": "CardCode"},
+            {"internal": "TenThe", "display": "Tên Thẻ", "type": "text", "sql": "CardName"},
             {"internal": "SoTheRFID", "display": "Số Thẻ Từ RFID", "type": "text", "sql": "CardNumber"},
             {"internal": "LoaiThe", "display": "Loại Thẻ", "type": "text", "sql": "CardType"},
             {"internal": "TrangThaiThe", "display": "Trạng Thái Thẻ", "type": "text", "sql": "Status"},
@@ -1512,6 +1513,8 @@ def upload_card_evidence_attachment_async(
     card_code: str,
     photo_b64: str,
     verified_by: str = "Quản trị viên",
+    card_name: str = "",
+    evidence_status: str = "VERIFIED",
 ) -> None:
     """
     Uploads physical card evidence photo (.jpg/.png) to SharePoint List
@@ -1542,26 +1545,32 @@ def upload_card_evidence_attachment_async(
                 sp_item_id = None
                 if r.status_code == 200 and r.json().get("value"):
                     sp_item_id = r.json()["value"][0]["Id"]
+                    merge_fields = {
+                        "TrangThaiBangChung": str(evidence_status or "VERIFIED")[:50],
+                        "NguoiXacMinhAnh": str(verified_by or "Quản trị viên")[:200],
+                    }
+                    if card_name:
+                        merge_fields["TenThe"] = str(card_name)[:200]
                     requests.post(
                         f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items({sp_item_id})",
                         headers={**headers_write, "X-HTTP-Method": "MERGE", "If-Match": "*"},
-                        json={
-                            "TrangThaiBangChung": "VERIFIED",
-                            "NguoiXacMinhAnh": str(verified_by or "Quản trị viên")[:200],
-                        },
+                        json=merge_fields,
                         timeout=10
                     )
                 else:
+                    create_fields = {
+                        "Title": clean_code[:250],
+                        "MaDinhDanhThe": clean_code[:250],
+                        "SoTheRFID": clean_card[:250],
+                        "TrangThaiBangChung": str(evidence_status or "VERIFIED")[:50],
+                        "NguoiXacMinhAnh": str(verified_by or "Quản trị viên")[:200],
+                    }
+                    if card_name:
+                        create_fields["TenThe"] = str(card_name)[:200]
                     cr = requests.post(
                         f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items",
                         headers=headers_write,
-                        json={
-                            "Title": clean_code[:250],
-                            "MaDinhDanhThe": clean_code[:250],
-                            "SoTheRFID": clean_card[:250],
-                            "TrangThaiBangChung": "VERIFIED",
-                            "NguoiXacMinhAnh": str(verified_by or "Quản trị viên")[:200],
-                        },
+                        json=create_fields,
                         timeout=10
                     )
                     if cr.status_code in (200, 201):
