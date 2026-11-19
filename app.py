@@ -754,6 +754,20 @@ def realtime_logs():
     # Scans are continuously collected and merged 24/7 by background thread
     scans = storage.get_saved_scans(target_date)
 
+    # Build fast lookup from active + recent visitors so 562xx hardware slots always show real Guest Name & RFID Card
+    visitor_by_slot = {}
+    try:
+        all_vis = (storage.get_active_visitors() or []) + (storage.get_visitor_history(limit=300) or [])
+        for v in all_vis:
+            v_id = str(v.get("id") or "").strip().lstrip("0")
+            v_epad = str(v.get("epad_atid") or "").strip().lstrip("0")
+            v_card = str(v.get("card_number") or "").strip().lstrip("0")
+            for k in (v_epad, v_id, v_card):
+                if k and k not in visitor_by_slot:
+                    visitor_by_slot[k] = v
+    except Exception:
+        pass
+
     enriched = []
     for l in scans:
         direction = determine_scan_direction(l)
@@ -767,6 +781,19 @@ def realtime_logs():
             continue
 
         item = dict(l)
+        raw_atid = str(item.get("EmployeeATID") or "").strip()
+        norm_atid = raw_atid.lstrip("0") or raw_atid
+        raw_name = str(item.get("FullName") or "").strip()
+        if (not is_staff) and (not raw_name or raw_name.lower().startswith("khach ") or raw_name.lower() in ("chưa rõ", "chua ro", "---", "unknown")):
+            matched_v = visitor_by_slot.get(norm_atid) or visitor_by_slot.get(raw_atid)
+            if matched_v:
+                if matched_v.get("full_name"):
+                    item["FullName"] = matched_v["full_name"]
+                if matched_v.get("card_number") and not item.get("CardNumber"):
+                    item["CardNumber"] = matched_v["card_number"]
+                if matched_v.get("department") and str(item.get("Department") or "").strip() in ("", "--", "Chỉ Huy Đội"):
+                    item["Department"] = matched_v["department"]
+
         item["direction"] = direction
         item["direction_label"] = "Lượt VÀO" if direction == "IN" else "Lượt RA"
         item["is_staff"] = is_staff

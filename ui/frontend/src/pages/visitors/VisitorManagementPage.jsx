@@ -641,10 +641,27 @@ export default function VisitorManagementPage({
     }
   };
 
-  const deptEmployees = employees.filter((e) => {
-    const dName = e.department || e.DepartmentName || '';
-    return !form.department || dName === form.department;
-  });
+  const deptEmployees = useMemo(() => {
+    const targetDept = String(form.department || '').trim().toLowerCase();
+    return (employees || []).filter((e) => {
+      const dName = String(e.department || e.DepartmentName || '').trim().toLowerCase();
+      return !targetDept || dName === targetDept;
+    });
+  }, [employees, form.department]);
+
+  const filteredHostEmployees = useMemo(() => {
+    const qRaw = String(form.host_person || '').trim().toLowerCase();
+    const qFold = foldVn(qRaw);
+    if (!qRaw) return deptEmployees.slice(0, 60);
+    return deptEmployees
+      .filter((emp) => {
+        const name = String(emp.fullname || emp.FullName || '');
+        const atid = String(emp.atid || emp.EmployeeATID || '');
+        const hay = `${name} ${atid}`.toLowerCase();
+        return hay.includes(qRaw) || foldVn(name).includes(qFold);
+      })
+      .slice(0, 60);
+  }, [deptEmployees, form.host_person]);
 
   const parseQrForMain = async (raw) => {
     setMainQrRaw(raw);
@@ -1564,16 +1581,18 @@ export default function VisitorManagementPage({
                   </select>
                 </div>
 
-                <div className="v-field">
+                <div className="v-field" style={{ position: 'relative' }}>
                   <label>
-                    <span className="req">*</span>Người liên hệ
+                    <span className="req">*</span>Người liên hệ ({deptEmployees.length} thuộc {form.department || 'Tất cả'})
                   </label>
                   <input
                     type="text"
-                    list="dept-employees-datalist"
+                    autoComplete="off"
                     className="v-input"
-                    placeholder="Chọn nhanh hoặc gõ tên người liên hệ..."
+                    placeholder="Gõ không dấu hoặc chọn nhanh người liên hệ..."
                     value={form.host_person}
+                    onFocus={() => setFocusedField('host_person')}
+                    onBlur={() => setTimeout(() => setFocusedField((f) => (f === 'host_person' ? null : f)), 160)}
                     onChange={(e) => {
                       const val = e.target.value;
                       const found = deptEmployees.find((emp) => (emp.fullname || emp.FullName) === val);
@@ -1582,15 +1601,52 @@ export default function VisitorManagementPage({
                         host_person: val,
                         host_phone: found?.phone || found?.Phone || form.host_phone,
                       });
+                      setFocusedField('host_person');
                     }}
                   />
-                  <datalist id="dept-employees-datalist">
-                    {deptEmployees.slice(0, 100).map((emp, idx) => (
-                      <option key={idx} value={emp.fullname || emp.FullName}>
-                        {emp.department || emp.DepartmentName}
-                      </option>
-                    ))}
-                  </datalist>
+                  {focusedField === 'host_person' && (
+                    <div className="guest-suggest-popover" style={{ maxHeight: 240, overflowY: 'auto' }}>
+                      <div className="guest-suggest-header">
+                        <span>
+                          NHÂN SỰ PHÒNG {String(form.department || 'TẤT CẢ').toUpperCase()} ({filteredHostEmployees.length})
+                        </span>
+                      </div>
+                      {filteredHostEmployees.length === 0 ? (
+                        <div style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-muted)' }}>
+                          Không tìm thấy nhân sự khớp "{form.host_person}" trong phòng {form.department}.
+                        </div>
+                      ) : (
+                        filteredHostEmployees.map((emp, idx) => {
+                          const empName = emp.fullname || emp.FullName || '';
+                          const empDept = emp.department || emp.DepartmentName || '';
+                          const empPhone = emp.phone || emp.Phone || '';
+                          return (
+                            <div
+                              key={emp.atid || emp.EmployeeATID || idx}
+                              className="guest-suggest-item"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                setForm((prev) => ({
+                                  ...prev,
+                                  host_person: empName,
+                                  host_phone: empPhone || prev.host_phone,
+                                }));
+                                setFocusedField(null);
+                              }}
+                            >
+                              <div>
+                                <div className="guest-suggest-name">{empName}</div>
+                                <div className="guest-suggest-meta">
+                                  {empDept}
+                                  {empPhone ? ` · ${empPhone}` : ''}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="v-field">
