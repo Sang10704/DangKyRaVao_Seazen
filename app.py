@@ -759,6 +759,9 @@ def realtime_logs():
     try:
         all_vis = (storage.get_active_visitors() or []) + (storage.get_visitor_history(limit=300) or [])
         for v in all_vis:
+            v_name = str(v.get("full_name") or "").strip()
+            if not v_name or v_name.lower().startswith("khach ") or v_name.lower() in ("chưa rõ", "chua ro", "---", "unknown"):
+                continue
             v_id = str(v.get("id") or "").strip().lstrip("0")
             v_epad = str(v.get("epad_atid") or "").strip().lstrip("0")
             v_card = str(v.get("card_number") or "").strip().lstrip("0")
