@@ -706,8 +706,12 @@ export default function VisitorManagementPage({
   };
 
   const handleAddCompanion = () => {
-    if (!compForm.full_name.trim() && !compForm.cccd_number.trim()) {
-      notify('Vui lòng nhập họ tên hoặc quét QR căn cước cho nhân sự đi cùng.', 'error');
+    const compMissing = [];
+    if (!compForm.full_name.trim()) compMissing.push('Họ tên');
+    if (!compForm.birth_date.trim()) compMissing.push('Ngày sinh');
+    if (!compForm.cccd_number.trim()) compMissing.push('CCCD/Passport');
+    if (compMissing.length > 0) {
+      notify(`Nhân sự đi cùng còn thiếu: ${compMissing.join(', ')}.`, 'error');
       return;
     }
     if (compCardConflict) {
@@ -774,16 +778,36 @@ export default function VisitorManagementPage({
   const handleSubmitRegistration = async (e) => {
     e.preventDefault();
     if (submitting) return;
-    if (!String(form.full_name || '').trim() && !String(form.cccd_number || '').trim()) {
-      notify('Vui lòng nhập Họ tên khách hoặc quét Số CCCD trước khi lưu.', 'error');
+
+    const requiredFields = [
+      ['full_name', 'Họ tên khách'],
+      ['birth_date', 'Ngày tháng năm sinh'],
+      ['from_date', 'Ngày bắt đầu'],
+      ['from_time', 'Giờ bắt đầu'],
+      ['to_date', 'Ngày kết thúc'],
+      ['to_time', 'Giờ kết thúc'],
+      ['purpose', 'Nội dung làm việc'],
+      ['cccd_number', 'CMND/CCCD/Passport'],
+      ['company', 'Tên công ty'],
+      ['access_area', 'Khu vực được phép truy cập'],
+      ['department', 'Phòng ban liên hệ'],
+      ['host_person', 'Người liên hệ'],
+      ['host_phone', 'Số điện thoại người liên hệ'],
+      ['card_number', 'Mã thẻ'],
+    ];
+    const missing = requiredFields
+      .filter(([key]) => !String(form[key] || '').trim())
+      .map(([, label]) => label);
+
+    if (missing.length > 0) {
+      notify(`Vui lòng nhập đầy đủ các trường bắt buộc: ${missing.join(', ')}.`, 'error');
       return;
     }
-    if (!String(form.full_name || '').trim()) {
-      notify('Vui lòng nhập Họ tên khách.', 'error');
-      return;
-    }
-    if (!String(form.cccd_number || '').trim()) {
-      notify('Vui lòng nhập hoặc quét Số CCCD / CMND của khách.', 'error');
+
+    const fromDtStr = `${form.from_date} ${form.from_time}`;
+    const toDtStr = `${form.to_date} ${form.to_time}`;
+    if (toDtStr < fromDtStr) {
+      notify('Thời gian kết thúc ("Đến thời gian") không được nhỏ hơn thời gian bắt đầu ("Từ thời gian").', 'error');
       return;
     }
     if (mainCardConflict) {
@@ -1448,10 +1472,13 @@ export default function VisitorManagementPage({
                 </div>
 
                 <div className="v-field">
-                  <label>Nội dung làm việc</label>
+                  <label>
+                    <span className="req">*</span>Nội dung làm việc
+                  </label>
                   <input
                     type="text"
                     className="v-input"
+                    placeholder="VD: Họp đối tác, bảo trì hệ thống..."
                     value={form.purpose}
                     onChange={(e) => setForm({ ...form, purpose: e.target.value })}
                   />

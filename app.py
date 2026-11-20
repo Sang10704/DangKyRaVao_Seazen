@@ -974,6 +974,25 @@ def register_visitor():
         card_number = card_number.lstrip("0") or "0"
         data["card_number"] = card_number
 
+    req_checks = [
+        (full_name, "Họ tên khách"),
+        (str(data.get("birth_date", "")).strip(), "Ngày tháng năm sinh"),
+        (cccd_num, "CMND/CCCD/Passport"),
+        (str(data.get("purpose", "")).strip(), "Nội dung làm việc"),
+        (str(data.get("company", "")).strip(), "Tên công ty"),
+        (str(data.get("access_area", "")).strip(), "Khu vực được phép truy cập"),
+        (str(data.get("department", "")).strip(), "Phòng ban liên hệ"),
+        (str(data.get("host_person", "")).strip(), "Người liên hệ"),
+        (str(data.get("host_phone", "")).strip(), "Số điện thoại người liên hệ"),
+        (card_number, "Mã thẻ"),
+    ]
+    missing_labels = [lbl for val, lbl in req_checks if not val]
+    if missing_labels:
+        return jsonify({
+            "success": False,
+            "error": f"Vui lòng nhập đầy đủ các trường bắt buộc: {', '.join(missing_labels)}.",
+        }), 400
+
     current_u = get_current_user()
     if current_u:
         data["operator"] = current_u.get("full_name") or data.get("operator", "Nhân viên tiếp đón")
