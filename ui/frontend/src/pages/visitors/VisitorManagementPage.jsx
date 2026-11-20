@@ -1324,10 +1324,9 @@ export default function VisitorManagementPage({
             noValidate
             className="visitor-sheet"
             style={{
-              marginBottom: 14,
-              maxHeight: '56vh',
+              marginBottom: 0,
+              flex: 1,
               overflowY: 'auto',
-              flexShrink: 0,
             }}
           >
             <div className="visitor-sheet-header">
@@ -1342,6 +1341,14 @@ export default function VisitorManagementPage({
                   }}
                 >
                   Đọc thông tin từ QR căn cước
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-gold"
+                  style={{ height: 34, padding: '0 18px', fontWeight: 700, opacity: submitting ? 0.7 : 1 }}
+                  disabled={submitting}
+                >
+                  {submitting ? 'Đang lưu...' : 'Đồng ý lưu & Nạp thẻ'}
                 </button>
                 <button
                   type="button"
@@ -2044,7 +2051,8 @@ export default function VisitorManagementPage({
         )}
 
         {/* DANH SÁCH KHÁCH (GỌN GÀNG, HIỂN THỊ GIỜ VÀO/RA, THỜI LƯỢNG Ở, CẢNH BÁO >15P & NÚT "v" XEM NGƯỜI ĐI CÙNG) */}
-        <div className="card card-table-fill">
+        {!isFormOpen && (
+          <div className="card card-table-fill">
           <div className="card-header" style={{ flexShrink: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <button
@@ -2478,7 +2486,8 @@ export default function VisitorManagementPage({
               </table>
             )}
           </div>
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );
