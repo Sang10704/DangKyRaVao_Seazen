@@ -409,7 +409,7 @@ export default function AppointmentsPage({
               </div>
             )}
 
-            <div className="visitor-grid-3">
+            <div className="visitor-3col-grid">
               {/* CỘT 1 */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div className="v-field">
