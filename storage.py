@@ -373,17 +373,31 @@ class StorageManager:
         target["status"] = "ACTIVE"
         target["operator"] = operator
 
-        # Remove from pending JSON
+        # Remove lead & attached companions from pending JSON, move both to active JSON
         pending_list = _read_json(PENDING_VISITORS_FILE, [])
-        kept_pending = [x for x in pending_list if str(x.get("id") or "") != vid]
-        for x in kept_pending:
-            if str(x.get("parent_visitor_id") or "") == vid:
-                x["parent_visitor_id"] = target["id"]
+        kept_pending = []
+        activated_companions = []
+        for x in pending_list:
+            x_id = str(x.get("id") or "")
+            x_pid = str(x.get("parent_visitor_id") or "")
+            if x_id == vid:
+                continue
+            if x_pid == vid:
+                comp = dict(x)
+                comp["parent_visitor_id"] = target["id"]
+                comp["status"] = "ACTIVE"
+                comp["operator"] = operator
+                activated_companions.append(comp)
+            else:
+                kept_pending.append(x)
         _write_json(PENDING_VISITORS_FILE, kept_pending)
 
         # Add to active JSON
         active_list = _read_json(ACTIVE_VISITORS_FILE, [])
-        active_list = [x for x in active_list if str(x.get("id") or "") != target["id"]]
+        active_ids = {target["id"]} | {str(c.get("id") or "") for c in activated_companions}
+        active_list = [x for x in active_list if str(x.get("id") or "") not in active_ids]
+        for comp in reversed(activated_companions):
+            active_list.insert(0, comp)
         active_list.insert(0, target)
         _write_json(ACTIVE_VISITORS_FILE, active_list)
 

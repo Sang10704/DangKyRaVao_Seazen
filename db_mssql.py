@@ -767,6 +767,18 @@ def activate_pending_visitor_db(old_visitor_id: str, new_visitor_id: str, card_n
     try:
         with pyodbc.connect(get_connection_string(), timeout=4) as conn:
             cur = conn.cursor()
+            old_id = str(old_visitor_id)[:50]
+            new_id = str(new_visitor_id or old_visitor_id)[:50]
+            # If ZKTeco reused an ATID that already exists in tbl_Visitors (from a past CHECKED_OUT visitor),
+            # rename the historical row's VisitorID so we preserve history and avoid a PK collision.
+            if new_id != old_id:
+                cur.execute("SELECT Status FROM tbl_Visitors WHERE VisitorID = ?", (new_id,))
+                existing = cur.fetchone()
+                if existing:
+                    archived_id = f"{new_id}_old_{int(time.time())}"[:50]
+                    cur.execute("UPDATE tbl_Visitors SET VisitorID = ? WHERE VisitorID = ?", (archived_id, new_id))
+                    cur.execute("UPDATE tbl_Visitors SET ParentVisitorID = ? WHERE ParentVisitorID = ?", (archived_id, new_id))
+
             cur.execute("""
                 UPDATE tbl_Visitors
                 SET VisitorID = ?,
@@ -774,14 +786,20 @@ def activate_pending_visitor_db(old_visitor_id: str, new_visitor_id: str, card_n
                     Status = 'ACTIVE',
                     Operator = ?
                 WHERE VisitorID = ? AND Status = 'PENDING'
-            """, (str(new_visitor_id)[:50], str(card_number or "")[:50], str(operator or "Lễ tân")[:100], str(old_visitor_id)[:50]))
-            if cur.rowcount > 0 and str(new_visitor_id) != str(old_visitor_id):
-                cur.execute(
-                    "UPDATE tbl_Visitors SET ParentVisitorID = ? WHERE ParentVisitorID = ?",
-                    (str(new_visitor_id)[:50], str(old_visitor_id)[:50]),
-                )
+            """, (new_id, str(card_number or "")[:50], str(operator or "Lễ tân")[:100], old_id))
+            updated = cur.rowcount > 0
+            if updated:
+                # Activate any pending companions attached to this lead appointment so they move
+                # into the lead visitor's active group instead of staying stuck in PENDING.
+                cur.execute("""
+                    UPDATE tbl_Visitors
+                    SET ParentVisitorID = ?,
+                        Status = 'ACTIVE',
+                        Operator = ?
+                    WHERE ParentVisitorID = ? AND Status = 'PENDING'
+                """, (new_id, str(operator or "Lễ tân")[:100], old_id))
             conn.commit()
-            return cur.rowcount > 0
+            return updated
     except Exception as e:
         logger.error("MSSQL activate_pending_visitor_db error: %s", e)
         return False
