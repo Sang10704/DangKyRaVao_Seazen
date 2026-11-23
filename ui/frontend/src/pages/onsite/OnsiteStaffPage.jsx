@@ -287,8 +287,8 @@ export default function OnsiteStaffPage({ onToast }) {
   };
 
   return (
-    <div style={{ height: '100%', overflowY: 'auto', padding: '18px 22px 32px' }}>
-      <div style={{ maxWidth: 1480, margin: '0 auto' }}>
+    <div style={{ height: '100%', overflow: 'hidden', padding: '16px 22px 18px', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ maxWidth: 1480, width: '100%', margin: '0 auto', height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         {/* HEADER */}
         <div
           style={{
@@ -373,27 +373,29 @@ export default function OnsiteStaffPage({ onToast }) {
           </div>
         </div>
 
-        {/* 2-COLUMN BALANCED LAYOUT (ZERO EMPTY GAPS, FULL-PAGE SCROLL) */}
+        {/* 2-COLUMN BALANCED LAYOUT (FIXED VIEWPORT, INTERNAL TABLE SCROLL ONLY) */}
         <div
           style={{
             display: 'grid',
             gridTemplateColumns: 'minmax(340px, 0.92fr) minmax(480px, 1.38fr)',
             gap: 16,
-            alignItems: 'start',
+            flex: 1,
+            minHeight: 0,
+            alignItems: 'stretch',
           }}
         >
           {/* LEFT COLUMN: DONUT + DEPARTMENT SUMMARY */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minHeight: 0 }}>
             <AttendanceDonutCard
               presentNow={officePresent}
               leftToday={officeLeft}
               absentOrLeave={officeAbsent}
             />
 
-            <div className="card">
+            <div className="card" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
               <div
                 className="card-header"
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexShrink: 0 }}
               >
                 <h3 className="card-title" style={{ margin: 0, fontSize: 14 }}>
                   Tổng hợp theo Phòng ban ({departments.length})
@@ -404,7 +406,7 @@ export default function OnsiteStaffPage({ onToast }) {
                   </button>
                 )}
               </div>
-              <div className="table-wrap">
+              <div className="table-wrap" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
                 <table className="data-table">
                   <thead>
                     <tr>
@@ -457,14 +459,14 @@ export default function OnsiteStaffPage({ onToast }) {
           </div>
 
           {/* RIGHT COLUMN: DEPARTMENT BAR CHART + TODAY EMPLOYEE LIST */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minHeight: 0 }}>
             <DepartmentBarCard
               departments={departments}
               selectedDept={selectedDept}
               onSelectDept={setSelectedDept}
             />
 
-            <div className="card">
+            <div className="card" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
               <div
                 className="card-header"
                 style={{
@@ -473,6 +475,7 @@ export default function OnsiteStaffPage({ onToast }) {
                   justifyContent: 'space-between',
                   gap: 8,
                   flexWrap: 'wrap',
+                  flexShrink: 0,
                 }}
               >
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -498,9 +501,9 @@ export default function OnsiteStaffPage({ onToast }) {
                 />
               </div>
 
-              <div className="table-wrap">
+              <div className="table-wrap" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
                 <table className="data-table">
-                  <thead>
+                  <thead style={{ position: 'sticky', top: 0, zIndex: 2, background: '#f8fafc' }}>
                     <tr>
                       <th>Mã NV</th>
                       <th>Họ và tên</th>
