@@ -232,6 +232,7 @@ export default function VisitorManagementPage({
   activeVisitors,
   visitorHistory = [],
   customerCards,
+  pendingAppointments = [],
   onRefreshData,
   notify,
 }) {
@@ -265,6 +266,68 @@ export default function VisitorManagementPage({
   const [releasingKey, setReleasingKey] = useState('');
   const [justReleasedInfo, setJustReleasedInfo] = useState({ card: '', holder: '' });
   const [submitting, setSubmitting] = useState(false);
+  const [assignCardMap, setAssignCardMap] = useState({});
+  const [assigningId, setAssigningId] = useState(null);
+  const [swapRowId, setSwapRowId] = useState(null);
+  const [swapCardInput, setSwapCardInput] = useState('');
+  const [swapping, setSwapping] = useState(false);
+
+  const handleAssignPendingCard = async (apt) => {
+    const cardNo = String(assignCardMap[apt.id] || '').trim();
+    if (!cardNo) {
+      notify('Vui lòng đặt trỏ chuột và quẹt thẻ NFC để cấp cho khách.', 'error');
+      return;
+    }
+    setAssigningId(apt.id);
+    try {
+      const { ok, data } = await apiFetch('/api/visitor/assign_card', {
+        method: 'POST',
+        body: JSON.stringify({ visitor_id: apt.id, card_number: cardNo }),
+      });
+      if (ok && data?.success) {
+        notify(data.message || 'Đã cấp thẻ và kích hoạt cửa thành công!', 'success');
+        setAssignCardMap((prev) => {
+          const next = { ...prev };
+          delete next[apt.id];
+          return next;
+        });
+        if (onRefreshData) onRefreshData();
+      } else {
+        notify(data?.error || 'Không thể cấp thẻ.', 'error');
+      }
+    } finally {
+      setAssigningId(null);
+    }
+  };
+
+  const handleSwapVisitorCard = async (v) => {
+    const newCard = String(swapCardInput || '').trim();
+    if (!newCard) {
+      notify('Vui lòng quẹt Mã thẻ mới để đổi.', 'error');
+      return;
+    }
+    setSwapping(true);
+    try {
+      const { ok, data } = await apiFetch('/api/visitor/swap_card', {
+        method: 'POST',
+        body: JSON.stringify({
+          visitor_id: v.id,
+          old_card_number: v.card_number || '',
+          new_card_number: newCard,
+        }),
+      });
+      if (ok && data?.success) {
+        notify(data.message || 'Đã đổi thẻ thành công!', 'success');
+        setSwapRowId(null);
+        setSwapCardInput('');
+        if (onRefreshData) onRefreshData();
+      } else {
+        notify(data?.error || 'Không thể đổi thẻ.', 'error');
+      }
+    } finally {
+      setSwapping(false);
+    }
+  };
 
   const [form, setForm] = useState({
     full_name: '',
@@ -2064,6 +2127,18 @@ export default function VisitorManagementPage({
               </button>
               <button
                 type="button"
+                className={`btn btn-sm ${listTab === 'PENDING' ? 'btn-primary' : ''}`}
+                style={
+                  pendingAppointments.length > 0 && listTab !== 'PENDING'
+                    ? { borderColor: '#f59e0b', background: '#fffbeb', color: '#b45309', fontWeight: 700 }
+                    : undefined
+                }
+                onClick={() => setListTab('PENDING')}
+              >
+                Chờ cấp thẻ ({pendingAppointments.length})
+              </button>
+              <button
+                type="button"
                 className={`btn btn-sm ${listTab === 'HISTORY' ? 'btn-primary' : ''}`}
                 onClick={() => setListTab('HISTORY')}
               >
@@ -2243,30 +2318,82 @@ export default function VisitorManagementPage({
                             </td>
 
                             <td style={{ textAlign: 'right' }}>
-                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                <button
-                                  type="button"
-                                  className={`btn btn-sm ${t.overdueAlert ? '' : 'btn-primary'}`}
-                                  style={
-                                    t.overdueAlert
-                                      ? { background: '#dc2626', borderColor: '#dc2626', color: '#ffffff', fontWeight: 700 }
-                                      : {}
-                                  }
-                                  onClick={() => handleFastCheckout(v.id)}
-                                >
-                                  {t.overdueAlert ? 'Check-out ngay' : 'Trả thẻ & Ra về'}
-                                </button>
-                                {hasCompanions && (
+                              {swapRowId === v.id ? (
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                  <input
+                                    type="text"
+                                    autoFocus
+                                    className="v-input"
+                                    style={{ width: 135, height: 30, fontSize: 12 }}
+                                    placeholder="Quẹt thẻ mới..."
+                                    value={swapCardInput}
+                                    onChange={(e) => setSwapCardInput(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        handleSwapVisitorCard(v);
+                                      } else if (e.key === 'Escape') {
+                                        setSwapRowId(null);
+                                        setSwapCardInput('');
+                                      }
+                                    }}
+                                  />
+                                  <button
+                                    type="button"
+                                    className="btn btn-primary btn-sm"
+                                    disabled={swapping}
+                                    onClick={() => handleSwapVisitorCard(v)}
+                                  >
+                                    {swapping ? '...' : 'Đổi'}
+                                  </button>
                                   <button
                                     type="button"
                                     className="btn btn-sm"
-                                    title="Trả thẻ & Check-out cả khách chính và toàn bộ người đi cùng"
-                                    onClick={() => handleGroupCheckout(v)}
+                                    onClick={() => {
+                                      setSwapRowId(null);
+                                      setSwapCardInput('');
+                                    }}
                                   >
-                                    Cả đoàn ({v.companions.length + 1})
+                                    Hủy
                                   </button>
-                                )}
-                              </div>
+                                </div>
+                              ) : (
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                  <button
+                                    type="button"
+                                    className={`btn btn-sm ${t.overdueAlert ? '' : 'btn-primary'}`}
+                                    style={
+                                      t.overdueAlert
+                                        ? { background: '#dc2626', borderColor: '#dc2626', color: '#ffffff', fontWeight: 700 }
+                                        : {}
+                                    }
+                                    onClick={() => handleFastCheckout(v.id)}
+                                  >
+                                    {t.overdueAlert ? 'Check-out ngay' : 'Trả thẻ & Ra về'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm"
+                                    title="Đổi sang thẻ RFID khác nếu thẻ cũ quét không được"
+                                    onClick={() => {
+                                      setSwapRowId(v.id);
+                                      setSwapCardInput('');
+                                    }}
+                                  >
+                                    Đổi thẻ
+                                  </button>
+                                  {hasCompanions && (
+                                    <button
+                                      type="button"
+                                      className="btn btn-sm"
+                                      title="Trả thẻ & Check-out cả khách chính và toàn bộ người đi cùng"
+                                      onClick={() => handleGroupCheckout(v)}
+                                    >
+                                      Cả đoàn ({v.companions.length + 1})
+                                    </button>
+                                  )}
+                                </div>
+                              )}
                             </td>
                           </tr>
 
@@ -2350,6 +2477,93 @@ export default function VisitorManagementPage({
                         </React.Fragment>
                       );
                     })
+                  )}
+                </tbody>
+              </table>
+            ) : listTab === 'PENDING' ? (
+              <table className="data-table" key="table-pending">
+                <thead>
+                  <tr>
+                    <th style={{ width: 46 }}>#</th>
+                    <th>Khách hẹn &amp; Định danh</th>
+                    <th>Công ty &amp; Nội dung</th>
+                    <th>Phòng ban / Người liên hệ</th>
+                    <th>Khung giờ hẹn</th>
+                    <th>Trạng thái</th>
+                    <th style={{ textAlign: 'right' }}>Quẹt thẻ cấp ngay</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingAppointments.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} style={{ textAlign: 'center', padding: 36, color: 'var(--text-muted)' }}>
+                        Hiện không có khách hẹn trước nào đang chờ cấp thẻ.
+                      </td>
+                    </tr>
+                  ) : (
+                    pendingAppointments
+                      .filter((apt) => {
+                        if (!visitorSearch.trim()) return true;
+                        const q = visitorSearch.toLowerCase();
+                        return `${apt.full_name || ''} ${apt.cccd_number || ''} ${apt.company || ''} ${apt.department || ''} ${apt.host_person || ''}`
+                          .toLowerCase()
+                          .includes(q);
+                      })
+                      .map((apt, idx) => (
+                        <tr key={apt.id || idx} style={{ background: '#fffdf5' }}>
+                          <td style={{ color: 'var(--text-muted)' }}>{idx + 1}</td>
+                          <td>
+                            <div style={{ fontWeight: 700, color: '#111111' }}>{apt.full_name}</div>
+                            <div style={{ fontSize: 11.5, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                              CCCD: {apt.cccd_number || '—'}
+                              {apt.phone ? ` · ${apt.phone}` : ''}
+                            </div>
+                          </td>
+                          <td>
+                            <div style={{ fontWeight: 600 }}>{apt.company || '—'}</div>
+                            <div style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>{apt.purpose || '—'}</div>
+                          </td>
+                          <td>
+                            <div style={{ fontWeight: 600 }}>{apt.department || '—'}</div>
+                            <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
+                              Gặp: {apt.host_person || '—'} {apt.host_phone ? `(${apt.host_phone})` : ''}
+                            </div>
+                          </td>
+                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5 }}>
+                            <div>Từ: {String(apt.checkin_time || '').slice(0, 16)}</div>
+                            <div>Đến: {String(apt.expected_checkout_time || '').slice(0, 16) || '—'}</div>
+                          </td>
+                          <td>
+                            <span className="badge badge-gold">PENDING · Chờ thẻ</span>
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                              <input
+                                type="text"
+                                className="v-input"
+                                style={{ width: 155, height: 32, fontSize: 12 }}
+                                placeholder="Đặt trỏ chuột & quẹt thẻ..."
+                                value={assignCardMap[apt.id] || ''}
+                                onChange={(e) => setAssignCardMap((p) => ({ ...p, [apt.id]: e.target.value }))}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleAssignPendingCard(apt);
+                                  }
+                                }}
+                              />
+                              <button
+                                type="button"
+                                className="btn btn-primary btn-sm"
+                                disabled={assigningId === apt.id}
+                                onClick={() => handleAssignPendingCard(apt)}
+                              >
+                                {assigningId === apt.id ? 'Đang nạp...' : 'Cấp thẻ'}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
                   )}
                 </tbody>
               </table>

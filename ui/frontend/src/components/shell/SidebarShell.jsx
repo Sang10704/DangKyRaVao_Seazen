@@ -7,6 +7,7 @@ export default function SidebarShell({
   user,
   onLogout,
   activeVisitorsCount = 0,
+  pendingAppointmentsCount = 0,
   pendingCardPhotoCount = 0,
 }) {
   const [copiedLan, setCopiedLan] = useState(false);
@@ -80,6 +81,19 @@ export default function SidebarShell({
       ),
     },
     {
+      path: ROUTES.APPOINTMENTS,
+      label: 'Khách mời & Lịch hẹn',
+      badge: pendingAppointmentsCount > 0 ? pendingAppointmentsCount : null,
+      svg: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+          <rect x="3" y="4" width="18" height="18" rx="2"></rect>
+          <line x1="16" y1="2" x2="16" y2="6"></line>
+          <line x1="8" y1="2" x2="8" y2="6"></line>
+          <path d="M8 14l2.5 2.5L16 11"></path>
+        </svg>
+      ),
+    },
+    {
       path: ROUTES.CARDS,
       label: 'Quản lý Kho Thẻ',
       badge: pendingCardPhotoCount > 0 ? pendingCardPhotoCount : null,
@@ -128,8 +142,11 @@ export default function SidebarShell({
   ];
 
   const isAdmin = user?.role === 'admin';
+  const isInviter = user?.role === 'guest_inviter';
   const visibleNavItems = isAdmin
     ? navItems
+    : isInviter
+    ? navItems.filter((item) => item.path === ROUTES.APPOINTMENTS)
     : navItems.filter((item) => item.path === ROUTES.VISITORS);
 
   return (

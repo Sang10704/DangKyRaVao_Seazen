@@ -673,6 +673,7 @@ def insert_visitor_db(v: Dict[str, Any]) -> bool:
 
             parent_id = str(v.get("parent_visitor_id") or "")[:50] or None
             parent_name = str(v.get("parent_visitor_name") or "")[:255] or None
+            status_val = str(v.get("status") or "ACTIVE").strip().upper()[:50]
 
             cursor.execute("""
                 IF NOT EXISTS (SELECT 1 FROM tbl_Visitors WHERE VisitorID = ?)
@@ -681,13 +682,13 @@ def insert_visitor_db(v: Dict[str, Any]) -> bool:
                         VisitorID, FullName, CCCDNumber, CardNumber, Company, Department,
                         HostPerson, Purpose, CheckinTime, ExpectedCheckoutTime, Status, Operator, Phone, BirthDate,
                         ParentVisitorID, ParentVisitorName
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 END
                 ELSE
                 BEGIN
                     UPDATE tbl_Visitors
                     SET FullName = ?, CCCDNumber = ?, CardNumber = ?, Company = ?, Department = ?,
-                        HostPerson = ?, Purpose = ?, CheckinTime = ?, ExpectedCheckoutTime = ?, Status = 'ACTIVE',
+                        HostPerson = ?, Purpose = ?, CheckinTime = ?, ExpectedCheckoutTime = ?, Status = ?,
                         Phone = COALESCE(NULLIF(?, ''), Phone),
                         BirthDate = COALESCE(NULLIF(?, ''), BirthDate),
                         ParentVisitorID = COALESCE(?, ParentVisitorID),
@@ -698,12 +699,12 @@ def insert_visitor_db(v: Dict[str, Any]) -> bool:
                 v_id,
                 v_id, v.get("full_name") or "Khách", v.get("cccd_number") or "",
                 v.get("card_number") or "", v.get("company") or "", v.get("department") or "",
-                v.get("host_person") or "", v.get("purpose") or "", cin_dt, exp_dt,
+                v.get("host_person") or "", v.get("purpose") or "", cin_dt, exp_dt, status_val,
                 v.get("operator") or "Bảo vệ", v.get("phone") or "", v.get("birth_date") or "",
                 parent_id, parent_name,
                 v.get("full_name") or "Khách", v.get("cccd_number") or "",
                 v.get("card_number") or "", v.get("company") or "", v.get("department") or "",
-                v.get("host_person") or "", v.get("purpose") or "", cin_dt, exp_dt,
+                v.get("host_person") or "", v.get("purpose") or "", cin_dt, exp_dt, status_val,
                 v.get("phone") or "", v.get("birth_date") or "",
                 parent_id, parent_name,
                 v_id
@@ -712,6 +713,116 @@ def insert_visitor_db(v: Dict[str, Any]) -> bool:
             return True
     except Exception as e:
         logger.error("MSSQL insert_visitor_db error: %s", e)
+        return False
+
+
+def get_pending_visitors_db() -> List[Dict[str, Any]]:
+    if not is_mssql_active():
+        return []
+    try:
+        ensure_extended_schema()
+        with pyodbc.connect(get_connection_string(), timeout=4) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT VisitorID, FullName, CCCDNumber, CardNumber, Company, Department,
+                       HostPerson, Purpose, CheckinTime, ExpectedCheckoutTime, Status, Operator, Phone, BirthDate,
+                       ParentVisitorID, ParentVisitorName
+                FROM tbl_Visitors
+                WHERE Status = 'PENDING'
+                ORDER BY CheckinTime ASC, CreatedAt DESC
+            """)
+            cols = [col[0] for col in cursor.description]
+            items = []
+            for row in cursor.fetchall():
+                d = dict(zip(cols, row))
+                cin_time = d["CheckinTime"].strftime("%Y-%m-%d %H:%M:%S") if d.get("CheckinTime") else ""
+                exp_time = d["ExpectedCheckoutTime"].strftime("%Y-%m-%d %H:%M:%S") if d.get("ExpectedCheckoutTime") else ""
+                items.append({
+                    "id": d["VisitorID"],
+                    "full_name": d["FullName"] or "Khách",
+                    "cccd_number": d["CCCDNumber"] or "",
+                    "birth_date": d.get("BirthDate") or "",
+                    "phone": d.get("Phone") or "",
+                    "card_number": d["CardNumber"] or "",
+                    "company": d["Company"] or "",
+                    "department": d["Department"] or "",
+                    "host_person": d["HostPerson"] or "",
+                    "purpose": d["Purpose"] or "",
+                    "checkin_time": cin_time,
+                    "expected_checkout_time": exp_time,
+                    "status": "PENDING",
+                    "operator": d["Operator"] or "Phòng ban",
+                    "parent_visitor_id": d.get("ParentVisitorID") or "",
+                    "parent_visitor_name": d.get("ParentVisitorName") or "",
+                })
+            return items
+    except Exception as e:
+        logger.error("MSSQL get_pending_visitors_db error: %s", e)
+        return []
+
+
+def activate_pending_visitor_db(old_visitor_id: str, new_visitor_id: str, card_number: str, operator: str = "Lễ tân") -> bool:
+    if not is_mssql_active():
+        return False
+    try:
+        with pyodbc.connect(get_connection_string(), timeout=4) as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                UPDATE tbl_Visitors
+                SET VisitorID = ?,
+                    CardNumber = ?,
+                    Status = 'ACTIVE',
+                    Operator = ?
+                WHERE VisitorID = ? AND Status = 'PENDING'
+            """, (str(new_visitor_id)[:50], str(card_number or "")[:50], str(operator or "Lễ tân")[:100], str(old_visitor_id)[:50]))
+            if cur.rowcount > 0 and str(new_visitor_id) != str(old_visitor_id):
+                cur.execute(
+                    "UPDATE tbl_Visitors SET ParentVisitorID = ? WHERE ParentVisitorID = ?",
+                    (str(new_visitor_id)[:50], str(old_visitor_id)[:50]),
+                )
+            conn.commit()
+            return cur.rowcount > 0
+    except Exception as e:
+        logger.error("MSSQL activate_pending_visitor_db error: %s", e)
+        return False
+
+
+def delete_pending_visitor_db(visitor_id: str) -> bool:
+    if not is_mssql_active():
+        return False
+    try:
+        with pyodbc.connect(get_connection_string(), timeout=4) as conn:
+            cur = conn.cursor()
+            cur.execute("DELETE FROM tbl_Visitors WHERE (VisitorID = ? OR ParentVisitorID = ?) AND Status = 'PENDING'", (str(visitor_id)[:50], str(visitor_id)[:50]))
+            conn.commit()
+            return cur.rowcount > 0
+    except Exception as e:
+        logger.error("MSSQL delete_pending_visitor_db error: %s", e)
+        return False
+
+
+def swap_visitor_card_db(visitor_id: str, old_card: str, new_card: str, new_visitor_id: Optional[str] = None) -> bool:
+    if not is_mssql_active():
+        return False
+    try:
+        with pyodbc.connect(get_connection_string(), timeout=4) as conn:
+            cur = conn.cursor()
+            if new_visitor_id and str(new_visitor_id) != str(visitor_id):
+                cur.execute("""
+                    UPDATE tbl_Visitors
+                    SET VisitorID = ?, CardNumber = ?
+                    WHERE (VisitorID = ? OR CardNumber = ?) AND Status = 'ACTIVE'
+                """, (str(new_visitor_id)[:50], str(new_card)[:50], str(visitor_id)[:50], str(old_card)[:50]))
+            else:
+                cur.execute("""
+                    UPDATE tbl_Visitors
+                    SET CardNumber = ?
+                    WHERE (VisitorID = ? OR CardNumber = ?) AND Status = 'ACTIVE'
+                """, (str(new_card)[:50], str(visitor_id)[:50], str(old_card)[:50]))
+            conn.commit()
+            return cur.rowcount > 0
+    except Exception as e:
+        logger.error("MSSQL swap_visitor_card_db error: %s", e)
         return False
 
 

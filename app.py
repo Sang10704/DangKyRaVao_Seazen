@@ -838,7 +838,7 @@ def audit_logs():
 # ---------------- Visitor CCCD & Access Management APIs ----------------
 
 @app.route("/api/visitor/parse_cccd", methods=["POST"])
-@require_role(["admin", "staff"])
+@require_role(["admin", "staff", "guest_inviter"])
 def parse_cccd_endpoint():
     """
     Bóc tách chuỗi QR CCCD thành thông tin định danh tiếng Việt chuẩn.
@@ -857,7 +857,7 @@ def parse_cccd_endpoint():
 
 @app.route("/api/visitors/frequent", methods=["GET"])
 @app.route("/api/visitor/frequent", methods=["GET"])
-@require_role(["admin", "staff"])
+@require_role(["admin", "staff", "guest_inviter"])
 def get_frequent_visitors_endpoint():
     """
     Returns deduplicated directory of returning/frequent visitors (by CCCD or FullName)
@@ -1537,7 +1537,7 @@ def get_present_details_endpoint():
 # ---------------- Department & Employee Lookup APIs ----------------
 
 @app.route("/api/departments", methods=["GET"])
-@require_role(["admin", "staff"])
+@require_role(["admin", "staff", "guest_inviter"])
 def get_departments():
     """Returns official company department list from ePAD."""
     depts = storage.get_departments()
@@ -1553,7 +1553,7 @@ def get_departments():
 
 
 @app.route("/api/employees", methods=["GET"])
-@require_role(["admin", "staff"])
+@require_role(["admin", "staff", "guest_inviter"])
 def get_employees():
     """
     Returns employees list with search, department filter, and pagination.
@@ -1768,6 +1768,308 @@ def api_visitor_card_history(card_key):
         return jsonify({"success": True, "rows": rows})
     except Exception as e:
         return jsonify({"success": False, "rows": [], "error": str(e)}), 500
+
+
+@app.route("/api/visitor/appointments", methods=["GET"])
+@require_role(["admin", "staff", "guest_inviter"])
+def get_visitor_appointments():
+    return jsonify({"success": True, "appointments": storage.get_pending_visitors()})
+
+
+@app.route("/api/visitor/appointment", methods=["POST"])
+@require_role(["admin", "staff", "guest_inviter"])
+def create_visitor_appointment():
+    """
+    Pre-registers an invited guest WITHOUT a physical RFID card (Status = PENDING).
+    Visible in both 'Khách mời & Lịch hẹn' and 'Đăng ký Khách' for 1-swipe card assignment upon arrival.
+    """
+    data = request.get_json() or {}
+    full_name = str(data.get("full_name", "")).strip()
+    cccd_num = str(data.get("cccd_number", "")).strip() or str(data.get("id_number", "")).strip()
+    req_checks = [
+        (full_name, "Họ tên khách"),
+        (str(data.get("birth_date", "")).strip(), "Ngày tháng năm sinh"),
+        (cccd_num, "CMND/CCCD/Passport"),
+        (str(data.get("purpose", "")).strip(), "Nội dung làm việc"),
+        (str(data.get("company", "")).strip(), "Tên công ty"),
+        (str(data.get("access_area", "")).strip(), "Khu vực được phép truy cập"),
+        (str(data.get("department", "")).strip(), "Phòng ban liên hệ"),
+        (str(data.get("host_person", "")).strip(), "Người liên hệ"),
+        (str(data.get("host_phone", "")).strip(), "Số điện thoại người liên hệ"),
+    ]
+    missing_labels = [lbl for val, lbl in req_checks if not val]
+    if missing_labels:
+        return jsonify({
+            "success": False,
+            "error": f"Vui lòng nhập đầy đủ các trường bắt buộc: {', '.join(missing_labels)}.",
+        }), 400
+
+    def _combine_dt(d_part, t_part, fallback=""):
+        s_t = str(t_part or "").strip()
+        if len(s_t) >= 16 and "-" in s_t[:10]:
+            return s_t.replace("T", " ")[:19]
+        s_d = str(d_part or "").strip()
+        if s_d and s_t:
+            return f"{s_d} {s_t}"[:19]
+        return str(fallback or "").replace("T", " ")[:19]
+
+    u = get_current_user()
+    op_name = data.get("operator") or (u["full_name"] if u else "Phòng ban")
+    from_str = _combine_dt(data.get("from_date"), data.get("from_time"), datetime.now().strftime("%Y-%m-%d %H:%M:00"))
+    to_str = _combine_dt(data.get("to_date"), data.get("expected_checkout_time") or data.get("to_time"))
+
+    import uuid
+    main_id = f"apt_{uuid.uuid4().hex[:8]}"
+    main_rec = storage.add_pending_visitor({
+        "id": main_id,
+        "full_name": full_name,
+        "cccd_number": cccd_num,
+        "birth_date": data.get("birth_date") or "",
+        "phone": data.get("phone") or "",
+        "card_number": "",
+        "company": data.get("company") or "",
+        "department": data.get("department") or "",
+        "host_person": data.get("host_person") or "",
+        "host_phone": data.get("host_phone") or "",
+        "purpose": data.get("purpose") or "",
+        "access_area": data.get("access_area") or "Sảnh Chính (Cổng Làn Vào & Làn Ra)",
+        "notes": data.get("notes") or "",
+        "checkin_time": from_str if len(from_str) == 19 else f"{from_str}:00" if len(from_str) == 16 else datetime.now().strftime("%Y-%m-%d %H:%M:00"),
+        "expected_checkout_time": to_str if len(to_str) == 19 else (f"{to_str}:00" if len(to_str) == 16 else ""),
+        "operator": op_name,
+        "status": "PENDING",
+    })
+
+    comp_recs = []
+    companions = data.get("companions") or []
+    if isinstance(companions, list):
+        for comp in companions:
+            c_name = str(comp.get("full_name") or "").strip()
+            c_cccd = str(comp.get("cccd_number") or "").strip()
+            if not c_name and not c_cccd:
+                continue
+            c_rec = storage.add_pending_visitor({
+                "id": f"apt_{uuid.uuid4().hex[:8]}",
+                "full_name": c_name or c_cccd,
+                "cccd_number": c_cccd,
+                "birth_date": comp.get("birth_date") or "",
+                "card_number": "",
+                "company": data.get("company") or "",
+                "department": data.get("department") or "",
+                "host_person": data.get("host_person") or "",
+                "host_phone": data.get("host_phone") or "",
+                "purpose": f"Đi cùng đoàn: {full_name} - {data.get('purpose') or ''}",
+                "checkin_time": comp.get("from_time") or main_rec["checkin_time"],
+                "expected_checkout_time": comp.get("to_time") or main_rec["expected_checkout_time"],
+                "parent_visitor_id": main_id,
+                "parent_visitor_name": full_name,
+                "operator": op_name,
+                "status": "PENDING",
+            })
+            comp_recs.append(c_rec)
+
+    try:
+        import sharepoint_vms_sync
+        sharepoint_vms_sync.push_table_async("tbl_Visitors", 150)
+    except Exception:
+        pass
+
+    return jsonify({
+        "success": True,
+        "appointment": main_rec,
+        "companions": comp_recs,
+        "message": f"Đã lưu lịch hẹn cho {full_name}" + (f" (+{len(comp_recs)} người đi cùng)" if comp_recs else "") + ". Khi khách đến, Lễ tân chỉ cần quẹt thẻ để cấp ngay!",
+    })
+
+
+@app.route("/api/visitor/appointment/<visitor_id>", methods=["DELETE"])
+@require_role(["admin", "staff", "guest_inviter"])
+def cancel_visitor_appointment(visitor_id):
+    ok = storage.delete_pending_visitor(visitor_id)
+    if not ok:
+        return jsonify({"success": False, "error": "Không tìm thấy lịch hẹn ở trạng thái chờ."}), 404
+    return jsonify({"success": True, "message": "Đã hủy lịch hẹn khách."})
+
+
+@app.route("/api/visitor/assign_card", methods=["POST"])
+@require_role(["admin", "staff"])
+def assign_card_to_pending_visitor():
+    """Assigns a physical RFID card to a PENDING appointment, enrolls on 4 ZKTeco devices, and activates visitor."""
+    data = request.get_json() or {}
+    visitor_id = str(data.get("visitor_id") or "").strip()
+    card_number = str(data.get("card_number") or "").strip()
+    if card_number.isdigit():
+        card_number = card_number.lstrip("0") or "0"
+    if not visitor_id or not card_number:
+        return jsonify({"success": False, "error": "Vui lòng chọn khách và quẹt Mã thẻ RFID."}), 400
+
+    # Check active card conflicts
+    norm_c = card_number.lstrip("0") or "0"
+    for av in storage.get_active_visitors():
+        av_c = str(av.get("card_number") or "").strip()
+        if av_c and (av_c == card_number or (av_c.isdigit() and av_c.lstrip("0") == norm_c)):
+            return jsonify({
+                "success": False,
+                "error": f"Thẻ {card_number} đang được giữ bởi {av.get('full_name')}. Vui lòng thu hồi hoặc đổi thẻ khác.",
+            }), 400
+
+    import db_mssql
+    if db_mssql.is_mssql_active():
+        blk = db_mssql.check_card_not_blocked_db(card_number)
+        if blk.get("blocked"):
+            return jsonify({"success": False, "error": blk.get("error")}), 400
+
+    pending_list = storage.get_pending_visitors()
+    target = next((p for p in pending_list if str(p.get("id") or "") == visitor_id), None)
+    if not target:
+        return jsonify({"success": False, "error": "Không tìm thấy hồ sơ khách đang chờ cấp thẻ."}), 404
+
+    u = get_current_user()
+    op_name = (u["full_name"] if u else None) or "Lễ tân"
+
+    # Enroll on 4 ZKTeco devices (unless scheduled for a future date/time > 60s away)
+    is_future = False
+    vf_str = str(target.get("checkin_time") or "").strip()
+    if vf_str:
+        try:
+            vf_dt = datetime.strptime(vf_str[:16], "%Y-%m-%d %H:%M")
+            if (vf_dt - datetime.now()).total_seconds() > 60:
+                is_future = True
+        except Exception:
+            pass
+
+    epad_atid = visitor_id
+    if not is_future:
+        hw_payload = dict(target)
+        hw_payload["card_number"] = card_number
+        hw_res = zk_client.enroll_visitor_card(hw_payload)
+        if hw_res.get("success") and hw_res.get("employee_atid"):
+            epad_atid = str(hw_res["employee_atid"])
+
+    activated = storage.activate_pending_visitor(visitor_id, epad_atid, card_number, operator=op_name)
+    if not activated:
+        return jsonify({"success": False, "error": "Không thể kích hoạt hồ sơ khách."}), 500
+
+    if db_mssql.is_mssql_active():
+        db_mssql.sync_card_assignment_on_checkin(
+            card_number,
+            activated.get("full_name") or "Khách",
+            activated.get("cccd_number") or "",
+            op_name,
+            holder_phone=activated.get("phone") or "",
+            holder_company=activated.get("company") or "",
+            contact_person=activated.get("host_person") or "",
+            contact_phone=activated.get("host_phone") or "",
+            valid_from=activated.get("checkin_time"),
+            valid_to=activated.get("expected_checkout_time"),
+            device_sync_state="SCHEDULED" if is_future else "ACTIVE_ON_DEVICE",
+        )
+        try:
+            import sharepoint_vms_sync
+            sharepoint_vms_sync.push_table_async("tbl_CustomerCards", 200)
+            sharepoint_vms_sync.push_table_async("tbl_Visitors", 150)
+        except Exception:
+            pass
+
+    return jsonify({
+        "success": True,
+        "visitor": activated,
+        "message": f"Đã cấp thẻ {card_number} và kích hoạt cửa cho {activated.get('full_name')}.",
+    })
+
+
+@app.route("/api/visitor/swap_card", methods=["POST"])
+@require_role(["admin", "staff"])
+def swap_visitor_card_endpoint():
+    """
+    Swaps an ACTIVE visitor's physical card on the fly:
+    - Revokes old card on 4 ZKTeco devices and releases old card in tbl_CustomerCards (preserving LastHolder*).
+    - Enrolls new card on 4 ZKTeco devices and updates visitor & card inventory seamlessly.
+    """
+    data = request.get_json() or {}
+    visitor_id = str(data.get("visitor_id") or "").strip()
+    old_card = str(data.get("old_card_number") or "").strip()
+    new_card = str(data.get("new_card_number") or "").strip()
+    if old_card.isdigit():
+        old_card = old_card.lstrip("0") or "0"
+    if new_card.isdigit():
+        new_card = new_card.lstrip("0") or "0"
+
+    if not visitor_id or not new_card:
+        return jsonify({"success": False, "error": "Vui lòng quẹt Mã thẻ mới để đổi."}), 400
+    if old_card and old_card == new_card:
+        return jsonify({"success": False, "error": "Mã thẻ mới đang trùng với thẻ hiện tại."}), 400
+
+    norm_new = new_card.lstrip("0") or "0"
+    for av in storage.get_active_visitors():
+        av_c = str(av.get("card_number") or "").strip()
+        if av_c and (av_c == new_card or (av_c.isdigit() and av_c.lstrip("0") == norm_new)):
+            return jsonify({
+                "success": False,
+                "error": f"Thẻ {new_card} đang được giữ bởi {av.get('full_name')}.",
+            }), 400
+
+    import db_mssql
+    if db_mssql.is_mssql_active():
+        blk = db_mssql.check_card_not_blocked_db(new_card)
+        if blk.get("blocked"):
+            return jsonify({"success": False, "error": blk.get("error")}), 400
+
+    target = next((v for v in storage.get_active_visitors() if str(v.get("id") or "") == visitor_id), None)
+    if not target:
+        return jsonify({"success": False, "error": "Không tìm thấy khách đang hoạt động để đổi thẻ."}), 404
+
+    old_card_actual = old_card or str(target.get("card_number") or "").strip()
+    u = get_current_user()
+    op_name = (u["full_name"] if u else None) or "Lễ tân"
+
+    # 1. Revoke old card on hardware + release in SQL
+    if old_card_actual:
+        try:
+            zk_client.return_or_delete_card(old_card_actual)
+        except Exception:
+            pass
+        if db_mssql.is_mssql_active():
+            db_mssql.release_card_on_checkout(
+                old_card_actual, operator=op_name, notes=f"Đổi sang thẻ mới {new_card}"
+            )
+
+    # 2. Enroll new card on 4 ZKTeco devices
+    hw_payload = dict(target)
+    hw_payload["card_number"] = new_card
+    hw_res = zk_client.enroll_visitor_card(hw_payload)
+    new_epad_atid = str(hw_res.get("employee_atid") or "") if hw_res.get("success") else None
+
+    # 3. Update visitor record + new card inventory
+    updated = storage.swap_visitor_card(visitor_id, old_card_actual, new_card, new_visitor_id=new_epad_atid)
+    if db_mssql.is_mssql_active():
+        db_mssql.sync_card_assignment_on_checkin(
+            new_card,
+            target.get("full_name") or "Khách",
+            target.get("cccd_number") or "",
+            op_name,
+            holder_phone=target.get("phone") or "",
+            holder_company=target.get("company") or "",
+            contact_person=target.get("host_person") or "",
+            contact_phone=target.get("host_phone") or "",
+            valid_from=target.get("checkin_time"),
+            valid_to=target.get("expected_checkout_time"),
+            device_sync_state="ACTIVE_ON_DEVICE",
+        )
+        try:
+            import sharepoint_vms_sync
+            sharepoint_vms_sync.push_table_async("tbl_CustomerCards", 200)
+            sharepoint_vms_sync.push_table_async("tbl_Visitors", 150)
+        except Exception:
+            pass
+
+    return jsonify({
+        "success": True,
+        "visitor": updated,
+        "old_card": old_card_actual,
+        "new_card": new_card,
+        "message": f"Đã đổi thẻ {old_card_actual or 'trống'} → {new_card} cho {target.get('full_name')} trên 4 máy cửa.",
+    })
 
 
 @app.route("/api/visitors/history", methods=["GET"])

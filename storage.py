@@ -30,6 +30,7 @@ os.makedirs(DATA_DIR, exist_ok=True)
 
 USERS_FILE = os.path.join(DATA_DIR, "users.json")
 ACTIVE_VISITORS_FILE = os.path.join(DATA_DIR, "active_visitors.json")
+PENDING_VISITORS_FILE = os.path.join(DATA_DIR, "pending_visitors.json")
 VISITOR_HISTORY_FILE = os.path.join(DATA_DIR, "visitor_history.json")
 DOOR_ACTIONS_FILE = os.path.join(DATA_DIR, "door_actions.json")
 DAILY_SCANS_FILE = os.path.join(DATA_DIR, "daily_scans.json")
@@ -203,10 +204,19 @@ class StorageManager:
             "allowed_pages": ["/visitors"],
             "is_active": True,
         },
+        "usr-seazen-khach": {
+            "id": "usr-seazen-khach",
+            "username": "Khach",
+            "email": "khach@seazen.com.vn",
+            "full_name": "Phòng Ban Đặt Lịch Khách (Khach)",
+            "role": "guest_inviter",
+            "allowed_pages": ["/appointments"],
+            "is_active": True,
+        },
     }
 
     def seed_default_users(self) -> None:
-        """Khởi tạo 2 tài khoản chuẩn SeazenAdmin (SeazenAdmin@1516) và Letan (Letan@1516) vào users.json."""
+        """Khởi tạo 3 tài khoản chuẩn SeazenAdmin, Letan và Khach vào users.json."""
         admin_user = {
             "id": "usr-seazen-admin",
             "username": "SeazenAdmin",
@@ -229,7 +239,18 @@ class StorageManager:
             "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "is_active": True
         }
-        _write_json(USERS_FILE, [admin_user, letan_user])
+        khach_user = {
+            "id": "usr-seazen-khach",
+            "username": "Khach",
+            "email": "khach@seazen.com.vn",
+            "password_hash": generate_password_hash("Khach@1516", method="scrypt"),
+            "full_name": "Phòng Ban Đặt Lịch Khách (Khach)",
+            "role": "guest_inviter",
+            "allowed_pages": ["/appointments"],
+            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "is_active": True
+        }
+        _write_json(USERS_FILE, [admin_user, letan_user, khach_user])
 
     def get_users(self) -> List[Dict[str, Any]]:
         return list(self.HARDCODED_USERS.values())
@@ -251,6 +272,8 @@ class StorageManager:
             return dict(self.HARDCODED_USERS["usr-seazen-admin"])
         if clean_cred in ("letan", "letan@seazen.com.vn"):
             return dict(self.HARDCODED_USERS["usr-seazen-letan"])
+        if clean_cred in ("khach", "khach@seazen.com.vn"):
+            return dict(self.HARDCODED_USERS["usr-seazen-khach"])
         users = _read_json(USERS_FILE, [])
         for u in users:
             u_name = str(u.get("username", "")).strip().lower()
@@ -272,6 +295,10 @@ class StorageManager:
         if clean_cred in ("letan", "letan@seazen.com.vn") and pw == "Letan@1516":
             return dict(self.HARDCODED_USERS["usr-seazen-letan"])
 
+        # 3. Department Inviter: Khach / Khach@1516 (Only /appointments page)
+        if clean_cred in ("khach", "khach@seazen.com.vn") and pw == "Khach@1516":
+            return dict(self.HARDCODED_USERS["usr-seazen-khach"])
+
         user = self.get_user_by_credential(username_or_email)
         if not user or not user.get("is_active", True):
             return None
@@ -279,6 +306,119 @@ class StorageManager:
         if pw_hash and check_password_hash(pw_hash, pw):
             return user
         return None
+
+    # ---------------- Pending Appointments & Card Swap ----------------
+
+    def get_pending_visitors(self) -> List[Dict[str, Any]]:
+        pending_map: Dict[str, Dict[str, Any]] = {}
+        for p in _read_json(PENDING_VISITORS_FILE, []):
+            pid = str(p.get("id") or "").strip()
+            if pid:
+                pending_map[pid] = p
+        if MSSQL_AVAILABLE and db_mssql and db_mssql.is_mssql_active():
+            try:
+                for p in db_mssql.get_pending_visitors_db():
+                    pid = str(p.get("id") or "").strip()
+                    if pid:
+                        pending_map[pid] = p
+            except Exception as e:
+                logger.warning("get_pending_visitors MSSQL warning: %s", e)
+        res = list(pending_map.values())
+        res.sort(key=lambda x: str(x.get("checkin_time") or ""))
+        return res
+
+    def add_pending_visitor(self, v_data: Dict[str, Any]) -> Dict[str, Any]:
+        rec = dict(v_data)
+        rec["status"] = "PENDING"
+        if not rec.get("id"):
+            rec["id"] = f"apt_{int(time.time() * 1000) % 10000000}"
+        pending_list = _read_json(PENDING_VISITORS_FILE, [])
+        pending_list = [x for x in pending_list if x.get("id") != rec["id"]]
+        pending_list.insert(0, rec)
+        _write_json(PENDING_VISITORS_FILE, pending_list)
+        if MSSQL_AVAILABLE and db_mssql and db_mssql.is_mssql_active():
+            try:
+                db_mssql.insert_visitor_db(rec)
+            except Exception as e:
+                logger.warning("add_pending_visitor MSSQL warning: %s", e)
+        return rec
+
+    def delete_pending_visitor(self, visitor_id: str) -> bool:
+        vid = str(visitor_id or "").strip()
+        pending_list = _read_json(PENDING_VISITORS_FILE, [])
+        kept = [x for x in pending_list if str(x.get("id") or "") != vid and str(x.get("parent_visitor_id") or "") != vid]
+        removed = len(kept) != len(pending_list)
+        if removed:
+            _write_json(PENDING_VISITORS_FILE, kept)
+        if MSSQL_AVAILABLE and db_mssql and db_mssql.is_mssql_active():
+            try:
+                if db_mssql.delete_pending_visitor_db(vid):
+                    removed = True
+            except Exception:
+                pass
+        return removed
+
+    def activate_pending_visitor(self, old_visitor_id: str, new_visitor_id: str, card_number: str, operator: str = "Lễ tân") -> Optional[Dict[str, Any]]:
+        vid = str(old_visitor_id or "").strip()
+        target = None
+        for p in self.get_pending_visitors():
+            if str(p.get("id") or "") == vid:
+                target = dict(p)
+                break
+        if not target:
+            return None
+        target["id"] = str(new_visitor_id or vid)
+        target["epad_atid"] = str(new_visitor_id or "")
+        target["card_number"] = str(card_number or "").strip()
+        target["status"] = "ACTIVE"
+        target["operator"] = operator
+
+        # Remove from pending JSON
+        pending_list = _read_json(PENDING_VISITORS_FILE, [])
+        kept_pending = [x for x in pending_list if str(x.get("id") or "") != vid]
+        for x in kept_pending:
+            if str(x.get("parent_visitor_id") or "") == vid:
+                x["parent_visitor_id"] = target["id"]
+        _write_json(PENDING_VISITORS_FILE, kept_pending)
+
+        # Add to active JSON
+        active_list = _read_json(ACTIVE_VISITORS_FILE, [])
+        active_list = [x for x in active_list if str(x.get("id") or "") != target["id"]]
+        active_list.insert(0, target)
+        _write_json(ACTIVE_VISITORS_FILE, active_list)
+
+        if MSSQL_AVAILABLE and db_mssql and db_mssql.is_mssql_active():
+            try:
+                db_mssql.activate_pending_visitor_db(vid, target["id"], target["card_number"], operator)
+            except Exception as e:
+                logger.warning("activate_pending_visitor MSSQL warning: %s", e)
+        return target
+
+    def swap_visitor_card(self, visitor_id: str, old_card: str, new_card: str, new_visitor_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        vid = str(visitor_id or "").strip()
+        active_list = _read_json(ACTIVE_VISITORS_FILE, [])
+        updated_rec = None
+        for v in active_list:
+            if str(v.get("id") or "") == vid or (old_card and str(v.get("card_number") or "") == str(old_card)):
+                v["card_number"] = str(new_card)
+                if new_visitor_id:
+                    v["epad_atid"] = str(new_visitor_id)
+                updated_rec = dict(v)
+                break
+        if updated_rec:
+            _write_json(ACTIVE_VISITORS_FILE, active_list)
+        if MSSQL_AVAILABLE and db_mssql and db_mssql.is_mssql_active():
+            try:
+                db_mssql.swap_visitor_card_db(vid, old_card, new_card, new_visitor_id=None)
+            except Exception as e:
+                logger.warning("swap_visitor_card MSSQL warning: %s", e)
+        if not updated_rec:
+            for v in self.get_active_visitors():
+                if str(v.get("id") or "") == vid or (old_card and str(v.get("card_number") or "") == str(old_card)):
+                    updated_rec = dict(v)
+                    updated_rec["card_number"] = str(new_card)
+                    break
+        return updated_rec
 
     # ---------------- Visitor Management ----------------
 

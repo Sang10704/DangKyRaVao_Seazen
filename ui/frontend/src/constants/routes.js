@@ -5,6 +5,7 @@ export const ROUTES = {
   LIVE: '/doors',
   HISTORY: '/history',
   VISITORS: '/visitors',
+  APPOINTMENTS: '/appointments',
   CARDS: '/cards',
   HRM: '/hrm',
   BIOMETRICS: '/biometrics',

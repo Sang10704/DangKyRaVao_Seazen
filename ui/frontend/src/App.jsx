@@ -8,6 +8,7 @@ import OverviewDashboardPage from './pages/overview/OverviewDashboardPage';
 import LiveCommandPage from './pages/live/LiveCommandPage';
 import AccessHistoryPage from './pages/history/AccessHistoryPage';
 import VisitorManagementPage from './pages/visitors/VisitorManagementPage';
+import AppointmentsPage from './pages/appointments/AppointmentsPage';
 import CardManagementPage from './pages/cards/CardManagementPage';
 import HrmDirectoryPage from './pages/hrm/HrmDirectoryPage';
 import BiometricsPage from './pages/biometrics/BiometricsPage';
@@ -43,6 +44,7 @@ export default function App() {
   const [empDeptFilter, setEmpDeptFilter] = useState('');
 
   const [activeVisitors, setActiveVisitors] = useState([]);
+  const [pendingAppointments, setPendingAppointments] = useState([]);
   const [visitorHistory, setVisitorHistory] = useState([]);
   const [customerCards, setCustomerCards] = useState([]);
   const [pendingCardPhotoCount, setPendingCardPhotoCount] = useState(0);
@@ -57,7 +59,12 @@ export default function App() {
 
   const handleNavigate = useCallback(
     (path) => {
-      const target = user && user.role !== 'admin' ? ROUTES.VISITORS : path;
+      const target =
+        user && user.role === 'guest_inviter'
+          ? ROUTES.APPOINTMENTS
+          : user && user.role !== 'admin'
+          ? ROUTES.VISITORS
+          : path;
       setCurrentPath(target);
       window.history.pushState({}, '', target);
     },
@@ -67,7 +74,9 @@ export default function App() {
   useEffect(() => {
     const onPopState = () => {
       const p = window.location.pathname;
-      if (user && user.role !== 'admin') {
+      if (user && user.role === 'guest_inviter') {
+        setCurrentPath(ROUTES.APPOINTMENTS);
+      } else if (user && user.role !== 'admin') {
         setCurrentPath(ROUTES.VISITORS);
       } else if (Object.values(ROUTES).includes(p)) {
         setCurrentPath(p);
@@ -86,14 +95,21 @@ export default function App() {
 
   const fetchActiveVisitorsFast = useCallback(async () => {
     if (!user) return;
-    const [visRes, cardsLiteRes] = await Promise.all([
+    if (user.role === 'guest_inviter') {
+      const aptRes = await apiFetch('/api/visitor/appointments');
+      if (aptRes.ok && aptRes.data.appointments) setPendingAppointments(aptRes.data.appointments);
+      return;
+    }
+    const [visRes, cardsLiteRes, aptRes] = await Promise.all([
       apiFetch('/api/visitors/active'),
       apiFetch('/api/visitor/cards?include_photos=0'),
+      apiFetch('/api/visitor/appointments'),
     ]);
     if (visRes.ok && visRes.data.visitors) setActiveVisitors(visRes.data.visitors);
     if (cardsLiteRes.ok && typeof cardsLiteRes.data.pending_photo_count === 'number') {
       setPendingCardPhotoCount(cardsLiteRes.data.pending_photo_count);
     }
+    if (aptRes.ok && aptRes.data.appointments) setPendingAppointments(aptRes.data.appointments);
   }, [user]);
 
   const fetchLiveStreams = useCallback(async () => {
@@ -120,6 +136,7 @@ export default function App() {
 
   const fetchCoreDirectory = useCallback(async () => {
     if (!user) return;
+    const isInviter = user.role === 'guest_inviter';
     const [deptRes, empRes, cardsRes, histRes] = await Promise.all([
       apiFetch('/api/departments'),
       apiFetch(
@@ -127,8 +144,8 @@ export default function App() {
           empDeptFilter
         )}&page=1&limit=300`
       ),
-      apiFetch('/api/visitor/cards?include_photos=1'),
-      apiFetch('/api/visitors/history?limit=250'),
+      isInviter ? Promise.resolve({ ok: false, data: {} }) : apiFetch('/api/visitor/cards?include_photos=1'),
+      isInviter ? Promise.resolve({ ok: false, data: {} }) : apiFetch('/api/visitors/history?limit=250'),
     ]);
 
     if (deptRes.ok && deptRes.data.departments) setDepartments(deptRes.data.departments);
@@ -221,7 +238,12 @@ export default function App() {
   };
 
   const pcClockInvalid = clockAudit && clockAudit.pc_clock_valid === false;
-  const effectivePath = user && user.role !== 'admin' ? ROUTES.VISITORS : currentPath;
+  const effectivePath =
+    user && user.role === 'guest_inviter'
+      ? ROUTES.APPOINTMENTS
+      : user && user.role !== 'admin'
+      ? ROUTES.VISITORS
+      : currentPath;
 
   return (
     <>
@@ -245,7 +267,12 @@ export default function App() {
           clockAudit={clockAudit}
           onLoginSuccess={(loggedInUser) => {
             setUser(loggedInUser);
-            const initRoute = loggedInUser.role !== 'admin' ? ROUTES.VISITORS : ROUTES.OVERVIEW;
+            const initRoute =
+              loggedInUser.role === 'guest_inviter'
+                ? ROUTES.APPOINTMENTS
+                : loggedInUser.role !== 'admin'
+                ? ROUTES.VISITORS
+                : ROUTES.OVERVIEW;
             setCurrentPath(initRoute);
             window.history.replaceState({}, '', initRoute);
             notify(`Xin chào ${loggedInUser.full_name}`, 'success');
@@ -261,6 +288,7 @@ export default function App() {
             user={user}
             onLogout={handleLogout}
             activeVisitorsCount={activeVisitors.length}
+            pendingAppointmentsCount={pendingAppointments.length}
             pendingCardPhotoCount={pendingCardPhotoCount}
           />
 
@@ -341,6 +369,21 @@ export default function App() {
                 activeVisitors={activeVisitors}
                 visitorHistory={visitorHistory}
                 customerCards={customerCards}
+                pendingAppointments={pendingAppointments}
+                onRefreshData={() => {
+                  fetchActiveVisitorsFast();
+                  fetchCoreDirectory();
+                }}
+                notify={notify}
+              />
+            )}
+
+            {effectivePath === ROUTES.APPOINTMENTS && (
+              <AppointmentsPage
+                user={user}
+                departments={departments}
+                employees={employees}
+                appointments={pendingAppointments}
                 onRefreshData={() => {
                   fetchActiveVisitorsFast();
                   fetchCoreDirectory();
