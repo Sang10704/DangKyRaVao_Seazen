@@ -2394,16 +2394,6 @@ export default function VisitorManagementPage({
                                   >
                                     Đổi thẻ
                                   </button>
-                                  {hasCompanions && (
-                                    <button
-                                      type="button"
-                                      className="btn btn-sm"
-                                      title="Trả thẻ & Check-out cả khách chính và toàn bộ người đi cùng"
-                                      onClick={() => handleGroupCheckout(v)}
-                                    >
-                                      Cả đoàn ({v.companions.length + 1})
-                                    </button>
-                                  )}
                                 </div>
                               )}
                             </td>
