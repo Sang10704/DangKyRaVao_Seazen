@@ -11,6 +11,7 @@ import VisitorManagementPage from './pages/visitors/VisitorManagementPage';
 import AppointmentsPage from './pages/appointments/AppointmentsPage';
 import CardManagementPage from './pages/cards/CardManagementPage';
 import HrmDirectoryPage from './pages/hrm/HrmDirectoryPage';
+import OnsiteStaffPage from './pages/onsite/OnsiteStaffPage';
 import BiometricsPage from './pages/biometrics/BiometricsPage';
 import TimekeepingPage from './pages/attendance/TimekeepingPage';
 
@@ -417,6 +418,10 @@ export default function App() {
                 onRefreshData={fetchCoreDirectory}
                 notify={notify}
               />
+            )}
+
+            {effectivePath === ROUTES.ONSITE && (
+              <OnsiteStaffPage onToast={notify} />
             )}
 
             {effectivePath === ROUTES.BIOMETRICS && (

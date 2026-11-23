@@ -8,6 +8,7 @@ export const ROUTES = {
   APPOINTMENTS: '/appointments',
   CARDS: '/cards',
   HRM: '/hrm',
+  ONSITE: '/onsite',
   BIOMETRICS: '/biometrics',
   TIMEKEEPING: '/timekeeping',
 };

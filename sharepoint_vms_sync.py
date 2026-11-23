@@ -14,6 +14,7 @@ import zlib
 import time
 import base64
 import re
+import unicodedata
 import threading
 import ctypes
 import ctypes.wintypes
@@ -1598,3 +1599,356 @@ def upload_card_evidence_attachment_async(
             logger.debug("upload_card_evidence_attachment_async warning: %s", e)
 
     threading.Thread(target=_worker, daemon=True).start()
+
+
+# ==============================================================================
+# MASTER_NHANVIEN PERIODIC CACHE & ONSITE STAFF RECONCILIATION
+# ==============================================================================
+MASTER_EMPLOYEES_LIST_ID = "d8d4e3de-f2db-4936-81d7-e42d8fce6e9b"
+MASTER_CACHE_TTL_SECONDS = 1800  # 30 minutes periodic refresh
+_MASTER_CACHE_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "data", "master_employees_sp_cache.json"
+)
+_master_cache_lock = threading.Lock()
+
+
+def _norm_person_name(name: Any) -> str:
+    s = unicodedata.normalize("NFC", str(name or "").strip().lower())
+    return " ".join(s.split())
+
+
+def _is_sp_resigned_status(status_text: str) -> bool:
+    low = _norm_person_name(status_text)
+    if not low:
+        return False
+    return any(tok in low for tok in ("nghi", "nghỉ", "ngung", "ngưng", "thoi", "thôi", "nghi viec", "nghỉ việc"))
+
+
+def sync_master_employees_from_sharepoint(force: bool = False) -> Dict[str, Any]:
+    """
+    Fetches Master_NhanVien (DANH SÁCH NHÂN VIÊN SEAZEN_APPv1) from SharePoint
+    via OAuth2 Bearer Token and caches locally to data/master_employees_sp_cache.json.
+    Respects MASTER_CACHE_TTL_SECONDS (30 min) unless force=True.
+    """
+    if not force and os.path.exists(_MASTER_CACHE_PATH):
+        try:
+            with open(_MASTER_CACHE_PATH, "r", encoding="utf-8") as f:
+                cached = json.load(f)
+            age = time.time() - float(cached.get("synced_ts") or 0)
+            if age < MASTER_CACHE_TTL_SECONDS and isinstance(cached.get("items"), list):
+                return {**cached, "from_cache": True, "cache_age_seconds": int(age)}
+        except Exception:
+            pass
+
+    with _master_cache_lock:
+        if not force and os.path.exists(_MASTER_CACHE_PATH):
+            try:
+                with open(_MASTER_CACHE_PATH, "r", encoding="utf-8") as f:
+                    cached = json.load(f)
+                age = time.time() - float(cached.get("synced_ts") or 0)
+                if age < MASTER_CACHE_TTL_SECONDS and isinstance(cached.get("items"), list):
+                    return {**cached, "from_cache": True, "cache_age_seconds": int(age)}
+            except Exception:
+                pass
+
+        tok_info = get_sharepoint_tokens(allow_interactive=False)
+        if not tok_info.get("ok"):
+            if os.path.exists(_MASTER_CACHE_PATH):
+                with open(_MASTER_CACHE_PATH, "r", encoding="utf-8") as f:
+                    cached = json.load(f)
+                return {**cached, "from_cache": True, "stale": True, "error": tok_info.get("error")}
+            return {"ok": False, "error": tok_info.get("error") or "Chưa có SharePoint Bearer Token", "items": []}
+
+        headers = {
+            "Authorization": f"Bearer {tok_info['sp_token']}",
+            "Accept": "application/json;odata=nometadata",
+        }
+        select_cols = (
+            "Id,field_2,field_3,field_7,KHUV_x1ef0_C,Doi,ChucVu,SDT,"
+            "TrangThaiLamViec,L_x00cd_DONGH_x1ec8_VI_x1ec6_C,NgayKyHDLan1,Modified"
+        )
+        url = f"{SP_SITE_URL}/_api/web/lists(guid'{MASTER_EMPLOYEES_LIST_ID}')/items?$select={select_cols}&$top=1000"
+        raw_items: List[Dict[str, Any]] = []
+        try:
+            while url:
+                resp = requests.get(url, headers=headers, timeout=25)
+                if resp.status_code != 200:
+                    raise RuntimeError(f"HTTP {resp.status_code}: {resp.text[:200]}")
+                payload = resp.json()
+                raw_items.extend(payload.get("value", []))
+                url = payload.get("odata.nextLink")
+        except Exception as e:
+            logger.warning("sync_master_employees_from_sharepoint failed: %s", e)
+            if os.path.exists(_MASTER_CACHE_PATH):
+                with open(_MASTER_CACHE_PATH, "r", encoding="utf-8") as f:
+                    cached = json.load(f)
+                return {**cached, "from_cache": True, "stale": True, "error": str(e)}
+            return {"ok": False, "error": str(e), "items": []}
+
+        normalized: List[Dict[str, Any]] = []
+        for it in raw_items:
+            normalized.append({
+                "sp_id": it.get("Id"),
+                "emp_code": str(it.get("field_2") or "").strip(),
+                "fullname": str(it.get("field_3") or "").strip(),
+                "target": str(it.get("field_7") or "").strip(),
+                "region": str(it.get("KHUV_x1ef0_C") or "").strip(),
+                "team": str(it.get("Doi") or "").strip(),
+                "position": str(it.get("ChucVu") or "").strip(),
+                "phone": str(it.get("SDT") or "").strip(),
+                "working_status": str(it.get("TrangThaiLamViec") or "").strip(),
+                "resign_reason": str(it.get("L_x00cd_DONGH_x1ec8_VI_x1ec6_C") or "").strip(),
+                "modified": str(it.get("Modified") or "").strip(),
+            })
+
+        now_ts = time.time()
+        cache_obj = {
+            "ok": True,
+            "list_id": MASTER_EMPLOYEES_LIST_ID,
+            "list_title": "Master_NhanVien",
+            "synced_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "synced_ts": now_ts,
+            "total_count": len(normalized),
+            "items": normalized,
+        }
+        os.makedirs(os.path.dirname(_MASTER_CACHE_PATH), exist_ok=True)
+        with open(_MASTER_CACHE_PATH, "w", encoding="utf-8") as f:
+            json.dump(cache_obj, f, ensure_ascii=False, indent=2)
+        logger.info("Synced %d Master_NhanVien items to local cache.", len(normalized))
+        return {**cache_obj, "from_cache": False, "cache_age_seconds": 0}
+
+
+def get_cached_master_employees(force_refresh: bool = False) -> Dict[str, Any]:
+    """
+    Returns locally cached Master_NhanVien data without spamming SharePoint.
+    Only fetches from SharePoint when cache is missing or force_refresh=True.
+    """
+    if not force_refresh and os.path.exists(_MASTER_CACHE_PATH):
+        try:
+            with open(_MASTER_CACHE_PATH, "r", encoding="utf-8") as f:
+                cached = json.load(f)
+            if isinstance(cached.get("items"), list):
+                age = int(time.time() - float(cached.get("synced_ts") or 0))
+                return {**cached, "from_cache": True, "cache_age_seconds": age}
+        except Exception:
+            pass
+    return sync_master_employees_from_sharepoint(force=force_refresh)
+
+
+def reconcile_onsite_staff(storage, target_date: Optional[str] = None, force_refresh: bool = False) -> Dict[str, Any]:
+    """
+    Reconciles local company department employees (tbl_Employees) and today's attendance
+    against the cached SharePoint Master_NhanVien list.
+    Computes overall & per-department statistics and mismatch alerts.
+    """
+    master_data = get_cached_master_employees(force_refresh=force_refresh)
+    master_items = master_data.get("items") or []
+
+    sp_by_code: Dict[str, Dict[str, Any]] = {}
+    sp_by_name: Dict[str, Dict[str, Any]] = {}
+    for it in master_items:
+        code = str(it.get("emp_code") or "").strip().lstrip("0")
+        raw_code = str(it.get("emp_code") or "").strip()
+        nm = _norm_person_name(it.get("fullname"))
+        if raw_code:
+            sp_by_code[raw_code] = it
+        if code:
+            sp_by_code[code] = it
+        if nm:
+            sp_by_name[nm] = it
+
+    local_emps = storage.get_employees(include_inactive=True)
+    present_info = storage.get_present_details(
+        target_date=target_date, category="STAFF", include_active_visitors=False
+    ) or {}
+    inside_list = present_info.get("inside") or []
+    left_list = present_info.get("left") or []
+
+    inside_by_atid: Dict[str, Dict[str, Any]] = {}
+    left_by_atid: Dict[str, Dict[str, Any]] = {}
+    for row in inside_list:
+        key = str(row.get("atid") or "").strip()
+        if key:
+            inside_by_atid[key] = row
+    for row in left_list:
+        key = str(row.get("atid") or "").strip()
+        if key:
+            left_by_atid[key] = row
+
+    reconciled_rows: List[Dict[str, Any]] = []
+    matched_sp_ids = set()
+    dept_buckets: Dict[str, Dict[str, Any]] = {}
+
+    for emp in local_emps:
+        atid = str(emp.get("atid") or "").strip()
+        code = str(emp.get("code") or "").strip()
+        code_stripped = code.lstrip("0")
+        atid_stripped = atid.lstrip("0")
+        fullname = str(emp.get("fullname") or "").strip()
+        nm = _norm_person_name(fullname)
+        dept = str(emp.get("department") or "").strip() or "Chưa phân phòng ban"
+        is_active_local = bool(emp.get("is_active", True))
+
+        sp_match = (
+            sp_by_code.get(code)
+            or sp_by_code.get(code_stripped)
+            or sp_by_code.get(atid)
+            or sp_by_code.get(atid_stripped)
+            or sp_by_name.get(nm)
+        )
+        if sp_match:
+            matched_sp_ids.add(sp_match.get("sp_id"))
+            sp_working_status = sp_match.get("working_status") or "Đang làm"
+            is_resigned = _is_sp_resigned_status(sp_working_status)
+            master_status = "RESIGNED" if is_resigned else "WORKING"
+            match_method = "MA_NV" if (
+                sp_by_code.get(code) or sp_by_code.get(code_stripped) or sp_by_code.get(atid) or sp_by_code.get(atid_stripped)
+            ) else "HO_TEN"
+        else:
+            sp_working_status = "Không có trên Master"
+            master_status = "RESIGNED"
+            match_method = "UNMATCHED"
+
+        inside_row = inside_by_atid.get(atid)
+        left_row = left_by_atid.get(atid)
+        if inside_row:
+            attendance_status = "PRESENT"
+            check_in_time = str(inside_row.get("first_in") or inside_row.get("check_in_time") or "")
+            check_out_time = ""
+            last_door = str(inside_row.get("last_door") or "")
+        elif left_row:
+            attendance_status = "LEFT"
+            check_in_time = str(left_row.get("first_in") or left_row.get("check_in_time") or "")
+            check_out_time = str(left_row.get("last_out") or left_row.get("check_out_time") or "")
+            last_door = str(left_row.get("last_door") or "")
+        elif master_status == "WORKING":
+            attendance_status = "ABSENT_OR_LEAVE"
+            check_in_time = ""
+            check_out_time = ""
+            last_door = ""
+        else:
+            attendance_status = "INACTIVE"
+            check_in_time = ""
+            check_out_time = ""
+            last_door = ""
+
+        mismatch_flag = (master_status == "RESIGNED" and is_active_local)
+        mismatch_reason = (
+            "Không có trên Master_NhanVien hoặc đã ngưng làm việc, nhưng vẫn Active trên máy chấm công/SQL"
+            if mismatch_flag else ""
+        )
+
+        rec = {
+            "atid": atid,
+            "code": code,
+            "fullname": fullname,
+            "department": dept,
+            "position": str(emp.get("position") or (sp_match.get("position") if sp_match else "") or ""),
+            "phone": str(emp.get("phone") or (sp_match.get("phone") if sp_match else "") or ""),
+            "is_active_local": is_active_local,
+            "master_matched": bool(sp_match),
+            "match_method": match_method,
+            "master_status": master_status,
+            "master_working_status": sp_working_status,
+            "master_target": sp_match.get("target", "") if sp_match else "",
+            "master_region": sp_match.get("region", "") if sp_match else "",
+            "master_team": sp_match.get("team", "") if sp_match else "",
+            "resign_reason": sp_match.get("resign_reason", "") if sp_match else "",
+            "attendance_status": attendance_status,
+            "check_in_time": check_in_time,
+            "check_out_time": check_out_time,
+            "last_door": last_door,
+            "mismatch_flag": mismatch_flag,
+            "mismatch_reason": mismatch_reason,
+        }
+        reconciled_rows.append(rec)
+
+        b = dept_buckets.setdefault(dept, {
+            "department": dept,
+            "total": 0,
+            "working": 0,
+            "resigned": 0,
+            "present_now": 0,
+            "attended_today": 0,
+            "absent_or_leave": 0,
+            "mismatch_count": 0,
+        })
+        b["total"] += 1
+        if master_status == "WORKING":
+            b["working"] += 1
+        else:
+            b["resigned"] += 1
+        if attendance_status == "PRESENT":
+            b["present_now"] += 1
+            b["attended_today"] += 1
+        elif attendance_status == "LEFT":
+            b["attended_today"] += 1
+        elif attendance_status == "ABSENT_OR_LEAVE":
+            b["absent_or_leave"] += 1
+        if mismatch_flag:
+            b["mismatch_count"] += 1
+
+    departments: List[Dict[str, Any]] = []
+    for dept, b in dept_buckets.items():
+        tot = b["total"] or 1
+        wrk = b["working"]
+        departments.append({
+            **b,
+            "working_pct": round((b["working"] / tot) * 100, 1),
+            "resigned_pct": round((b["resigned"] / tot) * 100, 1),
+            "attended_pct": round((b["attended_today"] / wrk) * 100, 1) if wrk else 0.0,
+            "absent_pct": round((b["absent_or_leave"] / wrk) * 100, 1) if wrk else 0.0,
+        })
+    departments.sort(key=lambda x: (-x["total"], x["department"]))
+
+    unregistered_van_phong: List[Dict[str, Any]] = []
+    master_van_phong_count = 0
+    for it in master_items:
+        is_vp = ("VAN PHONG" in str(it.get("region") or "").upper()) or ("VAN PHONG" in str(it.get("team") or "").upper())
+        if is_vp:
+            master_van_phong_count += 1
+            if it.get("sp_id") not in matched_sp_ids and not _is_sp_resigned_status(it.get("working_status") or ""):
+                unregistered_van_phong.append(it)
+
+    tot_local = len(reconciled_rows)
+    wrk_total = sum(1 for r in reconciled_rows if r["master_status"] == "WORKING")
+    res_total = sum(1 for r in reconciled_rows if r["master_status"] == "RESIGNED")
+    pres_total = sum(1 for r in reconciled_rows if r["attendance_status"] == "PRESENT")
+    att_total = sum(1 for r in reconciled_rows if r["attendance_status"] in ("PRESENT", "LEFT"))
+    abs_total = sum(1 for r in reconciled_rows if r["attendance_status"] == "ABSENT_OR_LEAVE")
+    mis_total = sum(1 for r in reconciled_rows if r["mismatch_flag"])
+
+    return {
+        "success": True,
+        "date": target_date or datetime.now().strftime("%Y-%m-%d"),
+        "cache_info": {
+            "list_id": MASTER_EMPLOYEES_LIST_ID,
+            "list_title": master_data.get("list_title", "Master_NhanVien"),
+            "synced_at": master_data.get("synced_at"),
+            "from_cache": master_data.get("from_cache", True),
+            "stale": master_data.get("stale", False),
+            "cache_age_seconds": master_data.get("cache_age_seconds", 0),
+            "ttl_seconds": MASTER_CACHE_TTL_SECONDS,
+            "error": master_data.get("error"),
+        },
+        "summary": {
+            "total_local": tot_local,
+            "master_total": len(master_items),
+            "master_van_phong": master_van_phong_count,
+            "working": wrk_total,
+            "resigned": res_total,
+            "present_now": pres_total,
+            "attended_today": att_total,
+            "absent_or_leave": abs_total,
+            "mismatch_count": mis_total,
+            "unregistered_van_phong_count": len(unregistered_van_phong),
+            "working_pct": round((wrk_total / tot_local) * 100, 1) if tot_local else 0.0,
+            "resigned_pct": round((res_total / tot_local) * 100, 1) if tot_local else 0.0,
+            "present_pct": round((pres_total / wrk_total) * 100, 1) if wrk_total else 0.0,
+            "attended_pct": round((att_total / wrk_total) * 100, 1) if wrk_total else 0.0,
+            "absent_pct": round((abs_total / wrk_total) * 100, 1) if wrk_total else 0.0,
+        },
+        "departments": departments,
+        "employees": reconciled_rows,
+        "unregistered_van_phong": unregistered_van_phong,
+    }

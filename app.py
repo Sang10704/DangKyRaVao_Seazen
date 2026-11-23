@@ -298,6 +298,7 @@ def _sharepoint_realtime_reconciler():
         if tok.get("ok"):
             logger.info("[SharePoint Reconciler] Bắt đầu đồng bộ tổng thể 18 danh sách VMS SEAZEN lên ONESEAZEN (%s)...", tok.get("account"))
             sharepoint_vms_sync.sync_all_active_lists(full_attendance_limit=350, timekeeping_limit=400)
+            sharepoint_vms_sync.sync_master_employees_from_sharepoint(force=False)
             logger.info("[SharePoint Reconciler] Đã hoàn tất đồng bộ tổng thể 18 danh sách lên SharePoint!")
         else:
             logger.warning("[SharePoint Reconciler] Chưa có MSAL token, sẽ thử lại sau: %s", tok.get("error"))
@@ -325,6 +326,10 @@ def _sharepoint_realtime_reconciler():
                         sharepoint_vms_sync.sync_table_to_sharepoint(tbl, max_rows=lim)
                     except Exception:
                         pass
+            try:
+                sharepoint_vms_sync.sync_master_employees_from_sharepoint(force=False)
+            except Exception:
+                pass
         except Exception as e:
             logger.debug("[SharePoint Reconciler] Cycle warning: %s", e)
 
@@ -1610,6 +1615,27 @@ def get_employees():
         "departments_count": len(depts),
         "employees": paginated
     })
+
+
+@app.route("/api/staff/onsite-reconcile", methods=["GET"])
+@require_role(["admin"])
+def get_onsite_staff_reconcile():
+    """
+    Returns cached reconciliation between local department employees (tbl_Employees),
+    today's attendance (present/left/absent), and SharePoint Master_NhanVien.
+    Does NOT spam SharePoint: reads local cache unless ?refresh=1 or cache missing.
+    """
+    target_date = (request.args.get("date") or "").strip() or None
+    force_refresh = str(request.args.get("refresh") or "").strip() in ("1", "true", "yes")
+    try:
+        import sharepoint_vms_sync
+        result = sharepoint_vms_sync.reconcile_onsite_staff(
+            storage, target_date=target_date, force_refresh=force_refresh
+        )
+        return jsonify(result)
+    except Exception as e:
+        logger.error("Error in /api/staff/onsite-reconcile: %s", e)
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 # ---------------- SQL Server Management APIs ----------------
