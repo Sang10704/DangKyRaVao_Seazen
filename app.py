@@ -1897,8 +1897,29 @@ def create_visitor_appointment():
             comp_recs.append(c_rec)
 
     try:
+        import db_mssql
+        if db_mssql.is_mssql_active():
+            for rec in [main_rec] + comp_recs:
+                ci_str = str(rec.get("checkin_time") or "")
+                co_str = str(rec.get("expected_checkout_time") or "")
+                db_mssql.upsert_pre_registered_guest_db({
+                    "BookingCode": rec["id"],
+                    "GuestFullName": rec.get("full_name") or "",
+                    "GuestCCCD": rec.get("cccd_number") or "",
+                    "GuestPhone": rec.get("phone") or "",
+                    "GuestCompany": rec.get("company") or "",
+                    "HostEmployeeName": rec.get("host_person") or "",
+                    "HostDepartment": rec.get("department") or "",
+                    "VisitDate": ci_str[:10] if len(ci_str) >= 10 else datetime.now().strftime("%Y-%m-%d"),
+                    "StartTime": ci_str[11:16] if len(ci_str) >= 16 else "08:30",
+                    "EndTime": co_str[11:16] if len(co_str) >= 16 else "17:30",
+                    "Purpose": rec.get("purpose") or "",
+                    "ReservedCardNumber": "",
+                    "Status": "PENDING",
+                })
         import sharepoint_vms_sync
         sharepoint_vms_sync.push_table_async("tbl_Visitors", 150)
+        sharepoint_vms_sync.push_table_async("tbl_PreRegisteredGuests", 200)
     except Exception:
         pass
 
@@ -1916,6 +1937,20 @@ def cancel_visitor_appointment(visitor_id):
     ok = storage.delete_pending_visitor(visitor_id)
     if not ok:
         return jsonify({"success": False, "error": "Không tìm thấy lịch hẹn ở trạng thái chờ."}), 404
+    try:
+        import db_mssql, sharepoint_vms_sync
+        if db_mssql.is_mssql_active():
+            import pyodbc
+            with pyodbc.connect(db_mssql.get_connection_string(), timeout=4) as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    "UPDATE tbl_PreRegisteredGuests SET Status = 'CANCELLED', UpdatedAt = GETDATE() WHERE BookingCode = ?",
+                    (str(visitor_id)[:50],),
+                )
+                conn.commit()
+        sharepoint_vms_sync.push_table_async("tbl_PreRegisteredGuests", 200)
+    except Exception:
+        pass
     return jsonify({"success": True, "message": "Đã hủy lịch hẹn khách."})
 
 
@@ -1993,9 +2028,21 @@ def assign_card_to_pending_visitor():
             device_sync_state="SCHEDULED" if is_future else "ACTIVE_ON_DEVICE",
         )
         try:
+            import pyodbc
+            with pyodbc.connect(db_mssql.get_connection_string(), timeout=4) as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    "UPDATE tbl_PreRegisteredGuests SET Status = 'CHECKED_IN', ReservedCardNumber = ?, UpdatedAt = GETDATE() WHERE BookingCode = ?",
+                    (str(card_number)[:50], str(visitor_id)[:50]),
+                )
+                conn.commit()
+        except Exception:
+            pass
+        try:
             import sharepoint_vms_sync
             sharepoint_vms_sync.push_table_async("tbl_CustomerCards", 200)
             sharepoint_vms_sync.push_table_async("tbl_Visitors", 150)
+            sharepoint_vms_sync.push_table_async("tbl_PreRegisteredGuests", 200)
         except Exception:
             pass
 
