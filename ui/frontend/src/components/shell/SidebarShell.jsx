@@ -205,17 +205,13 @@ export default function SidebarShell({
         <button
           type="button"
           onClick={onLogout}
-          className="btn"
+          className="tino-nav-item"
           style={{
             width: '100%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 8,
-            padding: '9px 12px',
-            borderRadius: 10,
-            fontWeight: 600,
-            fontSize: 13,
+            background: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            color: 'var(--text-secondary)',
           }}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
