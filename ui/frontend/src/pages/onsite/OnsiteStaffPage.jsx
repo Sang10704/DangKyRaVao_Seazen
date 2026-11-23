@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { RefreshCw, Search, AlertTriangle, CheckCircle2, UserX, Users, Building2, Clock } from 'lucide-react';
 import { apiFetch } from '../../services/apiClient';
 
 const TABS = [
@@ -10,30 +9,8 @@ const TABS = [
   { id: 'absent', label: 'Vắng / Nghỉ phép hôm nay' },
 ];
 
-function KpiCard({ title, value, subtext, tone = 'slate', icon: Icon }) {
-  const toneStyles = {
-    slate: 'bg-white border-slate-200 text-slate-900',
-    emerald: 'bg-white border-emerald-200 text-emerald-700',
-    amber: 'bg-white border-amber-200 text-amber-700',
-    rose: 'bg-white border-rose-200 text-rose-700',
-    indigo: 'bg-white border-indigo-200 text-indigo-700',
-  };
-  return (
-    <div className={`rounded-xl border p-4 shadow-sm ${toneStyles[tone] || toneStyles.slate}`}>
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">{title}</span>
-        {Icon ? <Icon className="h-4 w-4 text-slate-400" /> : null}
-      </div>
-      <div className="mt-2 flex items-baseline gap-2">
-        <span className="text-2xl font-bold tabular-nums tracking-tight text-slate-900">{value}</span>
-      </div>
-      {subtext ? <div className="mt-1 text-xs text-slate-500">{subtext}</div> : null}
-    </div>
-  );
-}
-
 export default function OnsiteStaffPage({ onToast }) {
-  const [data, setData] = useState(null);
+  const [payload, setPayload] = useState(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -47,14 +24,14 @@ export default function OnsiteStaffPage({ onToast }) {
     try {
       const qs = new URLSearchParams({ date: selectedDate });
       if (forceRefresh) qs.set('refresh', '1');
-      const res = await apiFetch(`/api/staff/onsite-reconcile?${qs.toString()}`);
-      if (res?.success) {
-        setData(res);
+      const { ok, data } = await apiFetch(`/api/staff/onsite-reconcile?${qs.toString()}`);
+      if (ok && data?.success) {
+        setPayload(data);
         if (forceRefresh) {
           onToast?.('Đã đồng bộ dữ liệu Master_NhanVien từ SharePoint', 'success');
         }
       } else {
-        onToast?.(res?.error || 'Không thể tải dữ liệu đối chiếu nhân viên', 'error');
+        onToast?.(data?.error || 'Không thể tải dữ liệu đối chiếu nhân viên', 'error');
       }
     } catch (err) {
       onToast?.(err?.message || 'Lỗi kết nối máy chủ', 'error');
@@ -68,11 +45,11 @@ export default function OnsiteStaffPage({ onToast }) {
     loadReconcile(false);
   }, [loadReconcile]);
 
-  const summary = data?.summary || {};
-  const cacheInfo = data?.cache_info || {};
-  const departments = data?.departments || [];
-  const employees = data?.employees || [];
-  const unregisteredVp = data?.unregistered_van_phong || [];
+  const summary = payload?.summary || {};
+  const cacheInfo = payload?.cache_info || {};
+  const departments = payload?.departments || [];
+  const employees = payload?.employees || [];
+  const unregisteredVp = payload?.unregistered_van_phong || [];
 
   const filteredEmployees = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -92,308 +69,377 @@ export default function OnsiteStaffPage({ onToast }) {
 
   const renderAttendanceBadge = (status) => {
     if (status === 'PRESENT') {
-      return <span className="inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-600/20">Đang có mặt</span>;
+      return <span className="badge badge-success">Đang có mặt</span>;
     }
     if (status === 'LEFT') {
-      return <span className="inline-flex items-center rounded-md bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700 ring-1 ring-inset ring-sky-600/20">Đã chấm công & ra về</span>;
+      return <span className="badge badge-info">Đã chấm công &amp; ra về</span>;
     }
     if (status === 'ABSENT_OR_LEAVE') {
-      return <span className="inline-flex items-center rounded-md bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20">Vắng / Nghỉ phép</span>;
+      return <span className="badge badge-warning">Vắng / Nghỉ phép</span>;
     }
-    return <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 ring-1 ring-inset ring-slate-500/20">Ngưng làm việc</span>;
+    return <span className="badge">Ngưng làm việc</span>;
   };
 
   const renderMasterBadge = (emp) => {
     if (emp.master_status === 'WORKING') {
-      return <span className="inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-600/20">Đang làm ({emp.match_method === 'MA_NV' ? 'Mã NV' : 'Họ tên'})</span>;
+      return (
+        <span className="badge badge-success">
+          Đang làm ({emp.match_method === 'MA_NV' ? 'Mã NV' : 'Họ tên'})
+        </span>
+      );
     }
-    return <span className="inline-flex items-center rounded-md bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700 ring-1 ring-inset ring-rose-600/20">{emp.master_working_status || 'Đã ngưng làm việc'}</span>;
+    return (
+      <span className="badge badge-danger">
+        {emp.master_working_status || 'Đã ngưng làm việc'}
+      </span>
+    );
   };
 
   return (
-    <div className="space-y-5">
-      {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
-            Đối chiếu Master_NhanVien (SharePoint) & Dữ liệu Phòng ban / Chấm công
-          </p>
-          <h1 className="mt-0.5 text-xl font-bold tracking-tight text-slate-900">
-            Nhân viên tại chỗ & Thống kê nhân sự
-          </h1>
-          <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-slate-500">
-            <span className="inline-flex items-center gap-1">
-              <Clock className="h-3.5 w-3.5" />
-              Đồng bộ SharePoint định kỳ mỗi {Math.round((cacheInfo.ttl_seconds || 1800) / 60)} phút
-            </span>
-            {cacheInfo.synced_at ? (
-              <span>Lần đồng bộ gần nhất: <strong className="text-slate-700">{cacheInfo.synced_at}</strong></span>
-            ) : null}
-            {cacheInfo.stale ? (
-              <span className="text-amber-600 font-medium">Đang dùng dữ liệu cache dự phòng</span>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-slate-900 focus:outline-none"
-          />
-          <button
-            type="button"
-            onClick={() => loadReconcile(true)}
-            disabled={syncing}
-            className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 disabled:opacity-60"
-          >
-            <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
-            {syncing ? 'Đang đồng bộ...' : 'Đồng bộ SharePoint ngay'}
-          </button>
-        </div>
-      </div>
-
-      {/* KPI Summary */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <KpiCard
-          title="Nhân sự trên hệ thống"
-          value={summary.total_local ?? 0}
-          subtext={`Master SharePoint: ${summary.master_total ?? 0} NV (${summary.master_van_phong ?? 0} Văn phòng)`}
-          icon={Users}
-        />
-        <KpiCard
-          title="Đang làm việc"
-          value={`${summary.working ?? 0} (${summary.working_pct ?? 0}%)`}
-          subtext="Khớp danh sách Master_NhanVien"
-          tone="emerald"
-          icon={CheckCircle2}
-        />
-        <KpiCard
-          title="Đã ngưng làm việc"
-          value={`${summary.resigned ?? 0} (${summary.resigned_pct ?? 0}%)`}
-          subtext={`Lệch Active trên ZKTeco: ${summary.mismatch_count ?? 0}`}
-          tone="rose"
-          icon={UserX}
-        />
-        <KpiCard
-          title="Có mặt / Đi làm hôm nay"
-          value={`${summary.attended_today ?? 0} (${summary.attended_pct ?? 0}%)`}
-          subtext={`Đang ở trong công ty: ${summary.present_now ?? 0} (${summary.present_pct ?? 0}%)`}
-          tone="indigo"
-          icon={Building2}
-        />
-        <KpiCard
-          title="Vắng / Nghỉ phép hôm nay"
-          value={`${summary.absent_or_leave ?? 0} (${summary.absent_pct ?? 0}%)`}
-          subtext="Tính trên nhân sự đang làm việc"
-          tone="amber"
-          icon={AlertTriangle}
-        />
-      </div>
-
-      {/* Department Summary Table */}
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+    <div className="tino-body">
+      <div className="tino-center">
+        {/* HEADER */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 14,
+            flexWrap: 'wrap',
+            marginBottom: 14,
+          }}
+        >
           <div>
-            <h2 className="text-sm font-bold text-slate-900">Tổng hợp tỷ lệ theo Phòng ban</h2>
-            <p className="text-xs text-slate-500">Nhấp vào một phòng ban để lọc danh sách nhân viên chi tiết bên dưới</p>
+            <div className="tino-greeting-sub" style={{ fontSize: 13 }}>
+              Đối chiếu Master_NhanVien (SharePoint) · Chu kỳ cache{' '}
+              {Math.round((cacheInfo.ttl_seconds || 1800) / 60)} phút
+              {cacheInfo.synced_at ? ` · Đồng bộ gần nhất: ${cacheInfo.synced_at}` : ''}
+              {cacheInfo.stale ? ' · Đang dùng cache dự phòng' : ''}
+            </div>
+            <h1 className="tino-greeting-title" style={{ fontSize: 22 }}>
+              Nhân viên tại chỗ &amp; Thống kê nhân sự
+            </h1>
           </div>
-          {selectedDept !== 'ALL' ? (
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <input
+              type="date"
+              className="form-control"
+              style={{ width: 155, height: 34, padding: '4px 10px' }}
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+            />
             <button
               type="button"
-              onClick={() => setSelectedDept('ALL')}
-              className="text-xs font-semibold text-slate-700 underline hover:text-slate-900"
+              className="btn btn-primary btn-sm"
+              disabled={syncing}
+              onClick={() => loadReconcile(true)}
             >
-              Xem tất cả phòng ban
+              {syncing ? 'Đang đồng bộ SharePoint...' : 'Đồng bộ SharePoint ngay'}
             </button>
-          ) : null}
+          </div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500">
-              <tr>
-                <th className="px-4 py-2.5 text-left">Phòng ban</th>
-                <th className="px-3 py-2.5 text-right">Tổng NV</th>
-                <th className="px-3 py-2.5 text-right">Đang làm</th>
-                <th className="px-3 py-2.5 text-right">Đi làm hôm nay</th>
-                <th className="px-3 py-2.5 text-right">Đang có mặt</th>
-                <th className="px-3 py-2.5 text-right">Vắng / Nghỉ phép</th>
-                <th className="px-3 py-2.5 text-right">Đã ngưng việc</th>
-                <th className="px-3 py-2.5 text-right">Tỷ lệ đi làm</th>
-                <th className="px-3 py-2.5 text-right">Tỷ lệ nghỉ việc</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {departments.map((d) => {
-                const isSelected = selectedDept === d.department;
-                return (
-                  <tr
-                    key={d.department}
-                    onClick={() => setSelectedDept(isSelected ? 'ALL' : d.department)}
-                    className={`cursor-pointer transition-colors ${isSelected ? 'bg-slate-100' : 'hover:bg-slate-50'}`}
-                  >
-                    <td className="px-4 py-2.5 font-semibold text-slate-900">
-                      {d.department}
-                      {d.mismatch_count > 0 ? (
-                        <span className="ml-2 inline-flex items-center rounded bg-rose-50 px-1.5 py-0.5 text-[11px] font-medium text-rose-700">
-                          {d.mismatch_count} lệch
-                        </span>
-                      ) : null}
-                    </td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{d.total}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums font-medium text-emerald-700">{d.working}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums font-medium text-indigo-700">{d.attended_today}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">{d.present_now}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-amber-700">{d.absent_or_leave}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-rose-700">{d.resigned}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-slate-900">{d.attended_pct}%</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">{d.resigned_pct}%</td>
-                  </tr>
-                );
-              })}
-              {departments.length === 0 && !loading ? (
-                <tr>
-                  <td colSpan={9} className="px-4 py-6 text-center text-sm text-slate-500">
-                    Chưa có dữ liệu phòng ban
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-      </div>
 
-      {/* Employee Reconciliation Table */}
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-col gap-3 border-b border-slate-200 p-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-wrap gap-1.5">
-            {TABS.map((t) => {
-              const active = activeTab === t.id;
-              return (
+        {/* 4 KPI SUMMARY CARDS */}
+        <div className="kpi-grid-4" style={{ marginBottom: 16 }}>
+          <div className="kpi-stat-card">
+            <span className="kpi-stat-label">Đang làm việc (Master)</span>
+            <span className="kpi-stat-value" style={{ color: '#047857' }}>
+              {summary.working ?? 0} ({summary.working_pct ?? 0}%)
+            </span>
+            <span className="kpi-stat-sub">
+              Tổng hệ thống: {summary.total_local ?? 0} · Master SP: {summary.master_total ?? 0}
+            </span>
+          </div>
+
+          <div className="kpi-stat-card">
+            <span className="kpi-stat-label">Đã ngưng làm việc</span>
+            <span className="kpi-stat-value" style={{ color: '#be123c' }}>
+              {summary.resigned ?? 0} ({summary.resigned_pct ?? 0}%)
+            </span>
+            <span className="kpi-stat-sub">
+              Lệch Active trên ZKTeco/SQL: {summary.mismatch_count ?? 0}
+            </span>
+          </div>
+
+          <div className="kpi-stat-card">
+            <span className="kpi-stat-label">Đi làm / Có mặt hôm nay</span>
+            <span className="kpi-stat-value" style={{ color: '#1d4ed8' }}>
+              {summary.attended_today ?? 0} ({summary.attended_pct ?? 0}%)
+            </span>
+            <span className="kpi-stat-sub">
+              Đang ở trong công ty: {summary.present_now ?? 0} ({summary.present_pct ?? 0}%)
+            </span>
+          </div>
+
+          <div className="kpi-stat-card">
+            <span className="kpi-stat-label">Vắng / Nghỉ phép hôm nay</span>
+            <span className="kpi-stat-value" style={{ color: '#b45309' }}>
+              {summary.absent_or_leave ?? 0} ({summary.absent_pct ?? 0}%)
+            </span>
+            <span className="kpi-stat-sub">
+              Tính trên {summary.working ?? 0} nhân sự đang làm việc
+            </span>
+          </div>
+        </div>
+
+        {/* DEPARTMENT SUMMARY TABLE */}
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div
+            className="card-header"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 10,
+              flexWrap: 'wrap',
+            }}
+          >
+            <div>
+              <h3 className="card-title" style={{ margin: 0 }}>
+                Tổng hợp tỷ lệ theo Phòng ban ({departments.length} phòng ban)
+              </h3>
+              <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                Nhấp vào một phòng ban để lọc danh sách nhân viên chi tiết bên dưới
+              </div>
+            </div>
+            {selectedDept !== 'ALL' && (
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => setSelectedDept('ALL')}
+              >
+                Xem tất cả phòng ban
+              </button>
+            )}
+          </div>
+
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Phòng ban</th>
+                  <th style={{ textAlign: 'right' }}>Tổng NV</th>
+                  <th style={{ textAlign: 'right' }}>Đang làm</th>
+                  <th style={{ textAlign: 'right' }}>Đi làm hôm nay</th>
+                  <th style={{ textAlign: 'right' }}>Đang có mặt</th>
+                  <th style={{ textAlign: 'right' }}>Vắng / Nghỉ phép</th>
+                  <th style={{ textAlign: 'right' }}>Đã ngưng việc</th>
+                  <th style={{ textAlign: 'right' }}>Tỷ lệ đi làm</th>
+                  <th style={{ textAlign: 'right' }}>Tỷ lệ nghỉ việc</th>
+                </tr>
+              </thead>
+              <tbody>
+                {departments.map((d) => {
+                  const isSelected = selectedDept === d.department;
+                  return (
+                    <tr
+                      key={d.department}
+                      onClick={() => setSelectedDept(isSelected ? 'ALL' : d.department)}
+                      style={{
+                        cursor: 'pointer',
+                        background: isSelected ? '#eff6ff' : undefined,
+                      }}
+                    >
+                      <td style={{ fontWeight: 600 }}>
+                        {d.department}
+                        {d.mismatch_count > 0 && (
+                          <span className="badge badge-danger" style={{ marginLeft: 8 }}>
+                            {d.mismatch_count} lệch
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ textAlign: 'right' }}>{d.total}</td>
+                      <td style={{ textAlign: 'right', color: '#047857', fontWeight: 600 }}>
+                        {d.working}
+                      </td>
+                      <td style={{ textAlign: 'right', color: '#1d4ed8', fontWeight: 600 }}>
+                        {d.attended_today}
+                      </td>
+                      <td style={{ textAlign: 'right' }}>{d.present_now}</td>
+                      <td style={{ textAlign: 'right', color: '#b45309' }}>{d.absent_or_leave}</td>
+                      <td style={{ textAlign: 'right', color: '#be123c' }}>{d.resigned}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 700 }}>{d.attended_pct}%</td>
+                      <td style={{ textAlign: 'right', color: '#64748b' }}>{d.resigned_pct}%</td>
+                    </tr>
+                  );
+                })}
+                {departments.length === 0 && !loading && (
+                  <tr>
+                    <td colSpan={9} style={{ textAlign: 'center', padding: 20, color: '#64748b' }}>
+                      Chưa có dữ liệu phòng ban
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* EMPLOYEE RECONCILIATION TABLE */}
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div
+            className="card-header"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 10,
+              flexWrap: 'wrap',
+            }}
+          >
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {TABS.map((t) => (
                 <button
                   key={t.id}
                   type="button"
+                  className={`btn btn-sm ${activeTab === t.id ? 'btn-primary' : ''}`}
                   onClick={() => setActiveTab(t.id)}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-                    active ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
                 >
                   {t.label}
                 </button>
-              );
-            })}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              value={selectedDept}
-              onChange={(e) => setSelectedDept(e.target.value)}
-              className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 focus:border-slate-900 focus:outline-none"
-            >
-              <option value="ALL">Tất cả phòng ban ({departments.length})</option>
-              {departments.map((d) => (
-                <option key={d.department} value={d.department}>
-                  {d.department} ({d.total})
-                </option>
               ))}
-            </select>
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-400" />
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <select
+                className="form-control"
+                style={{ width: 200, height: 34, padding: '4px 8px' }}
+                value={selectedDept}
+                onChange={(e) => setSelectedDept(e.target.value)}
+              >
+                <option value="ALL">Tất cả phòng ban ({departments.length})</option>
+                {departments.map((d) => (
+                  <option key={d.department} value={d.department}>
+                    {d.department} ({d.total})
+                  </option>
+                ))}
+              </select>
+
               <input
                 type="text"
+                className="form-control"
+                style={{ width: 220, height: 34, padding: '4px 10px' }}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Tìm tên, mã NV, ATID..."
-                className="w-56 rounded-lg border border-slate-300 bg-white py-1.5 pl-8 pr-3 text-xs text-slate-800 focus:border-slate-900 focus:outline-none"
               />
             </div>
           </div>
-        </div>
 
-        <div className="max-h-[480px] overflow-auto">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="sticky top-0 bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500">
-              <tr>
-                <th className="px-4 py-2.5 text-left">Mã NV / ATID</th>
-                <th className="px-3 py-2.5 text-left">Họ và tên</th>
-                <th className="px-3 py-2.5 text-left">Phòng ban</th>
-                <th className="px-3 py-2.5 text-left">Đối chiếu Master SharePoint</th>
-                <th className="px-3 py-2.5 text-left">Trạng thái hôm nay</th>
-                <th className="px-3 py-2.5 text-left">Giờ vào / ra</th>
-                <th className="px-3 py-2.5 text-left">Ghi chú đối soát</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {loading ? (
+          <div className="table-wrap" style={{ maxHeight: 480, overflowY: 'auto' }}>
+            <table className="data-table">
+              <thead>
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">
-                    Đang tải dữ liệu đối chiếu nhân viên...
-                  </td>
+                  <th>Mã NV / ATID</th>
+                  <th>Họ và tên</th>
+                  <th>Phòng ban</th>
+                  <th>Đối chiếu Master SharePoint</th>
+                  <th>Trạng thái hôm nay</th>
+                  <th>Giờ vào / ra</th>
+                  <th>Ghi chú đối soát</th>
                 </tr>
-              ) : filteredEmployees.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">
-                    Không có nhân viên phù hợp với bộ lọc hiện tại
-                  </td>
-                </tr>
-              ) : (
-                filteredEmployees.map((emp) => (
-                  <tr key={emp.atid || emp.code} className={emp.mismatch_flag ? 'bg-rose-50/40' : 'hover:bg-slate-50'}>
-                    <td className="px-4 py-2.5 font-mono text-xs text-slate-700">
-                      <div className="font-semibold text-slate-900">{emp.code || '—'}</div>
-                      <div className="text-[11px] text-slate-400">{emp.atid}</div>
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <div className="font-semibold text-slate-900">{emp.fullname}</div>
-                      {emp.position ? <div className="text-xs text-slate-500">{emp.position}</div> : null}
-                    </td>
-                    <td className="px-3 py-2.5 text-xs text-slate-700">
-                      <div>{emp.department}</div>
-                      {emp.master_target ? <div className="text-[11px] text-slate-400">{emp.master_target}</div> : null}
-                    </td>
-                    <td className="px-3 py-2.5">{renderMasterBadge(emp)}</td>
-                    <td className="px-3 py-2.5">{renderAttendanceBadge(emp.attendance_status)}</td>
-                    <td className="px-3 py-2.5 text-xs tabular-nums text-slate-600">
-                      {emp.check_in_time ? <div>Vào: {emp.check_in_time.slice(11, 19) || emp.check_in_time}</div> : '—'}
-                      {emp.check_out_time ? <div>Ra: {emp.check_out_time.slice(11, 19) || emp.check_out_time}</div> : null}
-                    </td>
-                    <td className="px-3 py-2.5 text-xs">
-                      {emp.mismatch_flag ? (
-                        <span className="font-medium text-rose-700">{emp.mismatch_reason}</span>
-                      ) : emp.resign_reason ? (
-                        <span className="text-slate-600">{emp.resign_reason}</span>
-                      ) : (
-                        <span className="text-slate-400">Khớp dữ liệu</span>
-                      )}
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: 'center', padding: 24, color: '#64748b' }}>
+                      Đang tải dữ liệu đối chiếu nhân viên...
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Unregistered Van Phong staff on Master_NhanVien */}
-      {unregisteredVp.length > 0 ? (
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-bold text-slate-900">
-            Nhân sự Văn phòng trên Master_NhanVien chưa có trên máy chấm công ({unregisteredVp.length})
-          </h2>
-          <p className="mt-0.5 text-xs text-slate-500">
-            Các nhân sự thuộc khu vực VAN PHONG đang làm việc trên SharePoint nhưng chưa xuất hiện trong tbl_Employees
-          </p>
-          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {unregisteredVp.map((it) => (
-              <div key={it.sp_id || it.emp_code} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
-                <div className="font-semibold text-slate-900">{it.fullname} ({it.emp_code || '—'})</div>
-                <div className="text-slate-500">{it.target || it.team || 'VAN PHONG'} · {it.position || 'Nhân viên'}</div>
-              </div>
-            ))}
+                ) : filteredEmployees.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: 'center', padding: 24, color: '#64748b' }}>
+                      Không có nhân viên phù hợp với bộ lọc hiện tại
+                    </td>
+                  </tr>
+                ) : (
+                  filteredEmployees.map((emp) => (
+                    <tr
+                      key={emp.atid || emp.code}
+                      style={emp.mismatch_flag ? { background: '#fff1f2' } : undefined}
+                    >
+                      <td>
+                        <div style={{ fontWeight: 700, fontFamily: 'monospace' }}>{emp.code || '—'}</div>
+                        <div style={{ fontSize: 11, color: '#64748b', fontFamily: 'monospace' }}>
+                          {emp.atid}
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ fontWeight: 600 }}>{emp.fullname}</div>
+                        {emp.position ? (
+                          <div style={{ fontSize: 12, color: '#64748b' }}>{emp.position}</div>
+                        ) : null}
+                      </td>
+                      <td>
+                        <div>{emp.department}</div>
+                        {emp.master_target ? (
+                          <div style={{ fontSize: 11, color: '#64748b' }}>{emp.master_target}</div>
+                        ) : null}
+                      </td>
+                      <td>{renderMasterBadge(emp)}</td>
+                      <td>{renderAttendanceBadge(emp.attendance_status)}</td>
+                      <td style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
+                        {emp.check_in_time ? (
+                          <div>Vào: {emp.check_in_time.slice(11, 19) || emp.check_in_time}</div>
+                        ) : (
+                          '—'
+                        )}
+                        {emp.check_out_time ? (
+                          <div>Ra: {emp.check_out_time.slice(11, 19) || emp.check_out_time}</div>
+                        ) : null}
+                      </td>
+                      <td style={{ fontSize: 12 }}>
+                        {emp.mismatch_flag ? (
+                          <span style={{ color: '#be123c', fontWeight: 600 }}>
+                            {emp.mismatch_reason}
+                          </span>
+                        ) : emp.resign_reason ? (
+                          <span style={{ color: '#475569' }}>{emp.resign_reason}</span>
+                        ) : (
+                          <span style={{ color: '#94a3b8' }}>Khớp dữ liệu</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
-      ) : null}
+
+        {/* UNREGISTERED VAN PHONG STAFF */}
+        {unregisteredVp.length > 0 && (
+          <div className="card">
+            <div className="card-header">
+              <h3 className="card-title" style={{ margin: 0 }}>
+                Nhân sự Văn phòng trên Master_NhanVien chưa có trên máy chấm công ({unregisteredVp.length})
+              </h3>
+            </div>
+            <div style={{ padding: 14, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10 }}>
+              {unregisteredVp.map((it) => (
+                <div
+                  key={it.sp_id || it.emp_code}
+                  style={{
+                    border: '1px solid #e2e8f0',
+                    borderRadius: 8,
+                    padding: '8px 12px',
+                    background: '#f8fafc',
+                    fontSize: 12,
+                  }}
+                >
+                  <div style={{ fontWeight: 700, color: '#0f172a' }}>
+                    {it.fullname} ({it.emp_code || '—'})
+                  </div>
+                  <div style={{ color: '#64748b', marginTop: 2 }}>
+                    {it.target || it.team || 'VAN PHONG'} · {it.position || 'Nhân viên'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
