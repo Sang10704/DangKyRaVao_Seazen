@@ -287,8 +287,8 @@ export default function OnsiteStaffPage({ onToast }) {
   };
 
   return (
-    <div className="tino-body">
-      <div className="tino-center">
+    <div style={{ height: '100%', overflowY: 'auto', padding: '18px 22px 32px' }}>
+      <div style={{ maxWidth: 1480, margin: '0 auto' }}>
         {/* HEADER */}
         <div
           style={{
@@ -373,193 +373,187 @@ export default function OnsiteStaffPage({ onToast }) {
           </div>
         </div>
 
-        {/* CHARTS ROW (COMPACT, BALANCED) */}
+        {/* 2-COLUMN BALANCED LAYOUT (ZERO EMPTY GAPS, FULL-PAGE SCROLL) */}
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'minmax(320px, 0.9fr) minmax(380px, 1.35fr)',
+            gridTemplateColumns: 'minmax(340px, 0.92fr) minmax(480px, 1.38fr)',
             gap: 16,
-            marginBottom: 16,
             alignItems: 'start',
           }}
         >
-          <AttendanceDonutCard
-            presentNow={officePresent}
-            leftToday={officeLeft}
-            absentOrLeave={officeAbsent}
-          />
-          <DepartmentBarCard
-            departments={departments}
-            selectedDept={selectedDept}
-            onSelectDept={setSelectedDept}
-          />
-        </div>
+          {/* LEFT COLUMN: DONUT + DEPARTMENT SUMMARY */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <AttendanceDonutCard
+              presentNow={officePresent}
+              leftToday={officeLeft}
+              absentOrLeave={officeAbsent}
+            />
 
-        {/* SIDE-BY-SIDE: DEPARTMENT SUMMARY (LEFT) & STAFF LIST (RIGHT) */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(340px, 0.9fr) minmax(460px, 1.35fr)',
-            gap: 16,
-            alignItems: 'start',
-          }}
-        >
-          {/* LEFT: DEPARTMENT BREAKDOWN */}
-          <div className="card">
-            <div
-              className="card-header"
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}
-            >
-              <h3 className="card-title" style={{ margin: 0, fontSize: 14 }}>
-                Tổng hợp theo Phòng ban ({departments.length})
-              </h3>
-              {selectedDept !== 'ALL' && (
-                <button type="button" className="btn btn-sm" onClick={() => setSelectedDept('ALL')}>
-                  Tất cả
-                </button>
-              )}
-            </div>
-            <div className="table-wrap">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Phòng ban</th>
-                    <th style={{ textAlign: 'right' }}>Đang làm</th>
-                    <th style={{ textAlign: 'right' }}>Đi làm</th>
-                    <th style={{ textAlign: 'right' }}>Vắng/Phép</th>
-                    <th style={{ textAlign: 'right' }}>Tỷ lệ</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {departments.map((d) => {
-                    const isSelected = selectedDept === d.department;
-                    return (
-                      <tr
-                        key={d.department}
-                        onClick={() => setSelectedDept(isSelected ? 'ALL' : d.department)}
-                        style={{
-                          cursor: 'pointer',
-                          background: isSelected ? '#eff6ff' : d.is_field_team ? '#f8fafc' : undefined,
-                          borderTop: d.is_field_team ? '2px solid #e2e8f0' : undefined,
-                        }}
-                      >
-                        <td style={{ fontWeight: 600 }}>
-                          {d.department}
-                          {d.is_field_team && (
-                            <span style={{ display: 'block', fontSize: 11, color: '#64748b', fontWeight: 400 }}>
-                              Mục tiêu ngoài
-                            </span>
-                          )}
-                        </td>
-                        <td style={{ textAlign: 'right' }}>{d.working}</td>
-                        <td style={{ textAlign: 'right', color: '#047857', fontWeight: 700 }}>{d.attended_today}</td>
-                        <td style={{ textAlign: 'right', color: '#b45309', fontWeight: 600 }}>{d.absent_or_leave}</td>
-                        <td style={{ textAlign: 'right', fontWeight: 700 }}>{d.attended_pct}%</td>
-                      </tr>
-                    );
-                  })}
-                  {departments.length === 0 && !loading && (
+            <div className="card">
+              <div
+                className="card-header"
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}
+              >
+                <h3 className="card-title" style={{ margin: 0, fontSize: 14 }}>
+                  Tổng hợp theo Phòng ban ({departments.length})
+                </h3>
+                {selectedDept !== 'ALL' && (
+                  <button type="button" className="btn btn-sm" onClick={() => setSelectedDept('ALL')}>
+                    Tất cả
+                  </button>
+                )}
+              </div>
+              <div className="table-wrap">
+                <table className="data-table">
+                  <thead>
                     <tr>
-                      <td colSpan={5} style={{ textAlign: 'center', padding: 20, color: '#64748b' }}>
-                        Chưa có dữ liệu phòng ban
-                      </td>
+                      <th>Phòng ban</th>
+                      <th style={{ textAlign: 'right' }}>Đang làm</th>
+                      <th style={{ textAlign: 'right' }}>Đi làm</th>
+                      <th style={{ textAlign: 'right' }}>Vắng/Phép</th>
+                      <th style={{ textAlign: 'right' }}>Tỷ lệ</th>
                     </tr>
-                  )}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {departments.map((d) => {
+                      const isSelected = selectedDept === d.department;
+                      return (
+                        <tr
+                          key={d.department}
+                          onClick={() => setSelectedDept(isSelected ? 'ALL' : d.department)}
+                          style={{
+                            cursor: 'pointer',
+                            background: isSelected ? '#eff6ff' : d.is_field_team ? '#f8fafc' : undefined,
+                            borderTop: d.is_field_team ? '2px solid #e2e8f0' : undefined,
+                          }}
+                        >
+                          <td style={{ fontWeight: 600 }}>
+                            {d.department}
+                            {d.is_field_team && (
+                              <span style={{ display: 'block', fontSize: 11, color: '#64748b', fontWeight: 400 }}>
+                                Mục tiêu ngoài
+                              </span>
+                            )}
+                          </td>
+                          <td style={{ textAlign: 'right' }}>{d.working}</td>
+                          <td style={{ textAlign: 'right', color: '#047857', fontWeight: 700 }}>{d.attended_today}</td>
+                          <td style={{ textAlign: 'right', color: '#b45309', fontWeight: 600 }}>{d.absent_or_leave}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 700 }}>{d.attended_pct}%</td>
+                        </tr>
+                      );
+                    })}
+                    {departments.length === 0 && !loading && (
+                      <tr>
+                        <td colSpan={5} style={{ textAlign: 'center', padding: 20, color: '#64748b' }}>
+                          Chưa có dữ liệu phòng ban
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
 
-          {/* RIGHT: TODAY EMPLOYEE DETAIL LIST */}
-          <div className="card">
-            <div
-              className="card-header"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 8,
-                flexWrap: 'wrap',
-              }}
-            >
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {TABS.map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    className={`btn btn-sm ${activeTab === t.id ? 'btn-primary' : ''}`}
-                    onClick={() => setActiveTab(t.id)}
-                  >
-                    {t.label} ({tabCounts[t.id] ?? 0})
-                  </button>
-                ))}
+          {/* RIGHT COLUMN: DEPARTMENT BAR CHART + TODAY EMPLOYEE LIST */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <DepartmentBarCard
+              departments={departments}
+              selectedDept={selectedDept}
+              onSelectDept={setSelectedDept}
+            />
+
+            <div className="card">
+              <div
+                className="card-header"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 8,
+                  flexWrap: 'wrap',
+                }}
+              >
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {TABS.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      className={`btn btn-sm ${activeTab === t.id ? 'btn-primary' : ''}`}
+                      onClick={() => setActiveTab(t.id)}
+                    >
+                      {t.label} ({tabCounts[t.id] ?? 0})
+                    </button>
+                  ))}
+                </div>
+
+                <input
+                  type="text"
+                  className="form-control"
+                  style={{ width: 200, height: 32, padding: '4px 10px' }}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Tìm tên, mã NV..."
+                />
               </div>
 
-              <input
-                type="text"
-                className="form-control"
-                style={{ width: 200, height: 32, padding: '4px 10px' }}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Tìm tên, mã NV..."
-              />
-            </div>
-
-            <div className="table-wrap" style={{ maxHeight: 460, overflowY: 'auto' }}>
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Mã NV</th>
-                    <th>Họ và tên</th>
-                    <th>Phòng ban</th>
-                    <th>Trạng thái hôm nay</th>
-                    <th>Giờ vào / ra</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
+              <div className="table-wrap">
+                <table className="data-table">
+                  <thead>
                     <tr>
-                      <td colSpan={5} style={{ textAlign: 'center', padding: 24, color: '#64748b' }}>
-                        Đang tải dữ liệu...
-                      </td>
+                      <th>Mã NV</th>
+                      <th>Họ và tên</th>
+                      <th>Phòng ban</th>
+                      <th>Trạng thái hôm nay</th>
+                      <th>Giờ vào / ra</th>
                     </tr>
-                  ) : filteredEmployees.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} style={{ textAlign: 'center', padding: 24, color: '#64748b' }}>
-                        Không có nhân viên phù hợp
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredEmployees.map((emp) => (
-                      <tr key={emp.atid || emp.code}>
-                        <td style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 12 }}>
-                          {emp.code || emp.atid}
-                        </td>
-                        <td>
-                          <div style={{ fontWeight: 600 }}>{emp.fullname}</div>
-                          {emp.position ? (
-                            <div style={{ fontSize: 11, color: '#64748b' }}>{emp.position}</div>
-                          ) : null}
-                        </td>
-                        <td style={{ fontSize: 12 }}>{emp.department}</td>
-                        <td>{renderAttendanceBadge(emp.attendance_status)}</td>
-                        <td style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
-                          {emp.check_in_time ? (
-                            <div>Vào: {emp.check_in_time.slice(11, 19) || emp.check_in_time}</div>
-                          ) : (
-                            '—'
-                          )}
-                          {emp.check_out_time ? (
-                            <div style={{ color: '#64748b' }}>
-                              Ra: {emp.check_out_time.slice(11, 19) || emp.check_out_time}
-                            </div>
-                          ) : null}
+                  </thead>
+                  <tbody>
+                    {loading ? (
+                      <tr>
+                        <td colSpan={5} style={{ textAlign: 'center', padding: 24, color: '#64748b' }}>
+                          Đang tải dữ liệu...
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    ) : filteredEmployees.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} style={{ textAlign: 'center', padding: 24, color: '#64748b' }}>
+                          Không có nhân viên phù hợp
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredEmployees.map((emp) => (
+                        <tr key={emp.atid || emp.code}>
+                          <td style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 12 }}>
+                            {emp.code || emp.atid}
+                          </td>
+                          <td>
+                            <div style={{ fontWeight: 600 }}>{emp.fullname}</div>
+                            {emp.position ? (
+                              <div style={{ fontSize: 11, color: '#64748b' }}>{emp.position}</div>
+                            ) : null}
+                          </td>
+                          <td style={{ fontSize: 12 }}>{emp.department}</td>
+                          <td>{renderAttendanceBadge(emp.attendance_status)}</td>
+                          <td style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
+                            {emp.check_in_time ? (
+                              <div>Vào: {emp.check_in_time.slice(11, 19) || emp.check_in_time}</div>
+                            ) : (
+                              '—'
+                            )}
+                            {emp.check_out_time ? (
+                              <div style={{ color: '#64748b' }}>
+                                Ra: {emp.check_out_time.slice(11, 19) || emp.check_out_time}
+                              </div>
+                            ) : null}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>
