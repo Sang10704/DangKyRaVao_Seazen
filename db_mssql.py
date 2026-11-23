@@ -775,7 +775,7 @@ def activate_pending_visitor_db(old_visitor_id: str, new_visitor_id: str, card_n
                 cur.execute("SELECT Status FROM tbl_Visitors WHERE VisitorID = ?", (new_id,))
                 existing = cur.fetchone()
                 if existing:
-                    archived_id = f"{new_id}_old_{int(time.time())}"[:50]
+                    archived_id = f"{new_id}_old_{int(datetime.now().timestamp())}"[:50]
                     cur.execute("UPDATE tbl_Visitors SET VisitorID = ? WHERE VisitorID = ?", (archived_id, new_id))
                     cur.execute("UPDATE tbl_Visitors SET ParentVisitorID = ? WHERE ParentVisitorID = ?", (archived_id, new_id))
 
