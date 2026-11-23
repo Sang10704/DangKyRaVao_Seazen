@@ -1889,17 +1889,31 @@ def reconcile_onsite_staff(storage, target_date: Optional[str] = None, force_ref
             b["mismatch_count"] += 1
 
     departments: List[Dict[str, Any]] = []
+    def _is_chd_dept(name: str) -> bool:
+        n = _norm_person_name(name)
+        return ("chỉ huy" in n) or ("chi huy" in n)
+
     for dept, b in dept_buckets.items():
         tot = b["total"] or 1
         wrk = b["working"]
         departments.append({
             **b,
+            "is_field_team": _is_chd_dept(dept),
             "working_pct": round((b["working"] / tot) * 100, 1),
             "resigned_pct": round((b["resigned"] / tot) * 100, 1),
             "attended_pct": round((b["attended_today"] / wrk) * 100, 1) if wrk else 0.0,
             "absent_pct": round((b["absent_or_leave"] / wrk) * 100, 1) if wrk else 0.0,
         })
-    departments.sort(key=lambda x: (-x["total"], x["department"]))
+    departments.sort(key=lambda x: (1 if x["is_field_team"] else 0, -x["working"], -x["attended_today"], x["department"]))
+
+    att_priority = {"PRESENT": 0, "LEFT": 1, "ABSENT_OR_LEAVE": 2, "INACTIVE": 3}
+    reconciled_rows.sort(key=lambda r: (
+        1 if _is_chd_dept(r["department"]) else 0,
+        0 if r["master_status"] == "WORKING" else 1,
+        att_priority.get(r["attendance_status"], 9),
+        r["department"],
+        r["fullname"],
+    ))
 
     unregistered_van_phong: List[Dict[str, Any]] = []
     master_van_phong_count = 0
@@ -1914,9 +1928,17 @@ def reconcile_onsite_staff(storage, target_date: Optional[str] = None, force_ref
     wrk_total = sum(1 for r in reconciled_rows if r["master_status"] == "WORKING")
     res_total = sum(1 for r in reconciled_rows if r["master_status"] == "RESIGNED")
     pres_total = sum(1 for r in reconciled_rows if r["attendance_status"] == "PRESENT")
-    att_total = sum(1 for r in reconciled_rows if r["attendance_status"] in ("PRESENT", "LEFT"))
+    left_total = sum(1 for r in reconciled_rows if r["attendance_status"] == "LEFT")
+    att_total = pres_total + left_total
     abs_total = sum(1 for r in reconciled_rows if r["attendance_status"] == "ABSENT_OR_LEAVE")
     mis_total = sum(1 for r in reconciled_rows if r["mismatch_flag"])
+
+    office_rows = [r for r in reconciled_rows if not _is_chd_dept(r["department"])]
+    off_wrk = sum(1 for r in office_rows if r["master_status"] == "WORKING")
+    off_pres = sum(1 for r in office_rows if r["attendance_status"] == "PRESENT")
+    off_left = sum(1 for r in office_rows if r["attendance_status"] == "LEFT")
+    off_att = off_pres + off_left
+    off_abs = sum(1 for r in office_rows if r["attendance_status"] == "ABSENT_OR_LEAVE")
 
     return {
         "success": True,
@@ -1938,6 +1960,7 @@ def reconcile_onsite_staff(storage, target_date: Optional[str] = None, force_ref
             "working": wrk_total,
             "resigned": res_total,
             "present_now": pres_total,
+            "left_today": left_total,
             "attended_today": att_total,
             "absent_or_leave": abs_total,
             "mismatch_count": mis_total,
@@ -1947,6 +1970,14 @@ def reconcile_onsite_staff(storage, target_date: Optional[str] = None, force_ref
             "present_pct": round((pres_total / wrk_total) * 100, 1) if wrk_total else 0.0,
             "attended_pct": round((att_total / wrk_total) * 100, 1) if wrk_total else 0.0,
             "absent_pct": round((abs_total / wrk_total) * 100, 1) if wrk_total else 0.0,
+            "office_working": off_wrk,
+            "office_present_now": off_pres,
+            "office_left_today": off_left,
+            "office_attended_today": off_att,
+            "office_absent_or_leave": off_abs,
+            "office_present_pct": round((off_pres / off_wrk) * 100, 1) if off_wrk else 0.0,
+            "office_attended_pct": round((off_att / off_wrk) * 100, 1) if off_wrk else 0.0,
+            "office_absent_pct": round((off_abs / off_wrk) * 100, 1) if off_wrk else 0.0,
         },
         "departments": departments,
         "employees": reconciled_rows,
