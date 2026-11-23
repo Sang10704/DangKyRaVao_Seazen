@@ -178,6 +178,7 @@ def auth_me():
         return jsonify({"authenticated": False})
     host_port = request.host.split(":")[1] if ":" in str(request.host or "") else ("6869" if _IS_DEV_MODE else "6868")
     lan_ip = _get_server_lan_ip()
+    pc_name = (os.environ.get("COMPUTERNAME") or socket.gethostname() or lan_ip).strip()
     return jsonify({
         "authenticated": True,
         "user": {
@@ -187,7 +188,8 @@ def auth_me():
             "full_name": user["full_name"],
             "role": user["role"],
             "allowed_pages": user.get("allowed_pages", ["ALL"] if user["role"] == "admin" else ["/visitors"]),
-            "lan_url": f"http://{lan_ip}:{host_port}",
+            "lan_url": f"http://{pc_name}:{host_port}",
+            "lan_ip_url": f"http://{lan_ip}:{host_port}",
         }
     })
 

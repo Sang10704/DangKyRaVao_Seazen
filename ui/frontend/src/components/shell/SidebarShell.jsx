@@ -10,10 +10,9 @@ export default function SidebarShell({
   pendingAppointmentsCount = 0,
   pendingCardPhotoCount = 0,
 }) {
-  const [copiedLan, setCopiedLan] = useState(false);
+  const [copiedLanKey, setCopiedLanKey] = useState('');
 
-  const handleCopyLanUrl = async () => {
-    const url = user?.lan_url;
+  const handleCopyUrl = async (url, key) => {
     if (!url) return;
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -28,8 +27,8 @@ export default function SidebarShell({
         document.execCommand('copy');
         document.body.removeChild(ta);
       }
-      setCopiedLan(true);
-      setTimeout(() => setCopiedLan(false), 2000);
+      setCopiedLanKey(key);
+      setTimeout(() => setCopiedLanKey(''), 2000);
     } catch {
       // ignore clipboard errors
     }
@@ -222,62 +221,78 @@ export default function SidebarShell({
               background: '#f8fafc',
               border: '1px solid #e2e8f0',
               borderRadius: 12,
-              padding: '9px 11px',
+              padding: '9px 10px',
               display: 'flex',
               flexDirection: 'column',
-              gap: 5,
+              gap: 6,
             }}
           >
-            <div
+            <span
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 6,
-              }}
-            >
-              <span
-                style={{
-                  fontSize: 10,
-                  fontWeight: 700,
-                  letterSpacing: '0.04em',
-                  color: 'var(--text-muted)',
-                  textTransform: 'uppercase',
-                }}
-              >
-                Truy cập máy LAN
-              </span>
-              <button
-                type="button"
-                onClick={handleCopyLanUrl}
-                title="Sao chép địa chỉ LAN"
-                style={{
-                  border: '1px solid #cbd5e1',
-                  background: copiedLan ? '#f0fdf4' : '#ffffff',
-                  color: copiedLan ? '#15803d' : '#334155',
-                  borderRadius: 6,
-                  padding: '2px 8px',
-                  fontSize: 10.5,
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  flexShrink: 0,
-                }}
-              >
-                {copiedLan ? 'Đã chép' : 'Sao chép'}
-              </button>
-            </div>
-            <div
-              style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: 11.5,
+                fontSize: 10,
                 fontWeight: 700,
-                color: '#111111',
-                wordBreak: 'break-all',
-                userSelect: 'all',
+                letterSpacing: '0.04em',
+                color: 'var(--text-muted)',
+                textTransform: 'uppercase',
               }}
             >
-              {user.lan_url}
-            </div>
+              Truy cập máy LAN (Tên PC)
+            </span>
+            {[
+              { key: 'main', label: 'Chính', url: user.lan_url.replace(/\/+$/, '') },
+              { key: 'visitors', label: 'Lễ tân', url: `${user.lan_url.replace(/\/+$/, '')}/visitors` },
+              { key: 'appointments', label: 'Hẹn khách', url: `${user.lan_url.replace(/\/+$/, '')}/appointments` },
+            ].map((item) => {
+              const isCopied = copiedLanKey === item.key;
+              return (
+                <div
+                  key={item.key}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 6,
+                  }}
+                >
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#475569' }}>{item.label}</div>
+                    <div
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 10.5,
+                        fontWeight: 600,
+                        color: '#111111',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        userSelect: 'all',
+                      }}
+                      title={item.url}
+                    >
+                      {item.url}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyUrl(item.url, item.key)}
+                    title={`Sao chép ${item.url}`}
+                    style={{
+                      border: '1px solid #cbd5e1',
+                      background: isCopied ? '#f0fdf4' : '#ffffff',
+                      color: isCopied ? '#15803d' : '#334155',
+                      borderRadius: 6,
+                      padding: '2px 7px',
+                      fontSize: 10,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {isCopied ? 'Đã chép' : 'Chép'}
+                  </button>
+                </div>
+              );
+            })}
           </div>
         )}
         <div className="tino-workspace-box">
