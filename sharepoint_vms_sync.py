@@ -1778,6 +1778,7 @@ def reconcile_onsite_staff(storage, target_date: Optional[str] = None, force_ref
     reconciled_rows: List[Dict[str, Any]] = []
     matched_sp_ids = set()
     dept_buckets: Dict[str, Dict[str, Any]] = {}
+    excluded_resigned = 0
 
     for emp in local_emps:
         atid = str(emp.get("atid") or "").strip()
@@ -1805,9 +1806,13 @@ def reconcile_onsite_staff(storage, target_date: Optional[str] = None, force_ref
                 sp_by_code.get(code) or sp_by_code.get(code_stripped) or sp_by_code.get(atid) or sp_by_code.get(atid_stripped)
             ) else "HO_TEN"
         else:
-            sp_working_status = "Không có trên Master"
-            master_status = "RESIGNED"
-            match_method = "UNMATCHED"
+            # Không có trên Master_NhanVien hoặc đã ngưng làm việc -> loại khỏi thống kê Nhân viên tại chỗ
+            excluded_resigned += 1
+            continue
+
+        if master_status != "WORKING":
+            excluded_resigned += 1
+            continue
 
         inside_row = inside_by_atid.get(atid)
         left_row = left_by_atid.get(atid)
@@ -1959,6 +1964,7 @@ def reconcile_onsite_staff(storage, target_date: Optional[str] = None, force_ref
             "master_van_phong": master_van_phong_count,
             "working": wrk_total,
             "resigned": res_total,
+            "excluded_resigned": excluded_resigned,
             "present_now": pres_total,
             "left_today": left_total,
             "attended_today": att_total,
