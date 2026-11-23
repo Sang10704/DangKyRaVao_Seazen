@@ -10,29 +10,6 @@ export default function SidebarShell({
   pendingAppointmentsCount = 0,
   pendingCardPhotoCount = 0,
 }) {
-  const [copiedLanKey, setCopiedLanKey] = useState('');
-
-  const handleCopyUrl = async (url, key) => {
-    if (!url) return;
-    try {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(url);
-      } else {
-        const ta = document.createElement('textarea');
-        ta.value = url;
-        ta.style.position = 'fixed';
-        ta.style.opacity = '0';
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-      }
-      setCopiedLanKey(key);
-      setTimeout(() => setCopiedLanKey(''), 2000);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
   const navItems = [
     {
       path: ROUTES.OVERVIEW,
@@ -149,6 +126,16 @@ export default function SidebarShell({
         </svg>
       ),
     },
+    {
+      path: ROUTES.ACCESS_LINKS,
+      label: 'Quản lý truy cập',
+      svg: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+        </svg>
+      ),
+    },
   ];
 
   const isAdmin = user?.role === 'admin';
@@ -214,138 +201,30 @@ export default function SidebarShell({
         </nav>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {user?.lan_url && (
-          <div
-            style={{
-              background: '#f8fafc',
-              border: '1px solid #e2e8f0',
-              borderRadius: 12,
-              padding: '9px 10px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 6,
-            }}
-          >
-            <span
-              style={{
-                fontSize: 10,
-                fontWeight: 700,
-                letterSpacing: '0.04em',
-                color: 'var(--text-muted)',
-                textTransform: 'uppercase',
-              }}
-            >
-              Truy cập máy LAN (Tên PC)
-            </span>
-            {[
-              { key: 'main', label: 'Chính', url: user.lan_url.replace(/\/+$/, '') },
-              { key: 'visitors', label: 'Lễ tân', url: `${user.lan_url.replace(/\/+$/, '')}/visitors` },
-              { key: 'appointments', label: 'Hẹn khách', url: `${user.lan_url.replace(/\/+$/, '')}/appointments` },
-            ].map((item) => {
-              const isCopied = copiedLanKey === item.key;
-              return (
-                <div
-                  key={item.key}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: 6,
-                  }}
-                >
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: '#475569' }}>{item.label}</div>
-                    <div
-                      style={{
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: 10.5,
-                        fontWeight: 600,
-                        color: '#111111',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        userSelect: 'all',
-                      }}
-                      title={item.url}
-                    >
-                      {item.url}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleCopyUrl(item.url, item.key)}
-                    title={`Sao chép ${item.url}`}
-                    style={{
-                      border: '1px solid #cbd5e1',
-                      background: isCopied ? '#f0fdf4' : '#ffffff',
-                      color: isCopied ? '#15803d' : '#334155',
-                      borderRadius: 6,
-                      padding: '2px 7px',
-                      fontSize: 10,
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      flexShrink: 0,
-                    }}
-                  >
-                    {isCopied ? 'Đã chép' : 'Chép'}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        )}
-        <div className="tino-workspace-box">
-          <span className="tino-workspace-label">Không gian làm việc</span>
-          <div className="tino-workspace-row" style={{ gap: 8 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0, flex: 1 }}>
-              <div
-                style={{
-                  width: 28,
-                  height: 28,
-                  minWidth: 28,
-                  flexShrink: 0,
-                  borderRadius: '50%',
-                  background: 'var(--jet)',
-                  color: '#fff',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 10.5,
-                  fontWeight: 700,
-                }}
-              >
-                SZ
-              </div>
-              <div style={{ minWidth: 0 }}>
-                <div className="tino-workspace-name" style={{ lineHeight: 1.25 }}>SeaZen Security</div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.3, marginTop: 1 }}>
-                  {user?.full_name || 'Quản trị viên'}
-                </div>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={onLogout}
-              title="Đăng xuất"
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                color: 'var(--text-secondary)',
-                padding: 4,
-                flexShrink: 0,
-              }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-                <polyline points="16 17 21 12 16 7"></polyline>
-                <line x1="21" y1="12" x2="9" y2="12"></line>
-              </svg>
-            </button>
-          </div>
-        </div>
+      <div style={{ paddingTop: 8 }}>
+        <button
+          type="button"
+          onClick={onLogout}
+          className="btn"
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            padding: '9px 12px',
+            borderRadius: 10,
+            fontWeight: 600,
+            fontSize: 13,
+          }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+            <polyline points="16 17 21 12 16 7"></polyline>
+            <line x1="21" y1="12" x2="9" y2="12"></line>
+          </svg>
+          <span>Đăng xuất</span>
+        </button>
       </div>
     </aside>
   );

@@ -14,6 +14,7 @@ import HrmDirectoryPage from './pages/hrm/HrmDirectoryPage';
 import OnsiteStaffPage from './pages/onsite/OnsiteStaffPage';
 import BiometricsPage from './pages/biometrics/BiometricsPage';
 import TimekeepingPage from './pages/attendance/TimekeepingPage';
+import AccessLinksPage from './pages/access/AccessLinksPage';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -438,6 +439,10 @@ export default function App() {
 
             {effectivePath === ROUTES.TIMEKEEPING && (
               <TimekeepingPage departments={departments} />
+            )}
+
+            {effectivePath === ROUTES.ACCESS_LINKS && (
+              <AccessLinksPage user={user} notify={notify} />
             )}
           </div>
 

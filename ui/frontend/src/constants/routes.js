@@ -11,4 +11,5 @@ export const ROUTES = {
   ONSITE: '/onsite',
   BIOMETRICS: '/biometrics',
   TIMEKEEPING: '/timekeeping',
+  ACCESS_LINKS: '/access',
 };
