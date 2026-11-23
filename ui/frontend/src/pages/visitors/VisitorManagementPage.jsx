@@ -2115,7 +2115,7 @@ export default function VisitorManagementPage({
 
         {/* DANH SÁCH KHÁCH (GỌN GÀNG, HIỂN THỊ GIỜ VÀO/RA, THỜI LƯỢNG Ở, CẢNH BÁO >15P & NÚT "v" XEM NGƯỜI ĐI CÙNG) */}
         {!isFormOpen && (
-          <div className="card card-table-fill">
+          <div className="card card-table-fill" style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <div className="card-header" style={{ flexShrink: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <button
@@ -2123,19 +2123,7 @@ export default function VisitorManagementPage({
                 className={`btn btn-sm ${listTab === 'ACTIVE' ? 'btn-primary' : ''}`}
                 onClick={() => setListTab('ACTIVE')}
               >
-                Khách đang làm việc ({activeVisitors.length})
-              </button>
-              <button
-                type="button"
-                className={`btn btn-sm ${listTab === 'PENDING' ? 'btn-primary' : ''}`}
-                style={
-                  pendingAppointments.length > 0 && listTab !== 'PENDING'
-                    ? { borderColor: '#f59e0b', background: '#fffbeb', color: '#b45309', fontWeight: 700 }
-                    : undefined
-                }
-                onClick={() => setListTab('PENDING')}
-              >
-                Chờ cấp thẻ ({pendingAppointments.length})
+                Đang làm việc ({activeVisitors.length}) &amp; Chờ cấp thẻ ({pendingAppointments.length})
               </button>
               <button
                 type="button"
@@ -2164,15 +2152,39 @@ export default function VisitorManagementPage({
             </span>
           </div>
 
-          <div className="table-scroll">
-            {listTab === 'ACTIVE' ? (
-              <table className="data-table" key="table-active">
-                <thead>
-                  <tr>
-                    <th style={{ width: 62 }}>#</th>
-                    <th>Khách hàng &amp; Định danh</th>
-                    <th>Thẻ NFC</th>
-                    <th>Phòng ban / Người liên hệ</th>
+          {listTab === 'ACTIVE' ? (
+            <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+              {/* NỬA TRÊN: KHÁCH ĐANG LÀM VIỆC */}
+              <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', borderBottom: '2px solid #e2e8f0' }}>
+                <div
+                  style={{
+                    padding: '7px 16px',
+                    background: '#f8fafc',
+                    borderBottom: '1px solid #e2e8f0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexShrink: 0,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 12.5, fontWeight: 700, color: '#0f172a' }}>
+                      Khách đang làm việc
+                    </span>
+                    <span className="badge badge-info">{activeVisitors.length}</span>
+                  </div>
+                  <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
+                    Khách đang giữ thẻ ra vào trong tòa nhà
+                  </span>
+                </div>
+                <div className="table-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+                  <table className="data-table" key="table-active">
+                    <thead style={{ position: 'sticky', top: 0, zIndex: 2, background: '#f8fafc' }}>
+                      <tr>
+                        <th style={{ width: 62 }}>#</th>
+                        <th>Khách hàng &amp; Định danh</th>
+                        <th>Thẻ NFC</th>
+                        <th>Phòng ban / Người liên hệ</th>
                     <th>Giờ vào / Ra cổng</th>
                     <th>Ở trong CTy / Cảnh báo</th>
                     <th style={{ textAlign: 'right' }}>Thao tác</th>
@@ -2480,20 +2492,48 @@ export default function VisitorManagementPage({
                   )}
                 </tbody>
               </table>
-            ) : listTab === 'PENDING' ? (
-              <table className="data-table" key="table-pending">
-                <thead>
-                  <tr>
-                    <th style={{ width: 46 }}>#</th>
-                    <th>Khách hẹn &amp; Định danh</th>
-                    <th>Công ty &amp; Nội dung</th>
-                    <th>Phòng ban / Người liên hệ</th>
-                    <th>Khung giờ hẹn</th>
-                    <th>Trạng thái</th>
-                    <th style={{ textAlign: 'right' }}>Quẹt thẻ cấp ngay</th>
-                  </tr>
-                </thead>
-                <tbody>
+                </div>
+              </div>
+
+              {/* NỬA DƯỚI: CHỜ CẤP THẺ */}
+              <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                <div
+                  style={{
+                    padding: '7px 16px',
+                    background: pendingAppointments.length > 0 ? '#fffbeb' : '#f8fafc',
+                    borderBottom: '1px solid #e2e8f0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexShrink: 0,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 12.5, fontWeight: 700, color: pendingAppointments.length > 0 ? '#b45309' : '#0f172a' }}>
+                      Khách hẹn chờ cấp thẻ
+                    </span>
+                    <span className={`badge ${pendingAppointments.length > 0 ? 'badge-gold' : ''}`}>
+                      {pendingAppointments.length}
+                    </span>
+                  </div>
+                  <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
+                    Đặt trỏ chuột vào ô &amp; quẹt thẻ NFC để cấp ngay khi khách đến
+                  </span>
+                </div>
+                <div className="table-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+                  <table className="data-table" key="table-pending">
+                    <thead style={{ position: 'sticky', top: 0, zIndex: 2, background: '#f8fafc' }}>
+                      <tr>
+                        <th style={{ width: 46 }}>#</th>
+                        <th>Khách hẹn &amp; Định danh</th>
+                        <th>Công ty &amp; Nội dung</th>
+                        <th>Phòng ban / Người liên hệ</th>
+                        <th>Khung giờ hẹn</th>
+                        <th>Trạng thái</th>
+                        <th style={{ textAlign: 'right' }}>Quẹt thẻ cấp ngay</th>
+                      </tr>
+                    </thead>
+                    <tbody>
                   {pendingAppointments.length === 0 ? (
                     <tr>
                       <td colSpan={7} style={{ textAlign: 'center', padding: 36, color: 'var(--text-muted)' }}>
@@ -2567,9 +2607,13 @@ export default function VisitorManagementPage({
                   )}
                 </tbody>
               </table>
-            ) : (
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="table-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
               <table className="data-table" key="table-history">
-                <thead>
+                <thead style={{ position: 'sticky', top: 0, zIndex: 2, background: '#f8fafc' }}>
                   <tr>
                     <th style={{ width: 58 }}>#</th>
                     <th>Khách hàng &amp; Định danh</th>
@@ -2698,8 +2742,8 @@ export default function VisitorManagementPage({
                   )}
                 </tbody>
               </table>
-            )}
-          </div>
+            </div>
+          )}
           </div>
         )}
       </div>
