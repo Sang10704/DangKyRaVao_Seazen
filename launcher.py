@@ -325,7 +325,9 @@ def main():
     print("-" * 78)
     print(f"  [1] Truy cap tai MAY SERVER NAY : {url}")
     if not is_dev:
-        print(f"  [2] Truy cap tu MAY LE TAN (LAN): {lan_url}")
+        host_name = socket.gethostname()
+        print(f"  [2] Truy cap tu MAY LE TAN (IP) : {lan_url}")
+        print(f"  [3] Truy cap theo TEN MAY (LAN): http://{host_name}:{port}  (Hoac http://{host_name}.local:{port})")
     print("-" * 78)
 
     # 5. Open application window unless --no-browser is passed
