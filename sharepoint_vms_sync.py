@@ -1989,3 +1989,146 @@ def reconcile_onsite_staff(storage, target_date: Optional[str] = None, force_ref
         "employees": reconciled_rows,
         "unregistered_van_phong": unregistered_van_phong,
     }
+
+
+_PREREG_PULL_LOCK = threading.Lock()
+_last_prereg_pull_ts = 0.0
+
+
+def pull_preregistered_guests_from_sharepoint(
+    storage, min_interval_seconds: int = 15, force: bool = False
+) -> Dict[str, Any]:
+    """
+    2-way pull: fetches PENDING appointments created on SeaZen Portal from SharePoint list
+    'VMS SEAZEN - ĐĂNG KÝ HẸN KHÁCH' (tbl_PreRegisteredGuests) and imports any new ones into VMS
+    (storage.add_pending_visitor + tbl_PreRegisteredGuests). Throttled by min_interval_seconds.
+    """
+    global _last_prereg_pull_ts
+    now_ts = time.time()
+    if not force and (now_ts - _last_prereg_pull_ts) < min_interval_seconds:
+        return {"ok": True, "throttled": True, "imported": 0, "cancelled": 0}
+
+    if not _PREREG_PULL_LOCK.acquire(blocking=False):
+        return {"ok": True, "throttled": True, "imported": 0, "cancelled": 0}
+
+    try:
+        if not force and (time.time() - _last_prereg_pull_ts) < min_interval_seconds:
+            return {"ok": True, "throttled": True, "imported": 0, "cancelled": 0}
+        _last_prereg_pull_ts = time.time()
+
+        tok_info = get_sharepoint_tokens(allow_interactive=False)
+        if not tok_info.get("ok"):
+            return {"ok": False, "error": tok_info.get("error"), "imported": 0, "cancelled": 0}
+
+        list_id = _SP_KNOWN_LIST_IDS["tbl_PreRegisteredGuests"]
+        headers = {
+            "Authorization": f"Bearer {tok_info['sp_token']}",
+            "Accept": "application/json;odata=nometadata",
+        }
+        select_cols = (
+            "Id,Title,MaLichHen,HoVaTenKhach,SoCCCD,SoDienThoai,DonViKhach,"
+            "NguoiBaoLanh,PhongBan,NgayHen,GioBatDau,GioKetThuc,MucDich,TrangThai"
+        )
+        resp = requests.get(
+            f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items?$select={select_cols}&$orderby=Id desc&$top=300",
+            headers=headers,
+            timeout=15,
+        )
+        if resp.status_code != 200:
+            return {"ok": False, "error": f"HTTP {resp.status_code}", "imported": 0, "cancelled": 0}
+
+        sp_items = resp.json().get("value", [])
+        pending_ids = {str(p.get("id") or "").strip() for p in storage.get_pending_visitors()}
+        known_visitor_ids = set(pending_ids)
+        for av in storage.get_active_visitors():
+            if av.get("id"):
+                known_visitor_ids.add(str(av["id"]).strip())
+
+        if db_mssql.is_mssql_active():
+            try:
+                import pyodbc
+                with pyodbc.connect(db_mssql.get_connection_string(), timeout=4) as conn:
+                    cur = conn.cursor()
+                    cur.execute("SELECT TOP 500 VisitorID FROM tbl_Visitors ORDER BY CheckInTime DESC")
+                    for row in cur.fetchall():
+                        if row[0]:
+                            known_visitor_ids.add(str(row[0]).strip())
+                    cur.execute("SELECT BookingCode, Status FROM tbl_PreRegisteredGuests")
+                    for row in cur.fetchall():
+                        if row[0] and str(row[1] or "").upper() in ("CHECKED_IN", "CANCELLED"):
+                            known_visitor_ids.add(str(row[0]).strip())
+            except Exception:
+                pass
+
+        imported = 0
+        cancelled = 0
+        today_str = datetime.now().strftime("%Y-%m-%d")
+
+        for it in sp_items:
+            booking_code = str(it.get("MaLichHen") or it.get("Title") or f"sp_{it.get('Id')}").strip()
+            full_name = str(it.get("HoVaTenKhach") or "").strip()
+            if not booking_code or not full_name:
+                continue
+            status_raw = str(it.get("TrangThai") or "PENDING").strip().upper()
+
+            if status_raw in ("CANCELLED", "HỦY", "ĐÃ HỦY", "DA HUY"):
+                if booking_code in pending_ids:
+                    if storage.delete_pending_visitor(booking_code):
+                        cancelled += 1
+                continue
+
+            if status_raw not in ("PENDING", "CHỜ CẤP THẺ", "CHO CAP THE", ""):
+                continue
+
+            if booking_code in known_visitor_ids:
+                continue
+
+            visit_date = str(it.get("NgayHen") or today_str).strip()[:10] or today_str
+            start_t = str(it.get("GioBatDau") or "08:30").strip()[:5] or "08:30"
+            end_t = str(it.get("GioKetThuc") or "17:30").strip()[:5] or "17:30"
+            checkin_dt = f"{visit_date} {start_t}:00"
+            checkout_dt = f"{visit_date} {end_t}:00"
+
+            rec = {
+                "id": booking_code,
+                "full_name": full_name,
+                "cccd_number": str(it.get("SoCCCD") or "").strip(),
+                "phone": str(it.get("SoDienThoai") or "").strip(),
+                "company": str(it.get("DonViKhach") or "").strip(),
+                "department": str(it.get("PhongBan") or "").strip(),
+                "host_person": str(it.get("NguoiBaoLanh") or "").strip(),
+                "purpose": str(it.get("MucDich") or "").strip(),
+                "checkin_time": checkin_dt,
+                "expected_checkout_time": checkout_dt,
+                "card_number": "",
+                "operator": "SharePoint Portal",
+                "status": "PENDING",
+            }
+            storage.add_pending_visitor(rec)
+            if db_mssql.is_mssql_active():
+                db_mssql.upsert_pre_registered_guest_db({
+                    "BookingCode": booking_code,
+                    "GuestFullName": full_name,
+                    "GuestCCCD": rec["cccd_number"],
+                    "GuestPhone": rec["phone"],
+                    "GuestCompany": rec["company"],
+                    "HostEmployeeName": rec["host_person"],
+                    "HostDepartment": rec["department"],
+                    "VisitDate": visit_date,
+                    "StartTime": start_t,
+                    "EndTime": end_t,
+                    "Purpose": rec["purpose"],
+                    "ReservedCardNumber": "",
+                    "Status": "PENDING",
+                })
+            known_visitor_ids.add(booking_code)
+            imported += 1
+
+        if imported or cancelled:
+            logger.info("[SharePoint Pull] Imported %d new appointments, cancelled %d from SharePoint.", imported, cancelled)
+        return {"ok": True, "throttled": False, "imported": imported, "cancelled": cancelled}
+    except Exception as e:
+        logger.debug("pull_preregistered_guests_from_sharepoint warning: %s", e)
+        return {"ok": False, "error": str(e), "imported": 0, "cancelled": 0}
+    finally:
+        _PREREG_PULL_LOCK.release()

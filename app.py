@@ -330,6 +330,7 @@ def _sharepoint_realtime_reconciler():
                         pass
             try:
                 sharepoint_vms_sync.sync_master_employees_from_sharepoint(force=False)
+                sharepoint_vms_sync.pull_preregistered_guests_from_sharepoint(storage, min_interval_seconds=30)
             except Exception:
                 pass
         except Exception as e:
@@ -1801,6 +1802,14 @@ def api_visitor_card_history(card_key):
 @app.route("/api/visitor/appointments", methods=["GET"])
 @require_role(["admin", "staff", "guest_inviter"])
 def get_visitor_appointments():
+    force = str(request.args.get("refresh") or "").strip() in ("1", "true", "yes")
+    try:
+        import sharepoint_vms_sync
+        sharepoint_vms_sync.pull_preregistered_guests_from_sharepoint(
+            storage, min_interval_seconds=15, force=force
+        )
+    except Exception:
+        pass
     return jsonify({"success": True, "appointments": storage.get_pending_visitors()})
 
 
