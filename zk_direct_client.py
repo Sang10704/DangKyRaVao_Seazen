@@ -613,8 +613,25 @@ class ZkDirectClient:
         # which already have permanent 24/7 Access Control userauthorize (Timezone=1, Doors=2,1) in all 4 SenseFace 4A terminals!
         # Creating a brand-new 80xxxxxx user via TCP 4370 lacks a 'userauthorize' row on DeviceType=acc firmware and triggers "Chu kỳ thời gian không hợp lệ".
         sp_item_id = visitor_data.get("sp_item_id")
-        slot_index = (card_int % 20) if card_int else 0
-        guest_user_id = str(56235 + slot_index)
+        start_idx = (card_int % 20) if card_int else 0
+        ordered_slots = [str(56235 + ((start_idx + offset) % 20)) for offset in range(20)]
+
+        # Pick a slot consistently across live caches:
+        # 1) Reuse slot that ALREADY holds this exact card_int
+        # 2) Otherwise pick the first FREE slot (card == 0/None) across live caches — NEVER overwrite another active guest's card!
+        guest_user_id = ordered_slots[0]
+        if card_int:
+            existing_match = None
+            free_slot = None
+            all_live_maps = [self._live_userid_to_user.get(d.get("ip"), {}) for d in self.devices if d.get("ip")]
+            for s_id in ordered_slots:
+                cards_in_slot = [getattr(m.get(s_id), "card", 0) for m in all_live_maps if s_id in m]
+                if any(c == card_int for c in cards_in_slot):
+                    existing_match = s_id
+                    break
+                if free_slot is None and (not cards_in_slot or all(not c or int(c) == 0 for c in cards_in_slot)):
+                    free_slot = s_id
+            guest_user_id = existing_match or free_slot or ordered_slots[0]
 
         if card_int:
             with self._card_gen_lock:
@@ -647,38 +664,52 @@ class ZkDirectClient:
                 conn = zk.connect()
 
                 # Fast path: use cached 562xx slot UID map if already warmed by live listener
+                # Priority: 1) slot already holding card_int, 2) target guest_user_id if free (card==0) or matching,
+                # 3) any free 562xx slot (card==0) — NEVER overwrite another active guest's occupied slot!
                 cached_by_uid = self._live_userid_to_user.get(ip, {})
                 chosen_slot = None
                 if cached_by_uid:
-                    for eu in cached_by_uid.values():
-                        eu_id_str = str(getattr(eu, "user_id", "") or "").strip()
-                        if eu_id_str.startswith("562"):
-                            if card_int and getattr(eu, "card", None) == card_int:
-                                chosen_slot = eu
-                                break
-                            if eu_id_str == guest_user_id and not chosen_slot:
-                                chosen_slot = eu
+                    first_free = None
+                    for s_id in ordered_slots:
+                        eu = cached_by_uid.get(s_id)
+                        if not eu:
+                            continue
+                        eu_card = getattr(eu, "card", 0) or 0
+                        if card_int and eu_card == card_int:
+                            chosen_slot = eu
+                            break
+                        if s_id == guest_user_id and (not eu_card or int(eu_card) == 0):
+                            chosen_slot = eu
+                            break
+                        if first_free is None and (not eu_card or int(eu_card) == 0):
+                            first_free = eu
+                    if not chosen_slot:
+                        chosen_slot = first_free
 
                 if not chosen_slot:
                     existing_users = conn.get_users()
                     target_slot = None
-                    fallback_slot = None
+                    fallback_free = None
+                    fallback_requested = None
                     for eu in existing_users:
                         eu_id_str = str(eu.user_id).strip()
                         if eu_id_str.startswith("562"):
-                            if card_int and eu.card == card_int:
+                            eu_card = getattr(eu, "card", 0) or 0
+                            if card_int and eu_card == card_int:
                                 target_slot = eu
-                            elif eu_id_str == guest_user_id:
-                                fallback_slot = eu
+                            elif eu_id_str == guest_user_id and (not eu_card or int(eu_card) == 0):
+                                fallback_requested = eu
+                            elif fallback_free is None and (not eu_card or int(eu_card) == 0):
+                                fallback_free = eu
                         elif card_int and (eu.card == card_int or eu_id_str.startswith("803") or eu_id_str.startswith("809")):
                             conn.delete_user(uid=eu.uid, user_id=eu.user_id)
-                    chosen_slot = target_slot or fallback_slot
+                    chosen_slot = target_slot or fallback_requested or fallback_free
 
                 if chosen_slot:
                     slot_uid = int(chosen_slot.uid)
                     slot_user_id = str(chosen_slot.user_id).strip()
                 else:
-                    slot_uid = 1720 + slot_index
+                    slot_uid = 1720 + ((int(guest_user_id) - 56235) if guest_user_id.isdigit() else 0)
                     slot_user_id = guest_user_id
 
                 self._set_access_user_tz(

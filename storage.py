@@ -520,7 +520,11 @@ class StorageManager:
                         matched = True
                         break
 
-                if not matched and card_no:
+                # Never synthesize ghost vis_562xx rows from internal guest hardware slots (56235..56254)
+                # or anonymous "Chưa rõ" scans without a real physical card.
+                is_internal_guest_slot = clean_c.startswith("562") and len(clean_c) == 5
+                is_unknown_ghost = str(p.get("fullname") or "").strip().lower() in ("", "chưa rõ", "chua ro", "---", "unknown")
+                if not matched and card_no and not is_internal_guest_slot and not is_unknown_ghost:
                     cin_time = str(p.get("check_time") or "").replace("T", " ")
                     if len(cin_time) == 10:
                         cin_time += " " + p.get("time_only", "08:00:00")
@@ -923,14 +927,15 @@ class StorageManager:
         history.append(matched)
         _write_json(VISITOR_HISTORY_FILE, history)
 
-        # Update MSSQL
+        # Update MSSQL: prefer exact VisitorID match so colliding slots/cards never check out a different guest
         if MSSQL_AVAILABLE and db_mssql and db_mssql.is_mssql_active():
             try:
-                db_mssql.checkout_visitor_db(query, now_str)
-                if matched.get("card_number"):
-                    db_mssql.checkout_visitor_db(matched["card_number"], now_str)
                 if matched.get("id"):
                     db_mssql.checkout_visitor_db(matched["id"], now_str)
+                elif matched.get("card_number"):
+                    db_mssql.checkout_visitor_db(matched["card_number"], now_str)
+                else:
+                    db_mssql.checkout_visitor_db(query, now_str)
             except Exception as e:
                 logger.warning("Failed to checkout visitor in MSSQL: %s", e)
 
