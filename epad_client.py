@@ -106,10 +106,12 @@ class EpadClient:
         try:
             resp = self.session.request(method, url, **kwargs)
             if resp.status_code == 401:
-                logger.warning("Token expired (401). Retrying with fresh login...")
+                logger.debug("ePAD token expired (401). Retrying with fresh login...")
                 if self._ensure_authenticated(force_refresh=True):
                     kwargs["headers"] = self._get_headers()
                     resp = self.session.request(method, url, **kwargs)
+                    if resp.status_code == 401:
+                        logger.warning("ePAD auth retry still returned HTTP 401 for %s", endpoint)
             return resp
         except Exception as e:
             logger.error("Error connecting to ePAD at %s: %s", url, e)

@@ -1384,36 +1384,44 @@ class ZkDirectClient:
                         if len(data_recv) < 16:
                             continue
 
-                        cmd, _checksum, event_type, _reply_id = struct.unpack("<HHHH", data_recv[8:16])
+                        cmd, _checksum, _session_or_ev, _reply_id = struct.unpack("<HHHH", data_recv[8:16])
                         payload = data_recv[16:]
 
                         if cmd != const.CMD_REG_EVENT or not payload:
                             continue
 
-                        # 1. EF_ATTLOG (1): Full attendance / access transaction packet
-                        if event_type == const.EF_ATTLOG and len(payload) >= 12:
-                            user_id_str = ""
-                            status_val = 15
-                            punch_val = 0
-                            timehex = b""
+                        # Parse full EF_ATTLOG (12 / 32 / 36 / 52+ bytes) vs short 4-byte EF_VERIFY (uid)
+                        if len(payload) >= 12:
+                            offset = 0
+                            while len(payload) - offset >= 12:
+                                chunk = payload[offset:]
+                                user_id_str = ""
+                                status_val = 15
+                                punch_val = 0
+                                timehex = b""
 
-                            if len(payload) == 12:
-                                uid_int, status_val, punch_val, timehex = struct.unpack("<IBB6s", payload[:12])
-                                user_id_str = str(uid_int)
-                            elif len(payload) >= 32:
-                                raw_uid, status_val, punch_val, timehex = struct.unpack("<24sBB6s", payload[:32])
-                                user_id_str = raw_uid.split(b"\x00")[0].decode("utf-8", errors="ignore").strip()
-                            else:
-                                raw_uid = payload[:-8]
-                                status_val, punch_val, timehex = struct.unpack("<BB6s", payload[-8:])
-                                user_id_str = raw_uid.split(b"\x00")[0].decode("utf-8", errors="ignore").strip()
+                                if len(chunk) == 12:
+                                    uid_int, status_val, punch_val, timehex = struct.unpack("<IBB6s", chunk[:12])
+                                    user_id_str = str(uid_int)
+                                    offset += 12
+                                elif len(chunk) in (32, 36, 52):
+                                    raw_uid, status_val, punch_val, timehex = struct.unpack("<24sBB6s", chunk[:32])
+                                    user_id_str = raw_uid.split(b"\x00")[0].decode("utf-8", errors="ignore").strip()
+                                    offset += len(chunk)
+                                else:
+                                    if len(chunk) >= 32:
+                                        raw_uid, status_val, punch_val, timehex = struct.unpack("<24sBB6s", chunk[:32])
+                                    else:
+                                        raw_uid = chunk[:-8]
+                                        status_val, punch_val, timehex = struct.unpack("<BB6s", chunk[-8:])
+                                    user_id_str = raw_uid.split(b"\x00")[0].decode("utf-8", errors="ignore").strip()
+                                    offset = len(payload)
 
-                            scan_dt = self._decode_zk_timehex(timehex)
-                            dev_u = cur_userid_map.get(user_id_str)
-                            self._emit_live_scan(dev, user_id_str, status_val, punch_val, scan_dt, dev_u, on_scan_callback)
+                                scan_dt = self._decode_zk_timehex(timehex)
+                                dev_u = cur_userid_map.get(user_id_str)
+                                self._emit_live_scan(dev, user_id_str, status_val, punch_val, scan_dt, dev_u, on_scan_callback)
 
-                        # 2. EF_VERIFY (8): Verification event (4-byte internal uid)
-                        elif event_type == const.EF_VERIFY and len(payload) >= 4:
+                        elif len(payload) >= 4:
                             verified_uid = struct.unpack("<I", payload[:4])[0]
                             if 0 < verified_uid < 0xFFFFFFFF and verified_uid in cur_uid_map:
                                 dev_u = cur_uid_map[verified_uid]
@@ -1428,7 +1436,7 @@ class ZkDirectClient:
 
                     except socket.timeout:
                         idle_cycles += 1
-                        if idle_cycles >= 4:
+                        if idle_cycles >= 12:
                             idle_cycles = 0
                             try:
                                 conn.reg_event(0xFFFF)

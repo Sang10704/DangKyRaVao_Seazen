@@ -1139,8 +1139,9 @@ class StorageManager:
             for l in saved_logs:
                 chk = str(l.get("CheckTime") or l.get("Time") or "").replace("T", " ").strip()[:19]
                 who = str(l.get("EmployeeATID") or l.get("FullName") or "").strip()
+                who_key = who.lstrip("0") or who if who.isdigit() else who
                 dev = str(l.get("SerialNumber") or l.get("DeviceSerialNumber") or "").strip()
-                key = f"{chk}_{who}_{dev}"
+                key = f"{chk}_{who_key}_{dev}"
                 if key not in seen_keys:
                     seen_keys.add(key)
                     merged.append(l)
@@ -1152,8 +1153,9 @@ class StorageManager:
                     l["CheckTime"] = l["Time"]
                 chk = str(l.get("CheckTime") or l.get("Time") or "").replace("T", " ").strip()[:19]
                 who = str(l.get("EmployeeATID") or l.get("FullName") or "").strip()
+                who_key = who.lstrip("0") or who if who.isdigit() else who
                 dev = str(l.get("SerialNumber") or l.get("DeviceSerialNumber") or "").strip()
-                key = f"{chk}_{who}_{dev}"
+                key = f"{chk}_{who_key}_{dev}"
 
                 atid = str(l.get("EmployeeATID") or "").strip()
                 name = str(l.get("FullName") or "").strip()
@@ -1235,9 +1237,11 @@ class StorageManager:
         for day_str, logs in log_dict.items():
             if isinstance(logs, list):
                 for item in logs:
-                    if "CheckTime" not in item and "Time" in item:
-                        item["CheckTime"] = item["Time"]
-                    all_new.append(item)
+                    if isinstance(item, dict):
+                        if "CheckTime" not in item and "Time" in item:
+                            item["CheckTime"] = item["Time"]
+                        item.setdefault("SyncSource", "ADMS_PUSH_BRIDGE")
+                        all_new.append(item)
         if all_new:
             self.merge_and_save_scans(all_new)
         return len(all_new)
@@ -1251,8 +1255,13 @@ class StorageManager:
             l for l in all_logs
             if str(l.get("CheckTime") or l.get("Time") or "").startswith(date_str)
         ]
+
+        def _norm_scan_who(rec: Dict[str, Any]) -> str:
+            w = str(rec.get("EmployeeATID") or rec.get("FullName") or "").strip()
+            return (w.lstrip("0") or w) if w.isdigit() else w
+
         seen_keys = {
-            f"{str(l.get('CheckTime') or l.get('Time') or '').replace('T', ' ')[:19]}_{l.get('EmployeeATID', '')}_{l.get('SerialNumber') or l.get('DeviceSerialNumber', '')}"
+            f"{str(l.get('CheckTime') or l.get('Time') or '').replace('T', ' ')[:19]}_{_norm_scan_who(l)}_{l.get('SerialNumber') or l.get('DeviceSerialNumber', '')}"
             for l in filtered
         }
         if not is_all:
@@ -1261,7 +1270,7 @@ class StorageManager:
                 if db_mssql.is_mssql_active():
                     db_logs = db_mssql.get_attendance_logs_by_date_db(date_str)
                     for dl in db_logs:
-                        k = f"{str(dl.get('CheckTime', '')).replace('T', ' ')[:19]}_{dl.get('EmployeeATID', '')}_{dl.get('SerialNumber', '')}"
+                        k = f"{str(dl.get('CheckTime', '')).replace('T', ' ')[:19]}_{_norm_scan_who(dl)}_{dl.get('SerialNumber', '')}"
                         if k not in seen_keys:
                             seen_keys.add(k)
                             filtered.append(dl)
@@ -1301,6 +1310,61 @@ class StorageManager:
 
     # ---------------- Dashboard & Analytics Engine ----------------
 
+    def _build_visitor_slot_index(self):
+        """Builds active and newest-first historical visitor lookup maps keyed by normalized slot/id/card."""
+        active_by_slot: Dict[str, Dict[str, Any]] = {}
+        hist_by_slot: Dict[str, List[Dict[str, Any]]] = {}
+
+        def _index_entry(target_map, v: Dict[str, Any], as_list: bool = False):
+            vn = str(v.get("full_name") or "").strip()
+            if not vn or vn.lower().startswith("khach ") or vn.lower() in ("chưa rõ", "chua ro", "---", "unknown"):
+                return
+            keys = (
+                str(v.get("epad_atid") or "").strip().lstrip("0"),
+                str(v.get("id") or "").strip().lstrip("0"),
+                str(v.get("card_number") or "").strip().lstrip("0"),
+            )
+            for k in keys:
+                if not k:
+                    continue
+                if as_list:
+                    target_map.setdefault(k, []).append(v)
+                elif k not in target_map:
+                    target_map[k] = v
+
+        for v in (self.get_active_visitors() or []):
+            _index_entry(active_by_slot, v, as_list=False)
+        for v in (self.get_visitor_history(limit=300) or []):
+            _index_entry(hist_by_slot, v, as_list=True)
+        return active_by_slot, hist_by_slot
+
+    @staticmethod
+    def resolve_visitor_for_scan(raw_atid: str, chk_time: str, active_by_slot: Dict[str, Dict[str, Any]], hist_by_slot: Dict[str, List[Dict[str, Any]]], is_placeholder_name: bool = True):
+        """Matches a non-staff scan to the exact active or time-window historical visitor holding that slot."""
+        raw_s = str(raw_atid or "").strip()
+        norm_s = raw_s.lstrip("0") or raw_s
+        chk_norm = str(chk_time or "").replace("T", " ").strip()[:19]
+
+        act_v = active_by_slot.get(norm_s) or active_by_slot.get(raw_s)
+        act_cin = str(act_v.get("checkin_time") or "").replace("T", " ")[:19] if act_v else ""
+        if act_v and (not act_cin or chk_norm >= act_cin):
+            return act_v, True
+
+        cand_list = hist_by_slot.get(norm_s) or hist_by_slot.get(raw_s) or []
+        for hv in cand_list:
+            cin = str(hv.get("checkin_time") or "").replace("T", " ")[:19]
+            cout = str(hv.get("checkout_time") or "").replace("T", " ")[:19]
+            if cin and chk_norm[:10] == cin[:10] and chk_norm >= cin and (not cout or chk_norm <= cout):
+                return hv, True
+
+        if is_placeholder_name and cand_list:
+            for hv in cand_list:
+                if chk_norm[:10] == str(hv.get("checkin_time") or "")[:10]:
+                    return hv, False
+            return cand_list[0], False
+
+        return None, False
+
     def get_dashboard_analytics(self, target_date: Optional[str] = None, realtime_logs: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
         """
         Computes 100% real-time or historical KPI metrics, hourly access volume, and department analytics
@@ -1339,7 +1403,7 @@ class StorageManager:
         hourly_visitor_map = {f"{h:02d}": 0 for h in range(6, 23)}
         dept_counts: Dict[str, int] = {}
 
-        # Build employee index from lightweight employees.json cache (avoids 5MB JPEG/subquery load every 3s)
+        # Build employee & visitor lookup maps (avoids 5MB JPEG/subquery load every 3s)
         emp_map = {}
         for emp in _read_json(EMPLOYEES_FILE, []):
             atid = str(emp.get("atid") or "").strip()
@@ -1352,6 +1416,8 @@ class StorageManager:
             if fn:
                 emp_map[fn] = emp
 
+        vis_active_by_slot, vis_hist_by_slot = self._build_visitor_slot_index()
+
         for l in sorted_scans:
             direction = determine_scan_direction(l)
             ptype = determine_scan_person_type(l)
@@ -1360,6 +1426,7 @@ class StorageManager:
             atid = str(l.get("EmployeeATID") or "").strip()
             name = str(l.get("FullName") or "").strip()
             card = str(l.get("CardNumber") or "").strip()
+            chk_time = str(l.get("CheckTime") or l.get("Time") or "")
 
             matched_emp = emp_map.get(atid) or emp_map.get(atid.lstrip("0")) or emp_map.get(name.lower())
             d_name = l.get("Department")
@@ -1370,6 +1437,15 @@ class StorageManager:
                 name = matched_emp.get("fullname")
 
             norm_atid = atid.lstrip("0") if atid.isdigit() else atid
+            if not is_staff:
+                is_ph = (not name or name == "--" or name.lower().startswith("khach ") or name.lower() in ("chưa rõ", "chua ro", "---", "unknown"))
+                matched_v, exact_win = self.resolve_visitor_for_scan(atid, chk_time, vis_active_by_slot, vis_hist_by_slot, is_placeholder_name=is_ph)
+                if matched_v:
+                    if matched_v.get("full_name") and (exact_win or is_ph):
+                        name = matched_v["full_name"]
+                    if matched_v.get("department") and (exact_win or not d_name or str(d_name).strip() in ("--", "Chỉ Huy Đội")):
+                        d_name = matched_v["department"]
+
             pkey = norm_atid or name or card or "UNKNOWN"
 
             if is_staff:
@@ -1569,17 +1645,13 @@ class StorageManager:
         scans = self.get_saved_scans(selected_date)
         sorted_scans = sorted(scans, key=lambda x: str(x.get("CheckTime") or x.get("Time") or ""))
 
-        # Also load active visitors for rich metadata matching
-        active_visitors = self.get_active_visitors() if include_active_visitors else []
-        visitor_map_by_card = {}
-        visitor_map_by_name = {}
-        for av in active_visitors:
-            card = str(av.get("card_number") or "").strip()
-            if card:
-                visitor_map_by_card[card] = av
-            name = str(av.get("full_name") or "").strip().lower()
-            if name:
-                visitor_map_by_name[name] = av
+        # Load visitor slot indexes (active + newest-first history) for rich metadata matching
+        vis_active_by_slot, vis_hist_by_slot = self._build_visitor_slot_index() if include_active_visitors else ({}, {})
+        visitor_map_by_name = {
+            str(av.get("full_name") or "").strip().lower(): av
+            for av in vis_active_by_slot.values()
+            if av.get("full_name")
+        }
 
         # Load lightweight employee directory metadata (avoid querying FacePhotoBase64 blobs when JSON cache exists)
         employees = _read_json(EMPLOYEES_FILE, [])
@@ -1608,9 +1680,22 @@ class StorageManager:
             chk_time = str(l.get("CheckTime") or l.get("Time") or "")
             time_only = chk_time.split("T")[-1] if "T" in chk_time else (chk_time.split(" ")[-1] if " " in chk_time else chk_time)
 
+            matched_emp = emp_map.get(atid) or emp_map.get(norm_atid) or emp_map.get(name.lower())
             dept = l.get("Department") or "--"
-            if (not dept or dept == "--") and atid in emp_map:
-                dept = emp_map[atid].get("department") or "--"
+            if (not dept or dept == "--") and matched_emp:
+                dept = matched_emp.get("department") or "--"
+            if (not name or name == "--" or name.startswith("User ")) and matched_emp:
+                name = matched_emp.get("fullname") or name
+
+            matched_vis = None
+            if not is_staff and include_active_visitors:
+                is_ph = (not name or name == "--" or name.lower().startswith("khach ") or name.lower() in ("chưa rõ", "chua ro", "---", "unknown"))
+                matched_vis, exact_win = self.resolve_visitor_for_scan(atid, chk_time, vis_active_by_slot, vis_hist_by_slot, is_placeholder_name=is_ph)
+                if matched_vis:
+                    if matched_vis.get("full_name") and (exact_win or is_ph):
+                        name = matched_vis["full_name"]
+                    if matched_vis.get("department") and (exact_win or not dept or str(dept).strip() in ("--", "Chỉ Huy Đội")):
+                        dept = matched_vis["department"]
 
             person_latest[pkey] = {
                 "atid": atid,
@@ -1622,7 +1707,8 @@ class StorageManager:
                 "serial_number": l.get("SerialNumber") or "--",
                 "direction": direction,
                 "is_staff": is_staff,
-                "verify_mode": "Quét Khuôn Mặt" if is_staff else "Quẹt Thẻ RFID"
+                "verify_mode": "Quét Khuôn Mặt" if is_staff else "Quẹt Thẻ RFID",
+                "_matched_vis": matched_vis,
             }
 
         target_staff = (category.upper() == "STAFF")
@@ -1633,19 +1719,20 @@ class StorageManager:
         inside_list.sort(key=lambda x: str(x.get("check_time", "")), reverse=True)
         left_list.sort(key=lambda x: str(x.get("check_time", "")), reverse=True)
 
-        # Enrich visitor metadata if applicable
-        if not target_staff:
-            for p in inside_list + left_list:
-                card = p.get("atid") or ""
-                name_clean = p.get("fullname", "").strip().lower()
-                matched_v = visitor_map_by_card.get(card) or visitor_map_by_name.get(name_clean)
+        # Enrich visitor metadata and drop internal helper key
+        for p in inside_list + left_list:
+            matched_v = p.pop("_matched_vis", None)
+            if not target_staff:
+                if not matched_v:
+                    name_clean = p.get("fullname", "").strip().lower()
+                    matched_v = visitor_map_by_name.get(name_clean)
                 if matched_v:
                     p["company"] = matched_v.get("company") or "--"
                     p["host_person"] = matched_v.get("host_person") or "--"
                     p["phone"] = matched_v.get("phone") or "--"
                     p["cccd_number"] = matched_v.get("cccd_number") or matched_v.get("id_number") or "--"
-                    if matched_v.get("department"):
-                        p["department"] = matched_v.get("department")
+                    if matched_v.get("department") and str(p.get("department") or "") in ("", "--", "Chỉ Huy Đội"):
+                        p["department"] = matched_v["department"]
 
         # Add 1-based STT and status labels
         for idx, item in enumerate(inside_list, 1):

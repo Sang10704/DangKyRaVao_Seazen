@@ -96,11 +96,65 @@ _allowed_cors_origins = [
 ]
 CORS(app, origins=_allowed_cors_origins, supports_credentials=True)
 
-# Initialize Modules (Direct ZKTeco Hardware + ePAD Enterprise Sync)
+# Initialize Modules (Direct ZKTeco Hardware + Read-Only ePAD Log Bridge)
 zk_client = ZkDirectClient(config)
 epad_client = EpadClient(config)
 storage = StorageManager(config)
-EPAD_ENABLED = config.get("epad", {}).get("enabled", False)
+_epad_cfg = config.get("epad", {}) or {}
+EPAD_ENABLED = bool(_epad_cfg.get("enabled", False))
+# Read-only log ingestion from ePAD ADMS bridge (GET /AttendanceLog/* only; NEVER writes/mutates ePAD)
+EPAD_READ_LOGS_ENABLED = bool(_epad_cfg.get("read_logs", True)) and bool(_epad_cfg.get("api_base"))
+_epad_pull_lock = threading.Lock()
+_last_epad_rt_pull_ts = 0.0
+_last_epad_7d_pull_ts = 0.0
+
+
+def _pull_epad_realtime_scans(min_interval: float = 0.0, limit: int = 60) -> int:
+    """Safely pulls read-only real-time logs from ePAD ADMS bridge with optional cooldown."""
+    global _last_epad_rt_pull_ts
+    if not EPAD_READ_LOGS_ENABLED:
+        return 0
+    now_mono = time.monotonic()
+    if min_interval > 0 and (now_mono - _last_epad_rt_pull_ts) < min_interval:
+        return 0
+    if not _epad_pull_lock.acquire(blocking=False):
+        return 0
+    try:
+        if min_interval > 0 and (time.monotonic() - _last_epad_rt_pull_ts) < min_interval:
+            return 0
+        rt_push_logs = epad_client.get_realtime_attendance_logs(limit=limit)
+        _last_epad_rt_pull_ts = time.monotonic()
+        if rt_push_logs:
+            for rec in rt_push_logs:
+                if isinstance(rec, dict):
+                    rec.setdefault("SyncSource", "ADMS_PUSH_BRIDGE")
+            storage.merge_and_save_scans(rt_push_logs)
+            return len(rt_push_logs)
+        return 0
+    finally:
+        _epad_pull_lock.release()
+
+
+def _pull_epad_7day_scans(min_interval: float = 0.0) -> int:
+    """Safely pulls read-only 7-day logs from ePAD ADMS bridge with optional cooldown."""
+    global _last_epad_7d_pull_ts
+    if not EPAD_READ_LOGS_ENABLED:
+        return 0
+    now_mono = time.monotonic()
+    if min_interval > 0 and (now_mono - _last_epad_7d_pull_ts) < min_interval:
+        return 0
+    if not _epad_pull_lock.acquire(blocking=False):
+        return 0
+    try:
+        if min_interval > 0 and (time.monotonic() - _last_epad_7d_pull_ts) < min_interval:
+            return 0
+        logs_7d = epad_client.get_log_last_7_days()
+        _last_epad_7d_pull_ts = time.monotonic()
+        if logs_7d:
+            return storage.sync_epad_7day_logs(logs_7d)
+        return 0
+    finally:
+        _epad_pull_lock.release()
 
 DOORS_CONFIG = config.get("doors", [])
 DOOR_NAME_MAP = {d["id"]: d["name"] for d in DOORS_CONFIG}
@@ -265,20 +319,19 @@ def _background_scan_collector():
     except Exception as ex:
         logger.warning("[Harvester Daemon] Lỗi quét bù ban đầu TCP 4370: %s", ex)
 
-    # 2b. Initial 7-day & Today ADMS Push Mirror Backfill ONLY if ePAD is explicitly enabled
-    if EPAD_ENABLED:
+    # 2b. Initial 7-day & Today Read-Only ADMS Push Mirror Backfill
+    if EPAD_READ_LOGS_ENABLED:
         try:
-            logs_7d = epad_client.get_log_last_7_days()
-            if logs_7d:
-                added_7d = storage.sync_epad_7day_logs(logs_7d)
-                logger.info("[Harvester Daemon] Đồng bộ ADMS Push 7 ngày gần nhất: +%d bản ghi mới", added_7d)
+            added_7d = _pull_epad_7day_scans()
+            if added_7d:
+                logger.info("[Harvester Daemon] Đồng bộ ADMS Push (Read-Only) 7 ngày gần nhất: %d bản ghi", added_7d)
         except Exception as ex:
             logger.debug("[Harvester Daemon] ADMS 7-day backfill skipped: %s", ex)
 
     last_clock_sync = time.time()
     last_7d_sync = time.time()
 
-    # 3. Continuous Hybrid Check Loop (4s interval for TCP 4370 fallback + optional ePAD if enabled)
+    # 3. Continuous Hybrid Check Loop (4s interval for TCP 4370 fallback + read-only ADMS log bridge)
     while True:
         try:
             now_ts = time.time()
@@ -289,20 +342,16 @@ def _background_scan_collector():
                 except Exception as ex:
                     logger.debug("[Harvester Daemon] Clock audit cycle warning: %s", ex)
 
-            if EPAD_ENABLED:
+            if EPAD_READ_LOGS_ENABLED:
                 try:
-                    rt_push_logs = epad_client.get_realtime_attendance_logs(limit=60)
-                    if rt_push_logs:
-                        storage.merge_and_save_scans(rt_push_logs)
+                    _pull_epad_realtime_scans(min_interval=0.0, limit=60)
                 except Exception:
                     pass
 
-                if now_ts - last_7d_sync > 30:
+                if now_ts - last_7d_sync > 20:
                     last_7d_sync = now_ts
                     try:
-                        logs_7d = epad_client.get_log_last_7_days()
-                        if logs_7d:
-                            storage.sync_epad_7day_logs(logs_7d)
+                        _pull_epad_7day_scans(min_interval=0.0)
                     except Exception:
                         pass
 
@@ -851,25 +900,20 @@ def realtime_logs():
     search_query = (request.args.get("search") or "").strip().lower()
     limit = _safe_int(request.args.get("limit", 1000), 1000, 1, 5000)
 
+    if (is_today or target_date.upper() == "ALL") and EPAD_READ_LOGS_ENABLED:
+        try:
+            _pull_epad_realtime_scans(min_interval=3.5, limit=60)
+        except Exception:
+            pass
+
     # Scans are continuously collected and merged 24/7 by background thread
     scans = storage.get_saved_scans(target_date)
 
-    # Build fast lookup from active + recent visitors so 562xx hardware slots always show real Guest Name & RFID Card
-    visitor_by_slot = {}
+    # Build active & date-aware historical lookup so 562xx hardware slots always resolve real Guest Name & RFID Card
     try:
-        all_vis = (storage.get_active_visitors() or []) + (storage.get_visitor_history(limit=300) or [])
-        for v in all_vis:
-            v_name = str(v.get("full_name") or "").strip()
-            if not v_name or v_name.lower().startswith("khach ") or v_name.lower() in ("chưa rõ", "chua ro", "---", "unknown"):
-                continue
-            v_id = str(v.get("id") or "").strip().lstrip("0")
-            v_epad = str(v.get("epad_atid") or "").strip().lstrip("0")
-            v_card = str(v.get("card_number") or "").strip().lstrip("0")
-            for k in (v_epad, v_id, v_card):
-                if k and k not in visitor_by_slot:
-                    visitor_by_slot[k] = v
+        active_by_slot, history_by_slot = storage._build_visitor_slot_index()
     except Exception:
-        pass
+        active_by_slot, history_by_slot = {}, {}
 
     enriched = []
     for l in scans:
@@ -884,17 +928,21 @@ def realtime_logs():
             continue
 
         item = dict(l)
+        chk = str(item.get("CheckTime") or item.get("Time") or "")
         raw_atid = str(item.get("EmployeeATID") or "").strip()
-        norm_atid = raw_atid.lstrip("0") or raw_atid
         raw_name = str(item.get("FullName") or "").strip()
-        if (not is_staff) and (not raw_name or raw_name.lower().startswith("khach ") or raw_name.lower() in ("chưa rõ", "chua ro", "---", "unknown")):
-            matched_v = visitor_by_slot.get(norm_atid) or visitor_by_slot.get(raw_atid)
+        is_placeholder_name = (not raw_name or raw_name.lower().startswith("khach ") or raw_name.lower() in ("chưa rõ", "chua ro", "---", "unknown"))
+
+        if not is_staff:
+            matched_v, override_card = storage.resolve_visitor_for_scan(
+                raw_atid, chk, active_by_slot, history_by_slot, is_placeholder_name=is_placeholder_name
+            )
             if matched_v:
-                if matched_v.get("full_name"):
+                if matched_v.get("full_name") and (override_card or is_placeholder_name):
                     item["FullName"] = matched_v["full_name"]
-                if matched_v.get("card_number") and not item.get("CardNumber"):
+                if matched_v.get("card_number") and (override_card or not item.get("CardNumber")):
                     item["CardNumber"] = matched_v["card_number"]
-                if matched_v.get("department") and str(item.get("Department") or "").strip() in ("", "--", "Chỉ Huy Đội"):
+                if matched_v.get("department") and (override_card or str(item.get("Department") or "").strip() in ("", "--", "Chỉ Huy Đội")):
                     item["Department"] = matched_v["department"]
 
         item["direction"] = direction
@@ -903,7 +951,6 @@ def realtime_logs():
         item["category"] = category
         item["category_name"] = ptype["category_name"]
 
-        chk = str(item.get("CheckTime") or item.get("Time") or "")
         item["CheckTime"] = chk
         time_part = chk.split("T")[-1] if "T" in chk else (chk.split(" ")[-1] if " " in chk else chk)
         item["TimeFormatted"] = time_part
@@ -1649,11 +1696,10 @@ def get_dashboard_analytics():
     target_date = request.args.get("date")
     now_str = datetime.now().strftime("%Y-%m-%d")
     is_today = not target_date or target_date == now_str
-    if is_today and EPAD_ENABLED:
+    if is_today and EPAD_READ_LOGS_ENABLED:
         try:
-            live = epad_client.get_log_last_7_days()
-            if live:
-                storage.sync_epad_7day_logs(live)
+            _pull_epad_realtime_scans(min_interval=3.5, limit=60)
+            _pull_epad_7day_scans(min_interval=15.0)
         except Exception:
             pass
 
@@ -1675,12 +1721,11 @@ def get_present_details_endpoint():
     target_date = request.args.get("date") or datetime.now().strftime("%Y-%m-%d")
     is_today = (target_date == datetime.now().strftime("%Y-%m-%d"))
 
-    # If today, sync latest logs from ePAD
-    if is_today and EPAD_ENABLED:
+    # If today, sync latest read-only logs from ePAD bridge
+    if is_today and EPAD_READ_LOGS_ENABLED:
         try:
-            live = epad_client.get_log_last_7_days()
-            if live:
-                storage.sync_epad_7day_logs(live)
+            _pull_epad_realtime_scans(min_interval=3.5, limit=60)
+            _pull_epad_7day_scans(min_interval=15.0)
         except Exception:
             pass
 
