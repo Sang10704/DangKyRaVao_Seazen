@@ -167,8 +167,9 @@ function evaluateVisitorTiming(v, nowMs) {
 }
 
 function groupVisitorsByParent(rawList) {
-  const normalized = (rawList || []).map((item) => ({
+  const normalized = (rawList || []).map((item, idx) => ({
     ...item,
+    _instKey: `${item.id || item.VisitorCode || item.VisitorID || 'row'}__${item.checkin_time || item.CheckInTime || ''}__${idx}`,
     id: item.id || item.VisitorCode || item.VisitorID,
     full_name: item.full_name || item.FullName || 'Khách',
     cccd_number: item.cccd_number || item.CCCDNumber || '',
@@ -184,37 +185,66 @@ function groupVisitorsByParent(rawList) {
     parent_visitor_name: item.parent_visitor_name || item.ParentVisitorName || '',
   }));
 
-  const byId = new Map();
-  const byNameDate = new Map();
+  const stripArchiveSuffix = (val) => String(val || '').replace(/_h_\d+$/, '');
+  const toMs = (ts) => {
+    if (!ts) return NaN;
+    const d = new Date(String(ts).replace(' ', 'T'));
+    return Number.isNaN(d.getTime()) ? NaN : d.getTime();
+  };
+  const isCompanionRow = (v) =>
+    Boolean(v.parent_visitor_id) || String(v.purpose || '').startsWith('Đi cùng đoàn:');
+
+  // Only non-companion rows can act as group leaders, and matching is scoped by
+  // same check-in date + matching parent_visitor_name (when present) so reused
+  // hardware slot IDs (e.g. 56239, 56252) never cross-link different visits.
+  const candidateParents = normalized.filter((v) => !isCompanionRow(v) && v.id);
+
   const parentNodes = [];
   const childMap = new Map();
 
   for (const v of normalized) {
-    if (v.id) byId.set(String(v.id), v);
+    let matchedParent = null;
     const cinDay = String(v.checkin_time || '').slice(0, 10);
-    const fNameKey = `${foldVn(v.full_name)}|${cinDay}`;
-    if (!byNameDate.has(fNameKey) && !v.parent_visitor_id && !String(v.purpose || '').startsWith('Đi cùng đoàn:')) {
-      byNameDate.set(fNameKey, v);
-    }
-  }
+    const vMs = toMs(v.checkin_time);
+    const vPid = stripArchiveSuffix(v.parent_visitor_id);
+    const vPNameFold = foldVn(v.parent_visitor_name);
 
-  for (const v of normalized) {
-    let resolvedParentId = v.parent_visitor_id ? String(v.parent_visitor_id) : '';
-    if (!resolvedParentId) {
+    if (vPid) {
+      const candidates = candidateParents.filter((p) => {
+        if (p._instKey === v._instKey) return false;
+        const pId = stripArchiveSuffix(p.id);
+        if (String(p.id) !== String(v.parent_visitor_id) && pId !== vPid) return false;
+        const pDay = String(p.checkin_time || '').slice(0, 10);
+        if (cinDay && pDay && pDay !== cinDay) return false;
+        if (vPNameFold && foldVn(p.full_name) !== vPNameFold) return false;
+        return true;
+      });
+      if (candidates.length > 0) {
+        candidates.sort((a, b) => {
+          const da = Number.isNaN(vMs) || Number.isNaN(toMs(a.checkin_time)) ? 0 : Math.abs(toMs(a.checkin_time) - vMs);
+          const db = Number.isNaN(vMs) || Number.isNaN(toMs(b.checkin_time)) ? 0 : Math.abs(toMs(b.checkin_time) - vMs);
+          return da - db;
+        });
+        matchedParent = candidates[0];
+      }
+    } else {
       const m = String(v.purpose || '').match(/^Đi cùng đoàn:\s*([^-\n]+)/i);
       if (m) {
-        const pName = m[1].trim();
-        const cinDay = String(v.checkin_time || '').slice(0, 10);
-        const foundParent = byNameDate.get(`${foldVn(pName)}|${cinDay}`);
-        if (foundParent && foundParent.id && String(foundParent.id) !== String(v.id)) {
-          resolvedParentId = String(foundParent.id);
+        const pNameFold = foldVn(m[1].trim());
+        const candidates = candidateParents.filter((p) => {
+          if (p._instKey === v._instKey) return false;
+          const pDay = String(p.checkin_time || '').slice(0, 10);
+          return (!cinDay || !pDay || pDay === cinDay) && foldVn(p.full_name) === pNameFold;
+        });
+        if (candidates.length > 0) {
+          matchedParent = candidates[0];
         }
       }
     }
 
-    if (resolvedParentId && byId.has(resolvedParentId) && resolvedParentId !== String(v.id)) {
-      if (!childMap.has(resolvedParentId)) childMap.set(resolvedParentId, []);
-      childMap.get(resolvedParentId).push(v);
+    if (matchedParent) {
+      if (!childMap.has(matchedParent._instKey)) childMap.set(matchedParent._instKey, []);
+      childMap.get(matchedParent._instKey).push(v);
     } else {
       parentNodes.push(v);
     }
@@ -222,7 +252,7 @@ function groupVisitorsByParent(rawList) {
 
   return parentNodes.map((p) => ({
     ...p,
-    companions: childMap.get(String(p.id)) || [],
+    companions: childMap.get(p._instKey) || [],
   }));
 }
 
