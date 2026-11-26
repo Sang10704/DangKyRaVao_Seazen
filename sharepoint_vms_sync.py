@@ -445,16 +445,39 @@ def _find_token_cache_paths() -> List[str]:
     return out
 
 
+def _jwt_remaining_seconds(token_str: str) -> float:
+    """Returns remaining lifetime in seconds of a JWT access_token, or 0.0 if unreadable."""
+    try:
+        import base64
+        parts = str(token_str or "").split(".")
+        if len(parts) < 2:
+            return 0.0
+        pad = parts[1] + "=" * ((4 - len(parts[1]) % 4) % 4)
+        claims = json.loads(base64.urlsafe_b64decode(pad))
+        return float(claims.get("exp", 0)) - time.time()
+    except Exception:
+        return 0.0
+
+
+def invalidate_sharepoint_token_cache() -> None:
+    """Clears in-memory SharePoint OAuth2 & FormDigest caches on HTTP 401."""
+    with _TOKEN_CACHE_LOCK:
+        _MEM_TOKEN_CACHE.clear()
+        _SP_DIGEST_CACHE["digest"] = ""
+        _SP_DIGEST_CACHE["ts"] = 0.0
+        _SP_DIGEST_CACHE["token"] = ""
+
+
 def get_sharepoint_tokens(allow_interactive: bool = False) -> Dict[str, Any]:
     """
     Acquires both Graph API and SharePoint Online REST API OAuth2 Bearer tokens
     using SEAZENHR-PORTAL (0390280b-12b8-49c4-adbf-a9c2b8bccfb5).
-    Thread-safe with in-memory TTL cache + atomic DPAPI persistence.
+    Thread-safe with JWT-exp-aware in-memory cache + atomic DPAPI persistence.
     """
     with _TOKEN_CACHE_LOCK:
         now_ts = time.time()
         mem = _MEM_TOKEN_CACHE.get("data")
-        if mem and mem.get("ok") and (now_ts - float(_MEM_TOKEN_CACHE.get("ts") or 0)) < 1800:
+        if mem and mem.get("ok") and _jwt_remaining_seconds(mem.get("sp_token", "")) > 300:
             return dict(mem)
 
         base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -878,6 +901,8 @@ def sync_table_to_sharepoint(sql_table: str, max_rows: int = 200, ensure_schema:
         )
         if r_items.status_code != 200:
             # CRITICAL GUARD: NEVER treat failed GET (429/401/500) as empty list, or POST will duplicate all items!
+            if r_items.status_code == 401:
+                invalidate_sharepoint_token_cache()
             logger.warning("[SP Sync ABORT %s] GET existing items failed HTTP %s: %s", sql_table, r_items.status_code, r_items.text[:160])
             return {"success": False, "sql_table": sql_table, "error": f"SharePoint GET HTTP {r_items.status_code}"}
         for it in r_items.json().get("value", []):
