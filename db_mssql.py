@@ -675,40 +675,59 @@ def insert_visitor_db(v: Dict[str, Any]) -> bool:
             parent_name = str(v.get("parent_visitor_name") or "")[:255] or None
             status_val = str(v.get("status") or "ACTIVE").strip().upper()[:50]
 
-            cursor.execute("""
-                IF NOT EXISTS (SELECT 1 FROM tbl_Visitors WHERE VisitorID = ?)
-                BEGIN
+            cursor.execute("SELECT Status FROM tbl_Visitors WHERE VisitorID = ?", (v_id,))
+            existing_row = cursor.fetchone()
+            existing_status = str(existing_row[0] or "").strip().upper() if existing_row else ""
+
+            if existing_row and existing_status != "ACTIVE" and status_val == "ACTIVE":
+                # Hardware slot reuse (e.g. 562xx): archive previous checked-out/pending row
+                # so history is preserved and stale ParentVisitorID/CheckoutTime never leak.
+                arch_suffix = datetime.now().strftime("%Y%m%d%H%M%S%f")[:18]
+                arch_id = f"{v_id[:30]}_h_{arch_suffix}"[:50]
+                cursor.execute(
+                    "UPDATE tbl_Visitors SET VisitorID = ? WHERE VisitorID = ?",
+                    (arch_id, v_id),
+                )
+                existing_row = None
+
+            if not existing_row:
+                cursor.execute("""
                     INSERT INTO tbl_Visitors (
                         VisitorID, FullName, CCCDNumber, CardNumber, Company, Department,
-                        HostPerson, Purpose, CheckinTime, ExpectedCheckoutTime, Status, Operator, Phone, BirthDate,
+                        HostPerson, Purpose, CheckinTime, ExpectedCheckoutTime, CheckoutTime,
+                        DurationMinutes, Status, Operator, Phone, BirthDate,
                         ParentVisitorID, ParentVisitorName
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                END
-                ELSE
-                BEGIN
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?)
+                """, (
+                    v_id, v.get("full_name") or "Khách", v.get("cccd_number") or "",
+                    v.get("card_number") or "", v.get("company") or "", v.get("department") or "",
+                    v.get("host_person") or "", v.get("purpose") or "", cin_dt, exp_dt, status_val,
+                    v.get("operator") or "Bảo vệ", v.get("phone") or "", v.get("birth_date") or "",
+                    parent_id, parent_name,
+                ))
+            else:
+                cursor.execute("""
                     UPDATE tbl_Visitors
                     SET FullName = ?, CCCDNumber = ?, CardNumber = ?, Company = ?, Department = ?,
                         HostPerson = ?, Purpose = ?, CheckinTime = ?, ExpectedCheckoutTime = ?, Status = ?,
+                        Operator = COALESCE(NULLIF(?, ''), Operator),
                         Phone = COALESCE(NULLIF(?, ''), Phone),
                         BirthDate = COALESCE(NULLIF(?, ''), BirthDate),
-                        ParentVisitorID = COALESCE(?, ParentVisitorID),
-                        ParentVisitorName = COALESCE(?, ParentVisitorName)
+                        ParentVisitorID = ?,
+                        ParentVisitorName = ?,
+                        CheckoutTime = CASE WHEN ? = 'ACTIVE' THEN NULL ELSE CheckoutTime END,
+                        DurationMinutes = CASE WHEN ? = 'ACTIVE' THEN NULL ELSE DurationMinutes END
                     WHERE VisitorID = ?
-                END
-            """, (
-                v_id,
-                v_id, v.get("full_name") or "Khách", v.get("cccd_number") or "",
-                v.get("card_number") or "", v.get("company") or "", v.get("department") or "",
-                v.get("host_person") or "", v.get("purpose") or "", cin_dt, exp_dt, status_val,
-                v.get("operator") or "Bảo vệ", v.get("phone") or "", v.get("birth_date") or "",
-                parent_id, parent_name,
-                v.get("full_name") or "Khách", v.get("cccd_number") or "",
-                v.get("card_number") or "", v.get("company") or "", v.get("department") or "",
-                v.get("host_person") or "", v.get("purpose") or "", cin_dt, exp_dt, status_val,
-                v.get("phone") or "", v.get("birth_date") or "",
-                parent_id, parent_name,
-                v_id
-            ))
+                """, (
+                    v.get("full_name") or "Khách", v.get("cccd_number") or "",
+                    v.get("card_number") or "", v.get("company") or "", v.get("department") or "",
+                    v.get("host_person") or "", v.get("purpose") or "", cin_dt, exp_dt, status_val,
+                    v.get("operator") or "",
+                    v.get("phone") or "", v.get("birth_date") or "",
+                    parent_id, parent_name,
+                    status_val, status_val,
+                    v_id,
+                ))
             conn.commit()
             return True
     except Exception as e:
