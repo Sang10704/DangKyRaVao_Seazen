@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ROUTES } from '../../constants/routes';
 import { apiFetch } from '../../services/apiClient';
+import { getLocalDateStr } from '../../utils/dateUtils';
 
 export default function LiveCommandPage({
   user,
@@ -30,7 +31,8 @@ export default function LiveCommandPage({
     setLoadingAudit(true);
     try {
       const { ok, data } = await apiFetch('/api/door/audit_logs?limit=100');
-      if (ok && data?.logs) setAuditLogs(data.logs);
+      const rows = data?.actions || data?.logs;
+      if (ok && Array.isArray(rows)) setAuditLogs(rows);
     } finally {
       setLoadingAudit(false);
     }
@@ -54,15 +56,23 @@ export default function LiveCommandPage({
   const weekDays = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(todayObj);
     d.setDate(todayObj.getDate() - 3 + i);
+    const localIso = getLocalDateStr(d);
     return {
       name: dayNames[d.getDay()],
       num: d.getDate(),
-      iso: d.toISOString().slice(0, 10),
-      isSelected: d.toISOString().slice(0, 10) === scanDate,
+      iso: localIso,
+      isSelected: localIso === scanDate,
     };
   });
 
   const staffInside = analytics?.currently_inside_staff ?? 0;
+  const auditDevicesList = Object.values(clockAudit?.devices || {});
+  const onlineDevicesCount = auditDevicesList.filter(
+    (d) => d?.status === 'OK' || d?.status === 'DRIFT_WARNING'
+  ).length;
+  const onlineSummaryLabel = auditDevicesList.length
+    ? `${onlineDevicesCount}/${auditDevicesList.length} Online`
+    : 'Đang kiểm tra kết nối';
 
   return (
     <div className="tino-body">
@@ -74,7 +84,7 @@ export default function LiveCommandPage({
               Điều khiển 4 Làn Cổng ZKTeco SenseFace · Giám sát đóng/mở trực tuyến
             </div>
             <h1 className="tino-greeting-title">
-              Quản lý Cửa &amp; Làn Ra Vào (4/4 Online)
+              Quản lý Cửa &amp; Làn Ra Vào ({onlineSummaryLabel})
             </h1>
           </div>
 
@@ -82,6 +92,7 @@ export default function LiveCommandPage({
             <button
               type="button"
               className="btn btn-gold"
+              disabled={Boolean(doorLoading?.ALL_DOORS)}
               onClick={() => onDoorAll('UNLOCK_ALL', 3)}
             >
               Mở khẩn cấp 4 làn (3s)
@@ -89,6 +100,7 @@ export default function LiveCommandPage({
             <button
               type="button"
               className="btn btn-primary"
+              disabled={Boolean(doorLoading?.ALL_DOORS)}
               onClick={() => onDoorAll('LOCK_ALL', 0)}
             >
               Khóa toàn bộ 4 làn
@@ -210,6 +222,7 @@ export default function LiveCommandPage({
                   <button
                     type="button"
                     className="btn btn-sm"
+                    disabled={Boolean(doorLoading?.[`${lane.sn}_LOCK`] || isBusy)}
                     style={
                       lane.dark
                         ? { background: 'transparent', borderColor: '#3f3f46', color: '#fca5a5' }
@@ -286,33 +299,35 @@ export default function LiveCommandPage({
                       </td>
                     </tr>
                   ) : (
-                    auditLogs.map((a, idx) => (
-                      <tr key={a.AuditID || idx}>
-                        <td style={{ color: 'var(--text-muted)' }}>{idx + 1}</td>
-                        <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-                          {String(a.CreatedAt || a.created_at || '').replace('T', ' ').slice(0, 19)}
-                        </td>
-                        <td style={{ fontWeight: 700 }}>{a.Operator || a.operator || 'Quản trị viên'}</td>
-                        <td>{a.DoorName || a.DeviceIP || a.door_name || 'Toàn bộ 4 làn'}</td>
-                        <td>
-                          <span className="badge badge-dark">{a.Action || a.action || 'CMD'}</span>
-                        </td>
-                        <td>
-                          <span
-                            className={`badge ${
-                              String(a.Status || a.status || '').toUpperCase() === 'SUCCESS' || a.Success
-                                ? 'badge-green'
-                                : 'badge-red'
-                            }`}
-                          >
-                            {a.Status || (a.Success ? 'SUCCESS' : 'FAILED')}
-                          </span>
-                        </td>
-                        <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                          {a.Detail || a.Message || a.detail || '—'}
-                        </td>
-                      </tr>
-                    ))
+                    auditLogs.map((a, idx) => {
+                      const isOk =
+                        typeof a.success === 'boolean'
+                          ? a.success
+                          : String(a.Status || a.status || '').toUpperCase() === 'SUCCESS' || Boolean(a.Success);
+                      const ts = String(a.timestamp || a.CreatedAt || a.created_at || '').replace('T', ' ').slice(0, 19);
+                      const detailTxt =
+                        a.Detail ||
+                        a.Message ||
+                        a.detail ||
+                        (a.duration_sec ? `Giữ mở ${a.duration_sec} giây` : '—');
+                      return (
+                        <tr key={a.id || a.AuditID || idx}>
+                          <td style={{ color: 'var(--text-muted)' }}>{idx + 1}</td>
+                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{ts}</td>
+                          <td style={{ fontWeight: 700 }}>{a.Operator || a.operator || 'Quản trị viên'}</td>
+                          <td>{a.DoorName || a.DeviceIP || a.door_name || 'Toàn bộ 4 làn'}</td>
+                          <td>
+                            <span className="badge badge-dark">{a.Action || a.action || 'CMD'}</span>
+                          </td>
+                          <td>
+                            <span className={`badge ${isOk ? 'badge-green' : 'badge-red'}`}>
+                              {a.Status || (isOk ? 'SUCCESS' : 'FAILED')}
+                            </span>
+                          </td>
+                          <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{detailTxt}</td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -340,7 +355,7 @@ export default function LiveCommandPage({
                   </tr>
                 ) : (
                   realtimeLogs.map((row, idx) => (
-                    <tr key={idx}>
+                    <tr key={`${row.CheckTime || ''}_${row.EmployeeATID || ''}_${row.SerialNumber || ''}_${idx}`}>
                       <td style={{ color: 'var(--text-muted)' }}>{idx + 1}</td>
                       <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{row.CheckTime}</td>
                       <td style={{ fontFamily: 'var(--font-mono)' }}>{row.EmployeeATID}</td>

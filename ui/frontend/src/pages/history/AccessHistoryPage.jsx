@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { apiFetch } from '../../services/apiClient';
+import { getLocalDateStr } from '../../utils/dateUtils';
 
 export default function AccessHistoryPage({ notify }) {
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = getLocalDateStr();
   const [selectedDate, setSelectedDate] = useState(todayStr);
   const [directionFilter, setDirectionFilter] = useState('ALL'); // ALL | IN | OUT
   const [personFilter, setPersonFilter] = useState('ALL'); // ALL | STAFF | VISITOR
@@ -14,7 +15,7 @@ export default function AccessHistoryPage({ notify }) {
     async (silent = false) => {
       try {
         if (!silent) setLoading(true);
-        const dateParam = selectedDate === 'ALL' ? '' : selectedDate;
+        const dateParam = selectedDate === 'ALL' ? 'ALL' : selectedDate;
         const { ok, data } = await apiFetch(
           `/api/door/realtime_logs?date=${encodeURIComponent(
             dateParam

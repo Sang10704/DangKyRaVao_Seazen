@@ -15,6 +15,7 @@ import OnsiteStaffPage from './pages/onsite/OnsiteStaffPage';
 import BiometricsPage from './pages/biometrics/BiometricsPage';
 import TimekeepingPage from './pages/attendance/TimekeepingPage';
 import AccessLinksPage from './pages/access/AccessLinksPage';
+import { getLocalDateStr } from './utils/dateUtils';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -30,7 +31,7 @@ export default function App() {
   const [clockModalOpen, setClockModalOpen] = useState(false);
 
   // Live Page State
-  const [scanDate, setScanDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [scanDate, setScanDate] = useState(() => getLocalDateStr());
   const [scanCategory, setScanCategory] = useState('ALL');
   const [scanDirection, setScanDirection] = useState('ALL');
   const [scanSearch, setScanSearch] = useState('');
@@ -120,10 +121,13 @@ export default function App() {
     const activePromise = fetchActiveVisitorsFast();
     // Only poll heavy dashboard logs/charts when actually viewing Live Command page
     if (currentPath === ROUTES.OVERVIEW || currentPath === ROUTES.DOORS) {
+      const catParam = currentPath === ROUTES.OVERVIEW ? 'ALL' : scanCategory;
+      const dirParam = currentPath === ROUTES.OVERVIEW ? 'ALL' : scanDirection;
+      const searchParam = currentPath === ROUTES.OVERVIEW ? '' : scanSearch;
       const [logRes, anaRes] = await Promise.all([
         apiFetch(
-          `/api/door/realtime_logs?date=${scanDate}&category=${scanCategory}&direction=${scanDirection}&search=${encodeURIComponent(
-            scanSearch
+          `/api/door/realtime_logs?date=${scanDate}&category=${catParam}&direction=${dirParam}&search=${encodeURIComponent(
+            searchParam
           )}&limit=300`
         ),
         apiFetch(`/api/analytics/dashboard?date=${scanDate}`),
@@ -144,7 +148,7 @@ export default function App() {
       apiFetch(
         `/api/employees?q=${encodeURIComponent(empSearch)}&department=${encodeURIComponent(
           empDeptFilter
-        )}&page=1&limit=300`
+        )}&page=1&limit=2000`
       ),
       isInviter ? Promise.resolve({ ok: false, data: {} }) : apiFetch('/api/visitor/cards?include_photos=1'),
       isInviter ? Promise.resolve({ ok: false, data: {} }) : apiFetch('/api/visitors/history?limit=250'),
@@ -170,7 +174,10 @@ export default function App() {
       const { ok, data } = await apiFetch('/api/auth/me');
       if (ok && data.authenticated) {
         setUser(data.user);
-        if (data.user.role !== 'admin') {
+        if (data.user.role === 'guest_inviter') {
+          setCurrentPath(ROUTES.APPOINTMENTS);
+          window.history.replaceState({}, '', ROUTES.APPOINTMENTS);
+        } else if (data.user.role !== 'admin') {
           setCurrentPath(ROUTES.VISITORS);
           window.history.replaceState({}, '', ROUTES.VISITORS);
         }
@@ -180,21 +187,36 @@ export default function App() {
   }, [fetchClockAudit]);
 
   useEffect(() => {
+    const onUnauth = () => {
+      setUser((prev) => {
+        if (prev) notify('Phiên đăng nhập đã hết hạn hoặc máy chủ vừa khởi động lại. Vui lòng đăng nhập lại.', 'warning');
+        return null;
+      });
+    };
+    window.addEventListener('seazen:unauthorized', onUnauth);
+    return () => window.removeEventListener('seazen:unauthorized', onUnauth);
+  }, [notify]);
+
+  useEffect(() => {
     const t = setInterval(fetchClockAudit, 30000);
     return () => clearInterval(t);
   }, [fetchClockAudit]);
 
   useEffect(() => {
     if (!user) return;
-    fetchLiveStreams();
+    const t0 = setTimeout(fetchLiveStreams, scanSearch ? 220 : 0);
     const t = setInterval(fetchLiveStreams, 3000);
-    return () => clearInterval(t);
-  }, [user, fetchLiveStreams]);
+    return () => {
+      clearTimeout(t0);
+      clearInterval(t);
+    };
+  }, [user, fetchLiveStreams, scanSearch]);
 
   useEffect(() => {
     if (!user) return;
-    fetchCoreDirectory();
-  }, [user, fetchCoreDirectory]);
+    const t = setTimeout(fetchCoreDirectory, empSearch ? 220 : 0);
+    return () => clearTimeout(t);
+  }, [user, fetchCoreDirectory, empSearch]);
 
   const handleLogout = async () => {
     await apiFetch('/api/auth/logout', { method: 'POST' });
@@ -222,20 +244,28 @@ export default function App() {
   };
 
   const handleDoorAll = async (action, seconds = 2) => {
-    const endpoint = action === 'UNLOCK_ALL' ? '/api/door/unlock_all' : '/api/door/lock_all';
-    const { ok, data } = await apiFetch(endpoint, {
-      method: 'POST',
-      body: JSON.stringify({ seconds }),
-    });
-    if (ok && data.success) {
-      notify(
-        action === 'UNLOCK_ALL'
-          ? 'Đã mở khẩn cấp toàn bộ 4 làn cổng.'
-          : 'Đã khóa toàn bộ 4 làn cổng.',
-        'success'
-      );
-    } else {
-      notify(data.error || 'Không thể thực hiện thao tác.', 'error');
+    const label = action === 'UNLOCK_ALL' ? 'MỞ KHẨN CẤP toàn bộ 4 làn cổng' : 'KHÓA toàn bộ 4 làn cổng';
+    if (!window.confirm(`Xác nhận ${label}?`)) return;
+    setDoorLoading((prev) => ({ ...prev, ALL_DOORS: true }));
+    try {
+      const endpoint = action === 'UNLOCK_ALL' ? '/api/door/unlock_all' : '/api/door/lock_all';
+      const { ok, data } = await apiFetch(endpoint, {
+        method: 'POST',
+        body: JSON.stringify({ seconds }),
+      });
+      if (ok && data.success) {
+        notify(
+          action === 'UNLOCK_ALL'
+            ? 'Đã mở khẩn cấp toàn bộ 4 làn cổng.'
+            : 'Đã khóa toàn bộ 4 làn cổng.',
+          'success'
+        );
+        fetchLiveStreams();
+      } else {
+        notify(data.error || 'Không thể thực hiện thao tác.', 'error');
+      }
+    } finally {
+      setDoorLoading((prev) => ({ ...prev, ALL_DOORS: false }));
     }
   };
 
@@ -269,11 +299,14 @@ export default function App() {
           clockAudit={clockAudit}
           onLoginSuccess={(loggedInUser) => {
             setUser(loggedInUser);
+            const isValidAdminDeepLink = Object.values(ROUTES).includes(currentPath) && currentPath !== ROUTES.LOGIN;
             const initRoute =
               loggedInUser.role === 'guest_inviter'
                 ? ROUTES.APPOINTMENTS
                 : loggedInUser.role !== 'admin'
                 ? ROUTES.VISITORS
+                : isValidAdminDeepLink
+                ? currentPath
                 : ROUTES.OVERVIEW;
             setCurrentPath(initRoute);
             window.history.replaceState({}, '', initRoute);
@@ -312,13 +345,15 @@ export default function App() {
                   Cảnh báo: Đồng hồ trên máy tính này ({clockAudit.local_pc_time}) đang lệch{' '}
                   {clockAudit.pc_drift_sec} giây so với Giờ chuẩn Việt Nam ({clockAudit.vietnam_ntp_time}). Hệ thống đã khóa cập nhật giờ tự động để bảo vệ 4 thiết bị cổng.
                 </span>
-                <button
-                  type="button"
-                  className="btn btn-sm"
-                  onClick={() => setClockModalOpen(true)}
-                >
-                  Kiểm tra Giờ chuẩn
-                </button>
+                {user.role === 'admin' && (
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    onClick={() => setClockModalOpen(true)}
+                  >
+                    Kiểm tra Giờ chuẩn
+                  </button>
+                )}
               </div>
             )}
 
@@ -438,7 +473,7 @@ export default function App() {
             )}
 
             {effectivePath === ROUTES.TIMEKEEPING && (
-              <TimekeepingPage departments={departments} />
+              <TimekeepingPage departments={departments} notify={notify} />
             )}
 
             {effectivePath === ROUTES.ACCESS_LINKS && (

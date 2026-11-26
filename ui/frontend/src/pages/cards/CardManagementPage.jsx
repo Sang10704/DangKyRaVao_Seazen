@@ -592,7 +592,8 @@ export default function CardManagementPage({
               Thiếu Tên / Ảnh: {pendingIncompleteCount}
             </span>
             <span className="badge badge-gold">
-              Đang cấp cho khách: {Object.keys(activeCardHolderMap).length}
+              Đang cấp cho khách:{' '}
+              {new Set(Object.values(activeCardHolderMap).map((v) => v?.id || v?.card_number).filter(Boolean)).size}
             </span>
             {lostCount > 0 && <span className="badge badge-red">Mất / Khóa: {lostCount}</span>}
             <button type="button" className="btn btn-sm" onClick={loadCards}>

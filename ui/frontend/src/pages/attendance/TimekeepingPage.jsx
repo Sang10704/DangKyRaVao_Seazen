@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../services/apiClient';
+import { getLocalMonthStr } from '../../utils/dateUtils';
 
 function getMonthBounds(ymStr) {
   const parts = String(ymStr || '').split('-');
@@ -14,8 +15,8 @@ function getMonthBounds(ymStr) {
   };
 }
 
-export default function TimekeepingPage({ departments }) {
-  const defaultMonth = new Date().toISOString().slice(0, 7);
+export default function TimekeepingPage({ departments, notify }) {
+  const defaultMonth = getLocalMonthStr();
   const initBounds = getMonthBounds(defaultMonth);
 
   const [monthFilter, setMonthFilter] = useState(defaultMonth);
@@ -57,11 +58,13 @@ export default function TimekeepingPage({ departments }) {
         setDays(data.days || []);
         setEmployees(data.employees || []);
         setDailyTotals(data.daily_totals || {});
+      } else if (notify) {
+        notify(data?.error || 'Không thể tải dữ liệu bảng chấm công.', 'error');
       }
     } finally {
       setLoading(false);
     }
-  }, [monthFilter, fromDate, toDate, deptFilter, searchQuery]);
+  }, [monthFilter, fromDate, toDate, deptFilter, searchQuery, notify]);
 
   useEffect(() => {
     fetchMatrix();
@@ -86,14 +89,41 @@ export default function TimekeepingPage({ departments }) {
     return params.toString();
   };
 
-  const handleExportExcel = () => {
-    window.location.href = `/api/timekeeping/export_excel?${buildParams()}`;
+  const triggerBlobDownload = async (url, fallbackFilename) => {
     setShowExportMenu(false);
+    try {
+      const res = await fetch(url, { credentials: 'include' });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        if (res.status === 401 && typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('seazen:unauthorized'));
+        }
+        if (notify) notify(errData.error || 'Không thể xuất file Excel.', 'error');
+        return;
+      }
+      const blob = await res.blob();
+      const disp = res.headers.get('content-disposition') || '';
+      const fnMatch = disp.match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)["']?/i);
+      const filename = fnMatch ? decodeURIComponent(fnMatch[1]) : fallbackFilename;
+      const objUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(objUrl);
+    } catch (err) {
+      if (notify) notify('Lỗi kết nối khi xuất Excel: ' + err.message, 'error');
+    }
+  };
+
+  const handleExportExcel = () => {
+    triggerBlobDownload(`/api/timekeeping/export_excel?${buildParams()}`, `Cham_Cong_${monthFilter || 'SeaZen'}.xlsx`);
   };
 
   const handleExportBCC = () => {
-    window.location.href = `/api/timekeeping/export_excel_bcc?${buildParams()}`;
-    setShowExportMenu(false);
+    triggerBlobDownload(`/api/timekeeping/export_excel_bcc?${buildParams()}`, `Bang_Cham_Cong_BCC_${monthFilter || 'SeaZen'}.xlsx`);
   };
 
   return (
@@ -164,8 +194,8 @@ export default function TimekeepingPage({ departments }) {
               >
                 <option value="">Tất cả phòng ban</option>
                 {departments.map((d) => (
-                  <option key={d.DepartmentID} value={d.DepartmentName}>
-                    {d.DepartmentName}
+                  <option key={d.DepartmentID || d.id || d.name} value={d.DepartmentName || d.name}>
+                    {d.DepartmentName || d.name}
                   </option>
                 ))}
               </select>

@@ -10,9 +10,11 @@ env/
 ui/frontend/node_modules/
 node_modules/
 
-# Runtime browser profile & sensitive token caches
+# Runtime browser profile, live caches & sensitive token files
 data/.webview_profile/
 data/.cache/
+data/pending_visitors.json
+data/master_employees_sp_cache.json
 token_cache.bin
 sp_cookies.json
 
@@ -20,4 +22,6 @@ sp_cookies.json
 data/*.xlsx
 scratch/
 *.log
+*.log.*
+logs/
 *.tmp

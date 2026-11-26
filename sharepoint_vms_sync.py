@@ -352,7 +352,7 @@ class _DATA_BLOB(ctypes.Structure):
 
 
 def _dpapi_decrypt(raw_bytes: bytes) -> bytes:
-    """Decrypts DPAPI:, SZSEC1: (DPAPI + Zlib), or raw Windows DPAPI token_cache.bin."""
+    """Decrypts DPAPI:, SZSEC1: (Base64 + DPAPI + Zlib), or raw Windows DPAPI token_cache.bin."""
     if not raw_bytes:
         return b""
     if raw_bytes.startswith(b"{"):
@@ -360,7 +360,11 @@ def _dpapi_decrypt(raw_bytes: bytes) -> bytes:
     if raw_bytes.startswith(b"DPAPI:"):
         payload = raw_bytes[6:]
     elif raw_bytes.startswith(b"SZSEC1:"):
-        payload = raw_bytes[7:]
+        b64_part = raw_bytes[7:].strip()
+        try:
+            payload = base64.b64decode(b64_part)
+        except Exception:
+            payload = b64_part
     else:
         payload = raw_bytes
     try:
@@ -379,6 +383,10 @@ def _dpapi_decrypt(raw_bytes: bytes) -> bytes:
     except Exception as e:
         logger.debug("DPAPI decrypt fallback: %s", e)
     return raw_bytes
+
+
+_TOKEN_CACHE_LOCK = threading.RLock()
+_MEM_TOKEN_CACHE: Dict[str, Any] = {"ts": 0.0, "data": None}
 
 
 def _dpapi_encrypt(plain_bytes: bytes) -> bytes:
@@ -405,9 +413,12 @@ def _save_token_cache_dpapi(serialized_json: str) -> str:
     target_dir = os.path.join(base_dir, "data", ".cache")
     os.makedirs(target_dir, exist_ok=True)
     target_path = os.path.join(target_dir, "token_cache.bin")
+    tmp_path = f"{target_path}.{threading.get_ident()}.tmp"
     enc_bytes = _dpapi_encrypt(serialized_json.encode("utf-8"))
-    with open(target_path, "wb") as f:
-        f.write(enc_bytes)
+    with _TOKEN_CACHE_LOCK:
+        with open(tmp_path, "wb") as f:
+            f.write(enc_bytes)
+        os.replace(tmp_path, target_path)
     return target_path
 
 
@@ -438,78 +449,88 @@ def get_sharepoint_tokens(allow_interactive: bool = False) -> Dict[str, Any]:
     """
     Acquires both Graph API and SharePoint Online REST API OAuth2 Bearer tokens
     using SEAZENHR-PORTAL (0390280b-12b8-49c4-adbf-a9c2b8bccfb5).
-    - Automatically discovers token_cache.bin from local VMS or SeaZen Portal App.
-    - Replicates & persists refreshed DPAPI token_cache.bin locally so silent refresh runs 24/7.
-    - When allow_interactive=True (e.g. moving to a new server PC), launches MSAL interactive browser sign-in.
+    Thread-safe with in-memory TTL cache + atomic DPAPI persistence.
     """
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    local_cache_file = os.path.join(base_dir, "data", ".cache", "token_cache.bin")
-    cache_paths = _find_token_cache_paths()
+    with _TOKEN_CACHE_LOCK:
+        now_ts = time.time()
+        mem = _MEM_TOKEN_CACHE.get("data")
+        if mem and mem.get("ok") and (now_ts - float(_MEM_TOKEN_CACHE.get("ts") or 0)) < 1800:
+            return dict(mem)
 
-    for path in cache_paths:
-        try:
-            with open(path, "rb") as f:
-                raw = f.read()
-            dec = _dpapi_decrypt(raw).decode("utf-8", errors="replace")
-            if not dec.strip().startswith("{"):
-                continue
-            cache = msal.SerializableTokenCache()
-            cache.deserialize(dec)
-            app = msal.PublicClientApplication(
-                CLIENT_ID,
-                authority=f"https://login.microsoftonline.com/{TENANT_ID}",
-                token_cache=cache
-            )
-            accounts = app.get_accounts()
-            if not accounts:
-                continue
-            acc = accounts[0]
-            sp_res = app.acquire_token_silent(SP_SCOPES, account=acc)
-            graph_res = app.acquire_token_silent(GRAPH_SCOPES, account=acc)
-            if sp_res and "access_token" in sp_res:
-                if cache.has_state_changed or not os.path.isfile(local_cache_file):
-                    try:
-                        _save_token_cache_dpapi(cache.serialize())
-                    except Exception:
-                        pass
-                return {
-                    "ok": True,
-                    "account": acc.get("username"),
-                    "cache_path": local_cache_file if os.path.isfile(local_cache_file) else path,
-                    "sp_token": sp_res["access_token"],
-                    "graph_token": graph_res.get("access_token") if graph_res else None
-                }
-        except Exception as e:
-            logger.debug("Token cache %s error: %s", path, e)
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        local_cache_file = os.path.join(base_dir, "data", ".cache", "token_cache.bin")
+        cache_paths = _find_token_cache_paths()
 
-    if allow_interactive:
-        try:
-            cache = msal.SerializableTokenCache()
-            app = msal.PublicClientApplication(
-                CLIENT_ID,
-                authority=f"https://login.microsoftonline.com/{TENANT_ID}",
-                token_cache=cache
-            )
-            sp_res = app.acquire_token_interactive(scopes=SP_SCOPES, prompt="select_account")
-            if sp_res and "access_token" in sp_res:
-                saved_path = _save_token_cache_dpapi(cache.serialize())
+        for path in cache_paths:
+            try:
+                with open(path, "rb") as f:
+                    raw = f.read()
+                dec = _dpapi_decrypt(raw).decode("utf-8", errors="replace")
+                if not dec.strip().startswith("{"):
+                    continue
+                cache = msal.SerializableTokenCache()
+                cache.deserialize(dec)
+                app = msal.PublicClientApplication(
+                    CLIENT_ID,
+                    authority=f"https://login.microsoftonline.com/{TENANT_ID}",
+                    token_cache=cache
+                )
                 accounts = app.get_accounts()
-                acc_name = accounts[0].get("username") if accounts else "Microsoft365"
-                graph_res = app.acquire_token_silent(GRAPH_SCOPES, account=accounts[0]) if accounts else None
-                return {
-                    "ok": True,
-                    "account": acc_name,
-                    "cache_path": saved_path,
-                    "sp_token": sp_res["access_token"],
-                    "graph_token": graph_res.get("access_token") if graph_res else None
-                }
-        except Exception as ie:
-            logger.warning("Interactive MSAL sign-in error: %s", ie)
+                if not accounts:
+                    continue
+                for acc in accounts:
+                    sp_res = app.acquire_token_silent(SP_SCOPES, account=acc)
+                    if sp_res and "access_token" in sp_res:
+                        graph_res = app.acquire_token_silent(GRAPH_SCOPES, account=acc)
+                        if cache.has_state_changed or not os.path.isfile(local_cache_file):
+                            try:
+                                _save_token_cache_dpapi(cache.serialize())
+                            except Exception as save_err:
+                                logger.warning("Save token_cache warning: %s", save_err)
+                        res_tok = {
+                            "ok": True,
+                            "account": acc.get("username"),
+                            "cache_path": local_cache_file if os.path.isfile(local_cache_file) else path,
+                            "sp_token": sp_res["access_token"],
+                            "graph_token": graph_res.get("access_token") if graph_res else None
+                        }
+                        _MEM_TOKEN_CACHE["ts"] = now_ts
+                        _MEM_TOKEN_CACHE["data"] = dict(res_tok)
+                        return res_tok
+            except Exception as e:
+                logger.warning("Token cache %s error: %s", path, e)
 
-    return {
-        "ok": False,
-        "error": "Không tìm thấy phiên OAuth2 Bearer Token hợp lệ của SEAZENHR-PORTAL."
-    }
+        if allow_interactive:
+            try:
+                cache = msal.SerializableTokenCache()
+                app = msal.PublicClientApplication(
+                    CLIENT_ID,
+                    authority=f"https://login.microsoftonline.com/{TENANT_ID}",
+                    token_cache=cache
+                )
+                sp_res = app.acquire_token_interactive(scopes=SP_SCOPES, prompt="select_account")
+                if sp_res and "access_token" in sp_res:
+                    saved_path = _save_token_cache_dpapi(cache.serialize())
+                    accounts = app.get_accounts()
+                    acc_name = accounts[0].get("username") if accounts else "Microsoft365"
+                    graph_res = app.acquire_token_silent(GRAPH_SCOPES, account=accounts[0]) if accounts else None
+                    res_tok = {
+                        "ok": True,
+                        "account": acc_name,
+                        "cache_path": saved_path,
+                        "sp_token": sp_res["access_token"],
+                        "graph_token": graph_res.get("access_token") if graph_res else None
+                    }
+                    _MEM_TOKEN_CACHE["ts"] = time.time()
+                    _MEM_TOKEN_CACHE["data"] = dict(res_tok)
+                    return res_tok
+            except Exception as ie:
+                logger.warning("Interactive MSAL sign-in error: %s", ie)
+
+        return {
+            "ok": False,
+            "error": "Không tìm thấy phiên OAuth2 Bearer Token hợp lệ của SEAZENHR-PORTAL."
+        }
 
 
 def get_vms_sharepoint_status() -> Dict[str, Any]:
@@ -753,6 +774,43 @@ def _ensure_list_id_cached(sql_table: str) -> Optional[str]:
     return None
 
 
+_SP_DIGEST_CACHE: Dict[str, Any] = {"digest": "", "ts": 0.0, "token": ""}
+
+
+def _get_cached_digest(sp_token: str) -> str:
+    now_ts = time.time()
+    if _SP_DIGEST_CACHE["digest"] and _SP_DIGEST_CACHE["token"] == sp_token and (now_ts - _SP_DIGEST_CACHE["ts"]) < 900:
+        return _SP_DIGEST_CACHE["digest"]
+    ctx_resp = requests.post(
+        f"{SP_SITE_URL}/_api/contextinfo",
+        headers={"Authorization": f"Bearer {sp_token}", "Accept": "application/json;odata=nometadata"},
+        timeout=10
+    )
+    if ctx_resp.status_code == 200:
+        digest = ctx_resp.json().get("FormDigestValue", "")
+        _SP_DIGEST_CACHE.update({"digest": digest, "ts": now_ts, "token": sp_token})
+        return digest
+    return ""
+
+
+def _sp_request_with_retry(method: str, url: str, max_retries: int = 3, **kwargs) -> requests.Response:
+    """Executes SharePoint REST HTTP request with bounded Retry-After / exponential backoff on 429/503."""
+    last_resp = None
+    for attempt in range(max_retries):
+        resp = requests.request(method, url, **kwargs)
+        last_resp = resp
+        if resp.status_code not in (429, 503):
+            return resp
+        retry_after_raw = resp.headers.get("Retry-After")
+        try:
+            wait_s = min(15.0, max(1.0, float(retry_after_raw))) if retry_after_raw else (2.0 * (attempt + 1))
+        except Exception:
+            wait_s = 2.0 * (attempt + 1)
+        if attempt < max_retries - 1:
+            time.sleep(wait_s)
+    return last_resp
+
+
 def sync_table_to_sharepoint(sql_table: str, max_rows: int = 200, ensure_schema: bool = False) -> Dict[str, Any]:
     """
     Pushes records from a local SQL Server table (SeaZen_AccessControl)
@@ -763,7 +821,7 @@ def sync_table_to_sharepoint(sql_table: str, max_rows: int = 200, ensure_schema:
     if not meta:
         return {"success": False, "error": f"Bảng không hợp lệ: {sql_table}"}
 
-    if ensure_schema or sql_table not in _PROVISIONED_LIST_CACHE:
+    if ensure_schema:
         prov = provision_vms_sharepoint_lists([sql_table])
         if not prov.get("success") or not prov.get("results"):
             return {"success": False, "error": prov.get("error", "Không thể khởi tạo SharePoint List")}
@@ -773,7 +831,9 @@ def sync_table_to_sharepoint(sql_table: str, max_rows: int = 200, ensure_schema:
         list_id = list_info["list_id"]
         _PROVISIONED_LIST_CACHE[sql_table] = list_id
     else:
-        list_id = _PROVISIONED_LIST_CACHE[sql_table]
+        list_id = _ensure_list_id_cached(sql_table)
+        if not list_id:
+            return {"success": False, "error": f"Không xác định được GUID SharePoint List cho {sql_table}"}
 
     list_title = meta["list_title"]
 
@@ -782,12 +842,9 @@ def sync_table_to_sharepoint(sql_table: str, max_rows: int = 200, ensure_schema:
         return {"success": False, "error": tok_info.get("error")}
     sp_token = tok_info["sp_token"]
 
-    ctx_resp = requests.post(
-        f"{SP_SITE_URL}/_api/contextinfo",
-        headers={"Authorization": f"Bearer {sp_token}", "Accept": "application/json;odata=nometadata"},
-        timeout=10
-    )
-    digest = ctx_resp.json().get("FormDigestValue", "") if ctx_resp.status_code == 200 else ""
+    digest = _get_cached_digest(sp_token)
+    if not digest:
+        return {"success": False, "error": "Không lấy được FormDigestValue từ SharePoint."}
 
     headers_read = {
         "Authorization": f"Bearer {sp_token}",
@@ -813,37 +870,42 @@ def sync_table_to_sharepoint(sql_table: str, max_rows: int = 200, ensure_schema:
         select_fields.extend(["SoTheRFID"])
 
     try:
-        r_items = requests.get(
+        r_items = _sp_request_with_retry(
+            "GET",
             f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items?$select={','.join(select_fields)}&$top=5000&$orderby=Id desc",
             headers=headers_read,
             timeout=15
         )
-        if r_items.status_code == 200:
-            for it in r_items.json().get("value", []):
-                if it.get("Title") is not None:
-                    existing_by_key.setdefault(str(it["Title"]).strip(), it)
-                if sql_table == "tbl_AttendanceLogs":
-                    s_atid = str(it.get("MaChamCongATID") or "").strip()
-                    s_ts = str(it.get("ThoiGianQuet") or "").replace("T", " ").strip()[:19]
-                    if s_atid and s_ts:
-                        existing_by_key.setdefault(f"{s_atid}_{s_ts}", it)
-                elif sql_table == "tbl_DailyTimekeeping":
-                    s_wd = str(it.get("NgayLamViec") or "")[:10]
-                    s_atid = str(it.get("MaChamCongATID") or "").strip()
-                    if s_wd and s_atid:
-                        existing_by_key.setdefault(f"{s_wd}_{s_atid}", it)
-                elif sql_table == "tbl_DoorAuditLogs":
-                    s_act = str(it.get("HanhDong") or "").strip()
-                    s_did = str(it.get("MaCua") or "0").strip()
-                    s_ts = str(it.get("ThoiGianThaoTac") or "").replace("T", " ").strip()[:19]
-                    if s_act and s_ts:
-                        existing_by_key.setdefault(f"{s_act}_D{s_did}_{s_ts}", it)
-                elif sql_table == "tbl_CustomerCards":
-                    s_rfid = str(it.get("SoTheRFID") or "").strip()
-                    if s_rfid:
-                        existing_by_key.setdefault(f"RFID_{s_rfid}", it)
+        if r_items.status_code != 200:
+            # CRITICAL GUARD: NEVER treat failed GET (429/401/500) as empty list, or POST will duplicate all items!
+            logger.warning("[SP Sync ABORT %s] GET existing items failed HTTP %s: %s", sql_table, r_items.status_code, r_items.text[:160])
+            return {"success": False, "sql_table": sql_table, "error": f"SharePoint GET HTTP {r_items.status_code}"}
+        for it in r_items.json().get("value", []):
+            if it.get("Title") is not None:
+                existing_by_key.setdefault(str(it["Title"]).strip(), it)
+            if sql_table == "tbl_AttendanceLogs":
+                s_atid = str(it.get("MaChamCongATID") or "").strip()
+                s_ts = str(it.get("ThoiGianQuet") or "").replace("T", " ").strip()[:19]
+                if s_atid and s_ts:
+                    existing_by_key.setdefault(f"{s_atid}_{s_ts}", it)
+            elif sql_table == "tbl_DailyTimekeeping":
+                s_wd = str(it.get("NgayLamViec") or "")[:10]
+                s_atid = str(it.get("MaChamCongATID") or "").strip()
+                if s_wd and s_atid:
+                    existing_by_key.setdefault(f"{s_wd}_{s_atid}", it)
+            elif sql_table == "tbl_DoorAuditLogs":
+                s_act = str(it.get("HanhDong") or "").strip()
+                s_did = str(it.get("MaCua") or "0").strip()
+                s_ts = str(it.get("ThoiGianThaoTac") or "").replace("T", " ").strip()[:19]
+                if s_act and s_ts:
+                    existing_by_key.setdefault(f"{s_act}_D{s_did}_{s_ts}", it)
+            elif sql_table == "tbl_CustomerCards":
+                s_rfid = str(it.get("SoTheRFID") or "").strip()
+                if s_rfid:
+                    existing_by_key.setdefault(f"RFID_{s_rfid}", it)
     except Exception as e:
-        logger.warning("Read existing items warning (%s): %s", sql_table, e)
+        logger.warning("[SP Sync ABORT %s] GET existing items exception: %s", sql_table, e)
+        return {"success": False, "sql_table": sql_table, "error": str(e)}
 
     # Read rows from SQL Server
     rows = db_mssql.get_table_rows(sql_table, limit=max_rows)
@@ -1056,8 +1118,9 @@ def checkout_visitor_on_sharepoint_async(visitor_record: Dict[str, Any]) -> None
                 sp_id = int(atid) - 80000000
 
             if not sp_id:
-                r = requests.get(
-                    f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items?$select=Id,Title,MaHoSoKhach,SoTheRFID&$top=500",
+                r = _sp_request_with_retry(
+                    "GET",
+                    f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items?$select=Id,Title,MaHoSoKhach,SoTheRFID&$top=500&$orderby=Id desc",
                     headers=headers_read,
                     timeout=8
                 )
@@ -1070,7 +1133,8 @@ def checkout_visitor_on_sharepoint_async(visitor_record: Dict[str, Any]) -> None
                             break
 
             if sp_id:
-                requests.post(
+                _sp_request_with_retry(
+                    "POST",
                     f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items({sp_id})",
                     headers={**headers_write, "X-HTTP-Method": "MERGE", "If-Match": "*"},
                     json={
@@ -1092,7 +1156,8 @@ def _warm_scan_sigs_cache(sp_token: str) -> None:
     try:
         list_id = _SP_KNOWN_LIST_IDS["tbl_AttendanceLogs"]
         headers_read = {"Authorization": f"Bearer {sp_token}", "Accept": "application/json;odata=nometadata"}
-        r = requests.get(
+        r = _sp_request_with_retry(
+            "GET",
             f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items?$select=Id,Title,MaChamCongATID,ThoiGianQuet&$top=5000&$orderby=Id desc",
             headers=headers_read,
             timeout=12
@@ -1105,7 +1170,7 @@ def _warm_scan_sigs_cache(sp_token: str) -> None:
                 s_ts = str(it.get("ThoiGianQuet") or "").replace("T", " ").strip()[:19]
                 if s_atid and s_ts:
                     _SP_RECENT_SCAN_SIGS.add(f"{s_atid}_{s_ts}")
-        _SP_SCAN_SIGS_WARMED = True
+            _SP_SCAN_SIGS_WARMED = True
     except Exception as e:
         logger.debug("_warm_scan_sigs_cache warning: %s", e)
 
@@ -1224,21 +1289,26 @@ def sync_specific_daily_timekeeping_rows(
                 "TongGioLamViec": float(r[9] or 0.0),
                 "TrangThaiChamCong": str(r[10] or "PRESENT")[:50],
             }
-            q_resp = requests.get(
+            q_resp = _sp_request_with_retry(
+                "GET",
                 f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items?$select=Id,Title&$filter=Title eq '{key_title}'",
                 headers=headers_read,
                 timeout=8
             )
-            sp_items = q_resp.json().get("value", []) if q_resp.status_code == 200 else []
+            if q_resp.status_code != 200:
+                continue
+            sp_items = q_resp.json().get("value", [])
             if sp_items:
-                requests.post(
+                _sp_request_with_retry(
+                    "POST",
                     f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items({sp_items[0]['Id']})",
                     headers={**headers_write, "X-HTTP-Method": "MERGE", "If-Match": "*"},
                     json=payload,
                     timeout=8
                 )
             else:
-                requests.post(
+                _sp_request_with_retry(
+                    "POST",
                     f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items",
                     headers=headers_write,
                     json=payload,
@@ -1764,16 +1834,36 @@ def reconcile_onsite_staff(storage, target_date: Optional[str] = None, force_ref
     inside_list = present_info.get("inside") or []
     left_list = present_info.get("left") or []
 
+    # Compute first IN / last OUT per employee from target_date scans so Giờ vào / Giờ ra columns stay populated
+    first_in_by_atid: Dict[str, str] = {}
+    last_out_by_atid: Dict[str, str] = {}
+    try:
+        day_scans = storage.get_saved_scans(target_date or datetime.now().strftime("%Y-%m-%d"))
+        for sc in sorted(day_scans, key=lambda x: str(x.get("CheckTime") or x.get("Time") or "")):
+            s_atid = str(sc.get("EmployeeATID") or "").strip()
+            s_ts = str(sc.get("CheckTime") or sc.get("Time") or "").replace("T", " ").strip()[:19]
+            if not s_atid or not s_ts:
+                continue
+            for k_alt in (s_atid, s_atid.lstrip("0")):
+                if k_alt:
+                    if k_alt not in first_in_by_atid:
+                        first_in_by_atid[k_alt] = s_ts
+                    last_out_by_atid[k_alt] = s_ts
+    except Exception:
+        pass
+
     inside_by_atid: Dict[str, Dict[str, Any]] = {}
     left_by_atid: Dict[str, Dict[str, Any]] = {}
     for row in inside_list:
         key = str(row.get("atid") or "").strip()
         if key:
             inside_by_atid[key] = row
+            inside_by_atid[key.lstrip("0")] = row
     for row in left_list:
         key = str(row.get("atid") or "").strip()
         if key:
             left_by_atid[key] = row
+            left_by_atid[key.lstrip("0")] = row
 
     reconciled_rows: List[Dict[str, Any]] = []
     matched_sp_ids = set()
@@ -1814,18 +1904,38 @@ def reconcile_onsite_staff(storage, target_date: Optional[str] = None, force_ref
             excluded_resigned += 1
             continue
 
-        inside_row = inside_by_atid.get(atid)
-        left_row = left_by_atid.get(atid)
+        inside_row = inside_by_atid.get(atid) or inside_by_atid.get(atid_stripped)
+        left_row = left_by_atid.get(atid) or left_by_atid.get(atid_stripped)
         if inside_row:
             attendance_status = "PRESENT"
-            check_in_time = str(inside_row.get("first_in") or inside_row.get("check_in_time") or "")
+            check_in_time = str(
+                inside_row.get("first_in")
+                or inside_row.get("check_in_time")
+                or first_in_by_atid.get(atid)
+                or first_in_by_atid.get(atid_stripped)
+                or inside_row.get("check_time")
+                or ""
+            )
             check_out_time = ""
-            last_door = str(inside_row.get("last_door") or "")
+            last_door = str(inside_row.get("last_door") or inside_row.get("device_name") or "")
         elif left_row:
             attendance_status = "LEFT"
-            check_in_time = str(left_row.get("first_in") or left_row.get("check_in_time") or "")
-            check_out_time = str(left_row.get("last_out") or left_row.get("check_out_time") or "")
-            last_door = str(left_row.get("last_door") or "")
+            check_in_time = str(
+                left_row.get("first_in")
+                or left_row.get("check_in_time")
+                or first_in_by_atid.get(atid)
+                or first_in_by_atid.get(atid_stripped)
+                or ""
+            )
+            check_out_time = str(
+                left_row.get("last_out")
+                or left_row.get("check_out_time")
+                or left_row.get("check_time")
+                or last_out_by_atid.get(atid)
+                or last_out_by_atid.get(atid_stripped)
+                or ""
+            )
+            last_door = str(left_row.get("last_door") or left_row.get("device_name") or "")
         elif master_status == "WORKING":
             attendance_status = "ABSENT_OR_LEAVE"
             check_in_time = ""
@@ -2075,6 +2185,18 @@ def pull_preregistered_guests_from_sharepoint(
                 if booking_code in pending_ids:
                     if storage.delete_pending_visitor(booking_code):
                         cancelled += 1
+                if db_mssql.is_mssql_active():
+                    try:
+                        import pyodbc
+                        with pyodbc.connect(db_mssql.get_connection_string(), timeout=4) as conn_c:
+                            cur_c = conn_c.cursor()
+                            cur_c.execute(
+                                "UPDATE tbl_PreRegisteredGuests SET Status = 'CANCELLED', UpdatedAt = GETDATE() WHERE BookingCode = ? AND Status <> 'CANCELLED'",
+                                (booking_code[:50],),
+                            )
+                            conn_c.commit()
+                    except Exception:
+                        pass
                 continue
 
             if status_raw not in ("PENDING", "CHỜ CẤP THẺ", "CHO CAP THE", ""):

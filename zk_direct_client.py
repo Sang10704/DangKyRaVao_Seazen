@@ -62,6 +62,8 @@ class ZkDirectClient:
         self._device_capacities: Dict[str, Dict[str, Any]] = {}
         self._card_op_gen: Dict[int, int] = {}
         self._card_gen_lock = threading.Lock()
+        self._person_cache_lock = threading.RLock()
+        self._slot_alloc_lock = threading.Lock()
 
         self._load_person_cache()
         logger.info("Initialized ZkDirectClient with %d terminals across %d doors (person cache: %d keys)",
@@ -141,27 +143,7 @@ class ZkDirectClient:
         except Exception as ex:
             logger.debug("SQL person cache enrichment skipped: %s", ex)
 
-        # 3. Visitors: load history first, then active visitors LAST so current slot/card holder wins
-        try:
-            import db_mssql
-            if db_mssql.is_mssql_active():
-                import pyodbc
-                with pyodbc.connect(db_mssql.get_connection_string(), timeout=3) as conn:
-                    cur = conn.cursor()
-                    cur.execute("SELECT VisitorID, FullName, Department, CardNumber, CCCDNumber, Status FROM tbl_Visitors ORDER BY CASE WHEN Status = 'ACTIVE' THEN 1 ELSE 0 END ASC, CheckinTime ASC")
-                    for r in cur.fetchall():
-                        vid = str(r[0] or "").strip()
-                        vname = str(r[1] or "").strip()
-                        vdept = str(r[2] or "Khách").strip()
-                        vcard = str(r[3] or "").strip()
-                        vcccd = str(r[4] or "").strip()
-                        if not vname or vid.startswith("vis_") or vname.lower().startswith("nv 000"):
-                            continue
-                        v_item = {"fullname": vname, "department": vdept, "is_staff": False, "atid": vid or vcard}
-                        self._index_person_entry(new_map, [vid, vcard, vcccd], v_item)
-        except Exception:
-            pass
-
+        # 3. Visitors: load JSON history first, then JSON active, then SQL (ACTIVE last so current holder always wins)
         for v_file_name in ("visitor_history.json", "active_visitors.json"):
             v_file = os.path.join(self.data_dir, v_file_name)
             if os.path.exists(v_file):
@@ -171,7 +153,7 @@ class ZkDirectClient:
                     for v in visitors:
                         v_name = str(v.get("full_name", "")).strip()
                         v_id = str(v.get("id") or "").strip()
-                        if not v_name or v_id.startswith("vis_") or v_name.lower().startswith("nv 000"):
+                        if not v_name or v_id.startswith("vis_") or v_name.lower().startswith("nv 000") or v_name.lower() == "chưa rõ":
                             continue
                         v_dept = str(v.get("department") or v.get("company") or "Khách").strip()
                         v_card = str(v.get("card_number", "")).strip()
@@ -187,8 +169,29 @@ class ZkDirectClient:
                 except Exception as ex:
                     logger.debug("Error loading visitors for person cache: %s", ex)
 
-        self._person_cache = new_map
-        self._last_person_cache_time = time.time()
+        try:
+            import db_mssql
+            if db_mssql.is_mssql_active():
+                import pyodbc
+                with pyodbc.connect(db_mssql.get_connection_string(), timeout=3) as conn:
+                    cur = conn.cursor()
+                    cur.execute("SELECT VisitorID, FullName, Department, CardNumber, CCCDNumber, Status FROM tbl_Visitors ORDER BY CASE WHEN Status = 'ACTIVE' THEN 1 ELSE 0 END ASC, CheckinTime ASC")
+                    for r in cur.fetchall():
+                        vid = str(r[0] or "").strip()
+                        vname = str(r[1] or "").strip()
+                        vdept = str(r[2] or "Khách").strip()
+                        vcard = str(r[3] or "").strip()
+                        vcccd = str(r[4] or "").strip()
+                        if not vname or vid.startswith("vis_") or vname.lower().startswith("nv 000") or vname.lower() == "chưa rõ":
+                            continue
+                        v_item = {"fullname": vname, "department": vdept, "is_staff": False, "atid": vid or vcard}
+                        self._index_person_entry(new_map, [vid, vcard, vcccd], v_item)
+        except Exception:
+            pass
+
+        with self._person_cache_lock:
+            self._person_cache = new_map
+            self._last_person_cache_time = time.time()
 
     def _lookup_person(self, user_id_str: str, dev_user: Any = None) -> Dict[str, Any]:
         """Resolves full name, department, and staff/visitor category from user_id or device user object."""
@@ -196,39 +199,40 @@ class ZkDirectClient:
             self._load_person_cache()
 
         clean_id = str(user_id_str).strip()
-        if clean_id in self._person_cache:
-            return self._person_cache[clean_id]
+        with self._person_cache_lock:
+            pc = self._person_cache
+            if clean_id in pc:
+                return pc[clean_id]
 
-        if clean_id.isdigit():
-            c_int = str(int(clean_id))
-            if c_int in self._person_cache:
-                return self._person_cache[c_int]
-            c_pad = clean_id.zfill(8)
-            if c_pad in self._person_cache:
-                return self._person_cache[c_pad]
+            if clean_id.isdigit():
+                c_int = str(int(clean_id))
+                if c_int in pc:
+                    return pc[c_int]
+                c_pad = clean_id.zfill(8)
+                if c_pad in pc:
+                    return pc[c_pad]
 
-        if dev_user is not None:
-            dev_name = str(getattr(dev_user, "name", "") or "").strip()
-            dev_card = str(getattr(dev_user, "card", "") or "").strip()
-            if dev_card and dev_card != "0" and dev_card in self._person_cache:
-                return self._person_cache[dev_card]
-            if dev_name and dev_name.lower() != "user":
-                is_guest = dev_name.lower().startswith("khach") or (clean_id.isdigit() and int(clean_id) >= 50000)
-                return {
-                    "fullname": dev_name,
-                    "department": "Khách Vãng Lai" if is_guest else "Nhân sự SeaZen",
-                    "is_staff": not is_guest
-                }
+            if dev_user is not None:
+                dev_name = str(getattr(dev_user, "name", "") or "").strip()
+                dev_card = str(getattr(dev_user, "card", "") or "").strip()
+                if dev_card and dev_card != "0" and dev_card in pc:
+                    return pc[dev_card]
+                if dev_name and dev_name.lower() != "user":
+                    is_guest = dev_name.lower().startswith("khach") or (clean_id.isdigit() and int(clean_id) >= 50000)
+                    return {
+                        "fullname": dev_name,
+                        "department": "Khách Vãng Lai" if is_guest else "Nhân sự SeaZen",
+                        "is_staff": not is_guest
+                    }
 
-        # Check if ID indicates visitor range (50000+ on SenseFace 4A or 80000000+)
         if clean_id.isdigit() and int(clean_id) >= 50000:
             return {"fullname": f"Khách Đến (Mã {clean_id})", "department": "Khách Vãng Lai", "is_staff": False}
 
         return {"fullname": f"Nhân sự {clean_id}", "department": "Nhân sự SeaZen", "is_staff": True}
 
     def _get_device_connection(self, ip: str, port: int = 4370) -> ZK:
-        """Creates a ZK connection instance for given IP."""
-        return ZK(ip, port=port, timeout=self.timeout, ommit_ping=False)
+        """Creates a ZK connection instance for given IP (ommit_ping=True avoids slow subprocess ping)."""
+        return ZK(ip, port=port, timeout=self.timeout, ommit_ping=True)
 
     # ---------------- Door Unlocking (Relay Control) ----------------
 
@@ -486,13 +490,14 @@ class ZkDirectClient:
                 dev_info["online"] = True
                 dev_info["firmware"] = "Ver 6.60 (Live TCP 4370)"
                 dev_info["model"] = "SenseFace 4A"
-                dev_info["user_count"] = len(self._live_uid_to_user.get(ip, {})) or 164
+                dev_info["user_count"] = len(self._live_uid_to_user.get(ip, {}))
                 online_count += 1
                 device_statuses.append(dev_info)
                 continue
 
             lock_acquired = lock.acquire(timeout=2.5) if lock else True
             if lock_acquired:
+                conn = None
                 try:
                     zk = self._get_device_connection(ip, port)
                     conn = zk.connect()
@@ -503,11 +508,15 @@ class ZkDirectClient:
                         dev_info["user_count"] = len(conn.get_users())
                     except Exception:
                         dev_info["user_count"] = 0
-                    conn.disconnect()
                     online_count += 1
                 except Exception as e:
                     dev_info["error"] = str(e)
                 finally:
+                    if conn:
+                        try:
+                            conn.disconnect()
+                        except Exception:
+                            pass
                     if lock:
                         lock.release()
 
@@ -519,7 +528,8 @@ class ZkDirectClient:
             "devices_online": online_count,
             "device_count": len(self.devices),
             "devices": device_statuses,
-            "door_count": len(self.doors_config)
+            "door_count": len(self.doors_config),
+            "live_clocks": dict(self._status_cache.get("live_clocks", {})),
         }
         self._status_cache = res
         self._last_status_check = now
@@ -616,26 +626,25 @@ class ZkDirectClient:
         start_idx = (card_int % 20) if card_int else 0
         ordered_slots = [str(56235 + ((start_idx + offset) % 20)) for offset in range(20)]
 
-        # Pick a slot consistently across live caches:
-        # 1) Reuse slot that ALREADY holds this exact card_int
-        # 2) Otherwise pick the first FREE slot (card == 0/None) across live caches — NEVER overwrite another active guest's card!
-        guest_user_id = ordered_slots[0]
-        if card_int:
-            existing_match = None
-            free_slot = None
-            all_live_maps = [self._live_userid_to_user.get(d.get("ip"), {}) for d in self.devices if d.get("ip")]
-            for s_id in ordered_slots:
-                cards_in_slot = [getattr(m.get(s_id), "card", 0) for m in all_live_maps if s_id in m]
-                if any(c == card_int for c in cards_in_slot):
-                    existing_match = s_id
-                    break
-                if free_slot is None and (not cards_in_slot or all(not c or int(c) == 0 for c in cards_in_slot)):
-                    free_slot = s_id
-            guest_user_id = existing_match or free_slot or ordered_slots[0]
+        # Atomic slot allocation across all 4 device live maps to prevent concurrent guests colliding on 562xx
+        with self._slot_alloc_lock:
+            guest_user_id = ordered_slots[0]
+            if card_int:
+                existing_match = None
+                free_slot = None
+                all_live_maps = [self._live_userid_to_user.get(d.get("ip"), {}) for d in self.devices if d.get("ip")]
+                for s_id in ordered_slots:
+                    cards_in_slot = [getattr(m.get(s_id), "card", 0) for m in all_live_maps if s_id in m]
+                    if any(c == card_int for c in cards_in_slot):
+                        existing_match = s_id
+                        break
+                    if free_slot is None and (not cards_in_slot or all(not c or int(c) == 0 for c in cards_in_slot)):
+                        free_slot = s_id
+                guest_user_id = existing_match or free_slot or ordered_slots[0]
 
-        if card_int:
-            with self._card_gen_lock:
-                self._card_op_gen[card_int] = self._card_op_gen.get(card_int, 0) + 1
+            if card_int:
+                with self._card_gen_lock:
+                    self._card_op_gen[card_int] = self._card_op_gen.get(card_int, 0) + 1
 
         # Immediately update in-memory person cache so live_capture resolves the visitor in <10ms
         dept_label = str(visitor_data.get("department") or visitor_data.get("company") or "Khách").strip()
@@ -646,7 +655,8 @@ class ZkDirectClient:
             "atid": guest_user_id,
             "sp_item_id": sp_item_id
         }
-        self._index_person_entry(self._person_cache, [guest_user_id, card_num_str, str(card_int)], vis_cache_entry)
+        with self._person_cache_lock:
+            self._index_person_entry(self._person_cache, [guest_user_id, card_num_str, str(card_int)], vis_cache_entry)
 
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -659,32 +669,31 @@ class ZkDirectClient:
             lock_acquired = lock.acquire(timeout=2.5) if lock else True
             if not lock_acquired:
                 return False, f"{name}: device busy", guest_user_id
+            conn = None
             try:
                 zk = self._get_device_connection(ip, dev.get("port", 4370))
                 conn = zk.connect()
 
-                # Fast path: use cached 562xx slot UID map if already warmed by live listener
-                # Priority: 1) slot already holding card_int, 2) target guest_user_id if free (card==0) or matching,
-                # 3) any free 562xx slot (card==0) — NEVER overwrite another active guest's occupied slot!
                 cached_by_uid = self._live_userid_to_user.get(ip, {})
                 chosen_slot = None
                 if cached_by_uid:
-                    first_free = None
-                    for s_id in ordered_slots:
-                        eu = cached_by_uid.get(s_id)
-                        if not eu:
-                            continue
-                        eu_card = getattr(eu, "card", 0) or 0
-                        if card_int and eu_card == card_int:
-                            chosen_slot = eu
-                            break
-                        if s_id == guest_user_id and (not eu_card or int(eu_card) == 0):
-                            chosen_slot = eu
-                            break
-                        if first_free is None and (not eu_card or int(eu_card) == 0):
-                            first_free = eu
+                    # Prefer the consistent slot chosen above if it already holds this card or is free
+                    eu_pref = cached_by_uid.get(guest_user_id)
+                    if eu_pref:
+                        pref_card = getattr(eu_pref, "card", 0) or 0
+                        if (card_int and pref_card == card_int) or (not pref_card or int(pref_card) == 0):
+                            chosen_slot = eu_pref
                     if not chosen_slot:
-                        chosen_slot = first_free
+                        for s_id in ordered_slots:
+                            eu = cached_by_uid.get(s_id)
+                            if not eu:
+                                continue
+                            eu_card = getattr(eu, "card", 0) or 0
+                            if card_int and eu_card == card_int:
+                                chosen_slot = eu
+                                break
+                            if chosen_slot is None and (not eu_card or int(eu_card) == 0):
+                                chosen_slot = eu
 
                 if not chosen_slot:
                     existing_users = conn.get_users()
@@ -701,7 +710,7 @@ class ZkDirectClient:
                                 fallback_requested = eu
                             elif fallback_free is None and (not eu_card or int(eu_card) == 0):
                                 fallback_free = eu
-                        elif card_int and (eu.card == card_int or eu_id_str.startswith("803") or eu_id_str.startswith("809")):
+                        elif card_int and (eu_id_str.startswith("803") or eu_id_str.startswith("809")):
                             conn.delete_user(uid=eu.uid, user_id=eu.user_id)
                     chosen_slot = target_slot or fallback_requested or fallback_free
 
@@ -722,7 +731,6 @@ class ZkDirectClient:
                     password="",
                     tz1=1
                 )
-                conn.disconnect()
 
                 class _DynamicGuestObj:
                     def __init__(self, u_id, u_uid, u_name, u_card):
@@ -734,7 +742,8 @@ class ZkDirectClient:
                 dyn_u = _DynamicGuestObj(slot_user_id, slot_uid, f"Khach {full_name}"[:24], card_int)
                 self._live_uid_to_user.setdefault(ip, {})[slot_uid] = dyn_u
                 self._live_userid_to_user.setdefault(ip, {})[slot_user_id] = dyn_u
-                self._index_person_entry(self._person_cache, [slot_user_id, card_num_str, str(card_int)], vis_cache_entry)
+                with self._person_cache_lock:
+                    self._index_person_entry(self._person_cache, [slot_user_id, card_num_str, str(card_int)], vis_cache_entry)
                 logger.info("[ZK DIRECT] Đã nạp thẻ %s vào khe %s (uid=%s - %s) trên %s",
                             card_num_str, slot_user_id, slot_uid, full_name, name)
                 return True, "", slot_user_id
@@ -742,6 +751,11 @@ class ZkDirectClient:
                 logger.error("[ZK DIRECT] Lỗi nạp thẻ vào máy %s: %s", name, e)
                 return False, f"{name}: {e}", guest_user_id
             finally:
+                if conn:
+                    try:
+                        conn.disconnect()
+                    except Exception:
+                        pass
                 if lock and lock_acquired:
                     lock.release()
 
@@ -802,6 +816,7 @@ class ZkDirectClient:
             lock_acquired = lock.acquire(timeout=2.5) if lock else True
             if not lock_acquired:
                 return 0
+            conn = None
             try:
                 if card_int and self._card_op_gen.get(card_int, 0) != my_gen:
                     logger.info("[ZK DIRECT] Bỏ qua thu hồi thẻ %s trên %s vì đã có lượt gán mới hơn.", clean_card, name)
@@ -810,21 +825,19 @@ class ZkDirectClient:
                 zk = self._get_device_connection(ip, dev.get("port", 4370))
                 conn = zk.connect()
 
-                # Fast lookup in live user map first; fallback to conn.get_users() only if needed
+                # NEVER match staff user_id by clean_digits[-8:] — only match card number or explicit guest slots (562xx / >= 80000000)
+                def _is_card_or_guest_match(u):
+                    u_id_s = str(getattr(u, "user_id", "") or "").strip()
+                    u_c = getattr(u, "card", None)
+                    card_hit = (u_c == card_int) or (card_int and str(u_c) == str(card_int))
+                    if u_id_s.startswith("562") or (u_id_s.isdigit() and int(u_id_s) >= 80000000):
+                        return card_hit or (clean_digits and u_id_s == clean_digits[-8:])
+                    return False
+
                 cached_users = list(self._live_userid_to_user.get(ip, {}).values())
-                matched_users = [
-                    u for u in cached_users
-                    if getattr(u, "card", None) == card_int
-                    or (card_int and str(getattr(u, "card", "")) == str(card_int))
-                    or (clean_digits and str(getattr(u, "user_id", "")).strip() == clean_digits[-8:])
-                ]
+                matched_users = [u for u in cached_users if _is_card_or_guest_match(u)]
                 if not matched_users:
-                    matched_users = [
-                        u for u in conn.get_users()
-                        if u.card == card_int
-                        or (card_int and str(u.card) == str(card_int))
-                        or (clean_digits and u.user_id == clean_digits[-8:])
-                    ]
+                    matched_users = [u for u in conn.get_users() if _is_card_or_guest_match(u)]
 
                 revoked = 0
                 for u in matched_users:
@@ -843,16 +856,25 @@ class ZkDirectClient:
                             tz1=1
                         )
                         u.card = 0
+                        u.name = f"Khach {u_id_str[-2:]}"
                         revoked += 1
-                    else:
+                    elif u_id_str.isdigit() and int(u_id_str) >= 80000000:
                         conn.delete_user(uid=u.uid, user_id=u.user_id)
                         revoked += 1
-                conn.disconnect()
+                with self._person_cache_lock:
+                    self._person_cache.pop(clean_card, None)
+                    if card_int:
+                        self._person_cache.pop(str(card_int), None)
                 return 1 if revoked > 0 else 0
             except Exception as e:
                 logger.warning("[ZK DIRECT] Thu hồi thẻ tại %s: %s", name, e)
                 return 0
             finally:
+                if conn:
+                    try:
+                        conn.disconnect()
+                    except Exception:
+                        pass
                 if lock and lock_acquired:
                     lock.release()
 
@@ -926,7 +948,10 @@ class ZkDirectClient:
 
                 target_uid = int(existing_u.uid) if existing_u else (max_staff_uid + 1)
                 target_user_id = str(existing_u.user_id).strip() if existing_u else padded_atid
-                final_card = card_int if str(card_number or "").strip() else (int(existing_u.card or 0) if existing_u else 0)
+                if card_number is not None:
+                    final_card = card_int if str(card_number).strip() else 0
+                else:
+                    final_card = int(existing_u.card or 0) if existing_u else 0
                 final_pw = str(existing_u.password or "") if existing_u else ""
 
                 self._set_access_user_tz(
@@ -1212,12 +1237,9 @@ class ZkDirectClient:
         try:
             year, month, day, hour, minute, second = struct.unpack("6B", timehex[:6])
             year_full = year + 2000
-            now = datetime.now()
-            # If device year is valid, use device timestamp; if PC clock is ahead by months (e.g. test clock), align date to today so UI filter matches
-            dt = datetime(year_full, month, day, hour, minute, second)
-            if abs((now.date() - dt.date()).days) > 2:
-                return datetime(now.year, now.month, now.day, hour, minute, second)
-            return dt
+            if year_full < 2020 or year_full > 2050:
+                return datetime.now()
+            return datetime(year_full, month, day, hour, minute, second)
         except Exception:
             return datetime.now()
 
@@ -1332,7 +1354,7 @@ class ZkDirectClient:
 
                 # Subscribe to all real-time access & attendance events
                 try:
-                    self._status_cache.setdefault("live_clocks", {})[ip] = (conn.get_time(), time.time())
+                    self._status_cache.setdefault("live_clocks", {})[ip] = (conn.get_time(), time.monotonic())
                 except Exception:
                     pass
                 conn.reg_event(0xFFFF)
@@ -1354,6 +1376,10 @@ class ZkDirectClient:
                             conn._ZK__ack_ok()
                         except Exception:
                             pass
+
+                        # Always read latest user maps so biometric matrix refresh updates live listener dynamically
+                        cur_uid_map = self._live_uid_to_user.get(ip) or uid_to_user
+                        cur_userid_map = self._live_userid_to_user.get(ip) or userid_to_user
 
                         if len(data_recv) < 16:
                             continue
@@ -1378,20 +1404,19 @@ class ZkDirectClient:
                                 raw_uid, status_val, punch_val, timehex = struct.unpack("<24sBB6s", payload[:32])
                                 user_id_str = raw_uid.split(b"\x00")[0].decode("utf-8", errors="ignore").strip()
                             else:
-                                # Fallback for intermediate packet sizes (14..31 bytes)
                                 raw_uid = payload[:-8]
                                 status_val, punch_val, timehex = struct.unpack("<BB6s", payload[-8:])
                                 user_id_str = raw_uid.split(b"\x00")[0].decode("utf-8", errors="ignore").strip()
 
                             scan_dt = self._decode_zk_timehex(timehex)
-                            dev_u = userid_to_user.get(user_id_str)
+                            dev_u = cur_userid_map.get(user_id_str)
                             self._emit_live_scan(dev, user_id_str, status_val, punch_val, scan_dt, dev_u, on_scan_callback)
 
                         # 2. EF_VERIFY (8): Verification event (4-byte internal uid)
                         elif event_type == const.EF_VERIFY and len(payload) >= 4:
                             verified_uid = struct.unpack("<I", payload[:4])[0]
-                            if 0 < verified_uid < 0xFFFFFFFF and verified_uid in uid_to_user:
-                                dev_u = uid_to_user[verified_uid]
+                            if 0 < verified_uid < 0xFFFFFFFF and verified_uid in cur_uid_map:
+                                dev_u = cur_uid_map[verified_uid]
                                 uid_str = str(dev_u.user_id).strip()
                                 v_mode = 2 if (getattr(dev_u, "card", 0) and str(getattr(dev_u, "name", "")).lower().startswith("khach")) else 15
 
@@ -1405,8 +1430,11 @@ class ZkDirectClient:
                         idle_cycles += 1
                         if idle_cycles >= 4:
                             idle_cycles = 0
-                            # Send lightweight keepalive re-registration every ~40s
-                            conn.reg_event(0xFFFF)
+                            try:
+                                conn.reg_event(0xFFFF)
+                            except Exception as ka_err:
+                                logger.debug("[ZK LIVE] Keepalive warning (%s): %s", name, ka_err)
+                                break
 
             except Exception as e:
                 self._live_online_devices[ip] = False
@@ -1459,8 +1487,8 @@ class ZkDirectClient:
         local_now = datetime.now()
         ntp_now = self.get_vietnam_ntp_time()
         ref_now = ntp_now if ntp_now else local_now
-        pc_drift_sec = round((local_now - ntp_now).total_seconds(), 1) if ntp_now else 0.0
-        pc_clock_valid = abs(pc_drift_sec) <= 30.0
+        pc_drift_sec = round((local_now - ntp_now).total_seconds(), 1) if ntp_now else None
+        pc_clock_valid = (abs(pc_drift_sec) <= 30.0) if ntp_now is not None else True
 
         if ntp_now and not pc_clock_valid:
             logger.warning(
@@ -1480,9 +1508,10 @@ class ZkDirectClient:
                 continue
 
             if self._live_online_devices.get(ip):
-                cached_clk, clk_ts = self._status_cache.get("live_clocks", {}).get(ip, (None, 0.0))
+                cached_clk, clk_mono = self._status_cache.get("live_clocks", {}).get(ip, (None, 0.0))
                 if cached_clk:
-                    est_dev_time = cached_clk + __import__("datetime").timedelta(seconds=max(0.0, time.time() - clk_ts))
+                    elapsed = max(0.0, time.monotonic() - clk_mono) if clk_mono < 1e9 else max(0.0, time.time() - clk_mono)
+                    est_dev_time = cached_clk + __import__("datetime").timedelta(seconds=elapsed)
                     drift_vs_vn = round((est_dev_time - ref_now).total_seconds(), 1)
                     devices_report[name] = {
                         "ip": ip,
@@ -1497,11 +1526,11 @@ class ZkDirectClient:
                 devices_report[name] = {"ip": ip, "status": "busy"}
                 continue
 
+            conn = None
             try:
                 zk = self._get_device_connection(ip, dev.get("port", 4370))
                 conn = zk.connect()
                 dev_time = conn.get_time()
-                conn.disconnect()
                 drift_vs_vn = round((dev_time - ref_now).total_seconds(), 1) if dev_time else None
                 devices_report[name] = {
                     "ip": ip,
@@ -1512,6 +1541,11 @@ class ZkDirectClient:
             except Exception as e:
                 devices_report[name] = {"ip": ip, "status": f"Error: {e}"}
             finally:
+                if conn:
+                    try:
+                        conn.disconnect()
+                    except Exception:
+                        pass
                 if lock and lock_acquired:
                     lock.release()
 
@@ -1563,6 +1597,7 @@ class ZkDirectClient:
                 results[name] = "Device busy"
                 continue
 
+            conn = None
             try:
                 zk = self._get_device_connection(ip, dev.get("port", 4370))
                 conn = zk.connect()
@@ -1571,14 +1606,20 @@ class ZkDirectClient:
                 drift = abs((dev_time - target_now).total_seconds()) if dev_time else 9999
                 if drift > max_drift_seconds:
                     conn.set_time(target_now)
+                    self._status_cache.setdefault("live_clocks", {})[ip] = (target_now, time.monotonic())
                     logger.info("[TimeSync 2-Layer Confirmed] Đã đồng bộ giờ chuẩn VN %s (%s): %s -> %s (lệch %.1fs)", name, ip, dev_time, target_now, drift)
                     results[name] = f"Synced to VN NTP (drift was {drift:.1f}s)"
                 else:
+                    self._status_cache.setdefault("live_clocks", {})[ip] = (dev_time or target_now, time.monotonic())
                     results[name] = f"OK (drift {drift:.1f}s)"
-                conn.disconnect()
             except Exception as e:
                 results[name] = f"Error: {e}"
             finally:
+                if conn:
+                    try:
+                        conn.disconnect()
+                    except Exception:
+                        pass
                 if lock and lock_acquired:
                     lock.release()
         return {"success": True, "vietnam_ntp_time": ntp_now.strftime("%Y-%m-%d %H:%M:%S"), "results": results}

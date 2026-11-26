@@ -243,6 +243,8 @@ def sync_from_zk_hardware_readonly(conn):
                 users = conn_zk.get_users()
                 for u in users:
                     uid_str = str(u.user_id).strip()
+                    if uid_str.isdigit() and (int(uid_str) >= 80000000 or 56200 <= int(uid_str) <= 56299 or int(uid_str.lstrip("0") or "0") >= 56200):
+                        continue
                     card_str = str(u.card).strip() if u.card and int(u.card) != 0 else None
                     priv = int(u.privilege or 0)
                     # Try both raw user_id and zero-padded 8-char ATID

@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { ROUTES } from '../../constants/routes';
 import { apiFetch } from '../../services/apiClient';
+import { getLocalDateStr } from '../../utils/dateUtils';
 
 function formatSmoothPath(points) {
   if (!points || points.length === 0) return '';
@@ -173,16 +174,20 @@ export default function OverviewDashboardPage({
       device: s.device_name || 'Cổng chính',
       verify: s.verify_mode || 'Khuôn mặt',
     }));
-    const visitorRows = (activeVisitors || []).map((v) => ({
-      key: `vis_${v.id || v.card_number}`,
-      name: v.full_name || 'Khách',
-      code: v.card_display_name || v.card_number || v.cccd_number || '—',
-      isStaff: false,
-      department: v.department || 'Khách',
-      time: String(v.checkin_time || '').slice(11, 19) || String(v.checkin_time || ''),
-      device: v.gate_last_in_device || 'Lễ tân / Cổng',
-      verify: v.card_number ? 'Thẻ NFC' : 'Đăng ký',
-    }));
+    const todayLocal = getLocalDateStr();
+    const isViewingToday = !scanDate || scanDate === todayLocal;
+    const visitorRows = isViewingToday
+      ? (activeVisitors || []).map((v) => ({
+          key: `vis_${v.id || v.card_number}`,
+          name: v.full_name || 'Khách',
+          code: v.card_display_name || v.card_number || v.cccd_number || '—',
+          isStaff: false,
+          department: v.department || 'Khách',
+          time: String(v.checkin_time || '').slice(11, 19) || String(v.checkin_time || ''),
+          device: v.gate_last_in_device || 'Lễ tân / Cổng',
+          verify: v.card_number ? 'Thẻ NFC' : 'Đăng ký',
+        }))
+      : [];
 
     let merged =
       insideFilter === 'STAFF'
@@ -203,7 +208,7 @@ export default function OverviewDashboardPage({
       visitorCount: visitorRows.length,
       totalCount: staffRows.length + visitorRows.length,
     };
-  }, [insideStaff, activeVisitors, insideFilter, insideSearch]);
+  }, [insideStaff, activeVisitors, insideFilter, insideSearch, scanDate]);
 
   const kpi = analytics?.kpi || {};
   const hourly = analytics?.hourly || { labels: [], staff: [], visitors: [] };
@@ -493,7 +498,13 @@ export default function OverviewDashboardPage({
               </span>
             </div>
             <div style={{ fontSize: 11.5, color: '#334155', fontWeight: 600, marginTop: 4 }}>
-              Vào: {totalIn} · Ra: {totalOut} · 4/4 ZKTeco Online
+              Vào: {totalIn} · Ra: {totalOut} ·{' '}
+              {(() => {
+                const devs = Object.values(clockAudit?.devices || {});
+                if (!devs.length) return 'ZKTeco đang kiểm tra...';
+                const okCnt = devs.filter((d) => d?.status === 'OK' || d?.status === 'DRIFT_WARNING').length;
+                return `${okCnt}/${devs.length} ZKTeco Online`;
+              })()}
             </div>
           </div>
         </div>

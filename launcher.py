@@ -22,7 +22,9 @@ sys.path.insert(0, BASE_DIR)
 
 
 class _TeeStream:
-    """Safely routes print() output to rotating log file when running under pythonw.exe (no console)."""
+    """Safely routes print() output to log file when running under pythonw.exe (no console)."""
+    _write_lock = threading.Lock()
+
     def __init__(self, log_file_path: str, orig_stream=None):
         self.orig = orig_stream
         self.log_file_path = log_file_path
@@ -35,8 +37,9 @@ class _TeeStream:
                 pass
         if msg:
             try:
-                with open(self.log_file_path, "a", encoding="utf-8", errors="replace") as f:
-                    f.write(msg)
+                with _TeeStream._write_lock:
+                    with open(self.log_file_path, "a", encoding="utf-8", errors="replace") as f:
+                        f.write(msg)
             except Exception:
                 pass
 
@@ -67,8 +70,9 @@ def _setup_logging(is_dev: bool) -> str:
     sys.stderr = _TeeStream(log_path, sys.stderr)
 
     root_logger = logging.getLogger()
+    root_logger.setLevel(logging.INFO)
     if not any(isinstance(h, RotatingFileHandler) for h in root_logger.handlers):
-        fh = RotatingFileHandler(log_path, maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8")
+        fh = RotatingFileHandler(log_path, maxBytes=10 * 1024 * 1024, backupCount=3, encoding="utf-8", delay=True)
         fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
         root_logger.addHandler(fh)
     return log_path
@@ -122,7 +126,7 @@ def free_stale_port(port: int) -> None:
             pids_to_kill = set()
             for line in out.splitlines():
                 parts = line.split()
-                if len(parts) >= 5 and f":{port}" in parts[1] and parts[3].upper() == "LISTENING":
+                if len(parts) >= 5 and parts[1].endswith(f":{port}") and parts[3].upper() == "LISTENING":
                     pid = int(parts[4])
                     if pid != my_pid and pid > 0:
                         pids_to_kill.add(pid)
@@ -285,11 +289,12 @@ def main():
     if not is_dev:
         ensure_lan_firewall_port(port)
 
-    # 2. Verify / Acquire Microsoft 365 SharePoint Token ONLY on local Server PC
+    # 2. Verify / Acquire Microsoft 365 SharePoint Token ONLY interactively when a browser UI is allowed;
+    #    in headless (--no-browser / VBS) startup, NEVER block waitress port 6868 waiting for interactive login!
     if not is_dev:
         try:
             import sharepoint_vms_sync
-            sp_tok = sharepoint_vms_sync.get_sharepoint_tokens(allow_interactive=True)
+            sp_tok = sharepoint_vms_sync.get_sharepoint_tokens(allow_interactive=not no_browser)
             if sp_tok.get("ok"):
                 print(f"  [SHAREPOINT] Da ket noi Microsoft 365 ({sp_tok.get('account')}) -> Dong bo SharePoint VMS")
             else:

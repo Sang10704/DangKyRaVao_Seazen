@@ -26,7 +26,7 @@ export default function AccessLinksPage({ user, notify }) {
     {
       key: 'appointments',
       title: 'Các Phòng ban (Khách mời & Lịch hẹn)',
-      role: 'Tài khoản: Khach / MK: Khach@1516',
+      role: 'Tài khoản phòng ban (Khach)',
       url: `${basePcUrl}/appointments`,
       ipUrl: baseIpUrl ? `${baseIpUrl}/appointments` : '',
       desc: 'Dành cho nhân viên các phòng ban đăng ký khách hẹn trước để Lễ tân cấp thẻ nhanh khi khách đến.',

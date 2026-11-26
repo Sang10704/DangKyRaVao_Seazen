@@ -332,7 +332,6 @@ GO
         ALTER TABLE tbl_CustomerCards ADD VerifiedBy NVARCHAR(100) NULL;
     IF COL_LENGTH('tbl_CustomerCards', 'VerifiedAt') IS NULL
         ALTER TABLE tbl_CustomerCards ADD VerifiedAt DATETIME NULL;
-END
 GO
 
 -- 10. Bảng Quản Lý Khách Ra Vào & Cấp Thẻ Tạm (HR_CustomerInfo)

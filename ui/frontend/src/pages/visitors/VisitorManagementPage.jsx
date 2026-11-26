@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { apiFetch } from '../../services/apiClient';
+import { getLocalDateStr, getLocalTimeStr } from '../../utils/dateUtils';
 
 function foldVn(str) {
   return String(str || '')
@@ -61,7 +62,7 @@ function formatDurationVi(totalMinutes) {
 function formatDateTimeCompact(raw, nowMs) {
   const s = String(raw || '').replace('T', ' ').trim();
   if (!s) return '—';
-  const todayIso = new Date(nowMs).toISOString().slice(0, 10);
+  const todayIso = getLocalDateStr(new Date(nowMs));
   const m = s.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}:\d{2})(?::(\d{2}))?/);
   if (!m) return s.slice(0, 16);
   const dIso = `${m[1]}-${m[2]}-${m[3]}`;
@@ -147,8 +148,8 @@ function evaluateVisitorTiming(v, nowMs) {
         alertMessage = `Đã quét ${v.gate_last_out_device || 'cổng RA'} lúc ${hhmm} (${minsSinceOut} phút trước) chưa trả thẻ — Yêu cầu Check-out!`;
       }
     } else {
-      const cinDateStr = new Date(cinMs).toISOString().slice(0, 10);
-      const nowDateStr = new Date(nowMs).toISOString().slice(0, 10);
+      const cinDateStr = getLocalDateStr(new Date(cinMs));
+      const nowDateStr = getLocalDateStr(new Date(nowMs));
       if (cinDateStr < nowDateStr && elapsedMins >= 1) {
         overdueAlert = true;
         overdueMins = elapsedMins;
@@ -266,8 +267,11 @@ export default function VisitorManagementPage({
   onRefreshData,
   notify,
 }) {
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const nowTimeStr = new Date().toTimeString().slice(0, 5);
+  const todayStr = getLocalDateStr();
+  const nowTimeStr = getLocalTimeStr();
+  const qrMainTimerRef = useRef(null);
+  const qrCompTimerRef = useRef(null);
+  const [checkingOutId, setCheckingOutId] = useState(null);
 
   const [nowMs, setNowMs] = useState(() => Date.now());
   useEffect(() => {
@@ -756,45 +760,81 @@ export default function VisitorManagementPage({
       .slice(0, 60);
   }, [deptEmployees, form.host_person]);
 
-  const parseQrForMain = async (raw) => {
+  const parseQrForMain = (raw, immediate = false) => {
     setMainQrRaw(raw);
-    if (!raw.includes('|')) return;
-    const { ok, data } = await apiFetch('/api/visitor/parse_cccd', {
-      method: 'POST',
-      body: JSON.stringify({ qr_string: raw }),
-    });
-    if (ok && data.success && data.data) {
-      const p = data.data;
-      setForm((prev) => ({
-        ...prev,
-        full_name: p.full_name || prev.full_name,
-        cccd_number: p.cccd_number || prev.cccd_number,
-        birth_date: normalizeStoredDob(p.birth_date) || prev.birth_date,
-      }));
-      setShowMainQrBox(false);
-      setMainQrRaw('');
-      notify(`Đã đọc QR căn cước: ${p.full_name} (${p.cccd_number})`, 'success');
+    if (qrMainTimerRef.current) clearTimeout(qrMainTimerRef.current);
+    const cleaned = String(raw || '').trim();
+    if (!cleaned.includes('|')) return;
+
+    const runParse = async () => {
+      const { ok, data } = await apiFetch('/api/visitor/parse_cccd', {
+        method: 'POST',
+        body: JSON.stringify({ qr_string: cleaned }),
+      });
+      if (ok && data.success && data.data) {
+        const p = data.data;
+        setForm((prev) => ({
+          ...prev,
+          full_name: p.full_name || prev.full_name,
+          cccd_number: p.cccd_number || prev.cccd_number,
+          birth_date: normalizeStoredDob(p.birth_date) || prev.birth_date,
+        }));
+        setShowMainQrBox(false);
+        setMainQrRaw('');
+        notify(`Đã đọc QR căn cước: ${p.full_name} (${p.cccd_number})`, 'success');
+      }
+    };
+
+    const parts = cleaned.split('|');
+    const looksComplete =
+      immediate ||
+      String(raw || '').includes('\n') ||
+      String(raw || '').includes('\r') ||
+      (parts.length >= 6 && parts[2].trim() && parts[3].trim());
+
+    if (looksComplete) {
+      runParse();
+    } else {
+      qrMainTimerRef.current = setTimeout(runParse, 320);
     }
   };
 
-  const parseQrForCompanion = async (raw) => {
+  const parseQrForCompanion = (raw, immediate = false) => {
     setCompQrRaw(raw);
-    if (!raw.includes('|')) return;
-    const { ok, data } = await apiFetch('/api/visitor/parse_cccd', {
-      method: 'POST',
-      body: JSON.stringify({ qr_string: raw }),
-    });
-    if (ok && data.success && data.data) {
-      const p = data.data;
-      setCompForm((prev) => ({
-        ...prev,
-        full_name: p.full_name || prev.full_name,
-        cccd_number: p.cccd_number || prev.cccd_number,
-        birth_date: normalizeStoredDob(p.birth_date) || prev.birth_date,
-      }));
-      setShowCompQrBox(false);
-      setCompQrRaw('');
-      notify(`Đã đọc QR người đi cùng: ${p.full_name}`, 'success');
+    if (qrCompTimerRef.current) clearTimeout(qrCompTimerRef.current);
+    const cleaned = String(raw || '').trim();
+    if (!cleaned.includes('|')) return;
+
+    const runParse = async () => {
+      const { ok, data } = await apiFetch('/api/visitor/parse_cccd', {
+        method: 'POST',
+        body: JSON.stringify({ qr_string: cleaned }),
+      });
+      if (ok && data.success && data.data) {
+        const p = data.data;
+        setCompForm((prev) => ({
+          ...prev,
+          full_name: p.full_name || prev.full_name,
+          cccd_number: p.cccd_number || prev.cccd_number,
+          birth_date: normalizeStoredDob(p.birth_date) || prev.birth_date,
+        }));
+        setShowCompQrBox(false);
+        setCompQrRaw('');
+        notify(`Đã đọc QR người đi cùng: ${p.full_name}`, 'success');
+      }
+    };
+
+    const parts = cleaned.split('|');
+    const looksComplete =
+      immediate ||
+      String(raw || '').includes('\n') ||
+      String(raw || '').includes('\r') ||
+      (parts.length >= 6 && parts[2].trim() && parts[3].trim());
+
+    if (looksComplete) {
+      runParse();
+    } else {
+      qrCompTimerRef.current = setTimeout(runParse, 320);
     }
   };
 
@@ -843,12 +883,14 @@ export default function VisitorManagementPage({
   };
 
   const handleResetForm = () => {
+    const curDate = getLocalDateStr();
+    const curTime = getLocalTimeStr();
     setForm({
       full_name: '',
       birth_date: '',
-      from_date: todayStr,
-      from_time: nowTimeStr,
-      to_date: todayStr,
+      from_date: curDate,
+      from_time: curTime,
+      to_date: curDate,
       to_time: '16:45',
       purpose: '',
       cccd_number: '',
@@ -1276,7 +1318,7 @@ export default function VisitorManagementPage({
               </button>
 
               {/* Inline preview directly below Image 2 showing exact holder */}
-              {checkoutQuery.trim() && (
+              {focusedField === 'quick_checkout' && checkoutQuery.trim() && (
                 <div className="quick-checkout-popover">
                   {quickCheckoutMatches.length === 0 ? (
                     <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '2px 4px' }}>
@@ -1698,7 +1740,7 @@ export default function VisitorManagementPage({
                   <select
                     className="v-input"
                     value={form.department}
-                    onChange={(e) => setForm({ ...form, department: e.target.value })}
+                    onChange={(e) => setForm({ ...form, department: e.target.value, host_person: '', host_phone: '' })}
                   >
                     {departments.map((d) => (
                       <option key={d.DepartmentID || d.id} value={d.DepartmentName || d.name}>
@@ -2403,15 +2445,27 @@ export default function VisitorManagementPage({
                                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                                   <button
                                     type="button"
+                                    disabled={checkingOutId === v.id}
                                     className={`btn btn-sm ${t.overdueAlert ? '' : 'btn-primary'}`}
                                     style={
                                       t.overdueAlert
                                         ? { background: '#dc2626', borderColor: '#dc2626', color: '#ffffff', fontWeight: 700 }
                                         : {}
                                     }
-                                    onClick={() => handleFastCheckout(v.id)}
+                                    onClick={async () => {
+                                      setCheckingOutId(v.id);
+                                      try {
+                                        if (hasCompanions) {
+                                          await handleGroupCheckout(v);
+                                        } else {
+                                          await handleFastCheckout(v.id);
+                                        }
+                                      } finally {
+                                        setCheckingOutId(null);
+                                      }
+                                    }}
                                   >
-                                    {t.overdueAlert ? 'Check-out ngay' : 'Trả thẻ & Ra về'}
+                                    {t.overdueAlert ? 'Check-out ngay' : hasCompanions ? 'Trả thẻ cả đoàn' : 'Trả thẻ & Ra về'}
                                   </button>
                                   <button
                                     type="button"

@@ -1,10 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../services/apiClient';
 
 export default function ClockSafetyModal({ open, onClose, clockAudit, onSynced, notify }) {
   const [step1Confirmed, setStep1Confirmed] = useState(false);
   const [confirmCode, setConfirmCode] = useState('');
   const [syncing, setSyncing] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      setStep1Confirmed(false);
+      setConfirmCode('');
+    }
+  }, [open]);
 
   if (!open) return null;
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { apiFetch } from '../../services/apiClient';
+import { getLocalDateStr } from '../../utils/dateUtils';
 
 const TABS = [
   { id: 'all', label: 'Tất cả đang làm' },
@@ -214,7 +215,7 @@ export default function OnsiteStaffPage({ onToast }) {
   const [payload, setPayload] = useState(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [selectedDate, setSelectedDate] = useState(() => getLocalDateStr());
   const [activeTab, setActiveTab] = useState('all');
   const [selectedDept, setSelectedDept] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');

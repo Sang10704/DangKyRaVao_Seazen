@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { apiFetch } from '../../services/apiClient';
+import { getLocalDateStr, getLocalTimeStr } from '../../utils/dateUtils';
 
 function foldVn(str) {
   return String(str || '')
@@ -38,9 +39,8 @@ export default function AppointmentsPage({
   onRefreshData,
   notify,
 }) {
-  const now = new Date();
-  const todayStr = now.toISOString().slice(0, 10);
-  const nowTimeStr = now.toTimeString().slice(0, 5);
+  const todayStr = getLocalDateStr();
+  const nowTimeStr = getLocalTimeStr();
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -50,6 +50,7 @@ export default function AppointmentsPage({
   const [showMainQrBox, setShowMainQrBox] = useState(false);
   const [mainQrRaw, setMainQrRaw] = useState('');
   const mainQrInputRef = useRef(null);
+  const mainQrTimerRef = useRef(null);
 
   const [form, setForm] = useState({
     full_name: '',
@@ -65,7 +66,7 @@ export default function AppointmentsPage({
     access_area: 'Sảnh Chính (Cổng Làn Vào & Làn Ra)',
     notes: '',
     use_phone: false,
-    department: departments[0]?.name || 'BGĐ SeaZen',
+    department: departments[0]?.DepartmentName || departments[0]?.name || 'BGĐ SeaZen',
     host_person: '',
     host_phone: '',
   });
@@ -143,24 +144,49 @@ export default function AppointmentsPage({
     [focusedField, form.full_name, getGuestSuggestions]
   );
 
-  const parseQrForMain = async (raw) => {
+  useEffect(() => {
+    return () => {
+      if (mainQrTimerRef.current) clearTimeout(mainQrTimerRef.current);
+    };
+  }, []);
+
+  const parseQrForMain = (raw, immediate = false) => {
     setMainQrRaw(raw);
-    if (!raw.includes('|')) return;
-    const { ok, data } = await apiFetch('/api/visitor/parse_cccd', {
-      method: 'POST',
-      body: JSON.stringify({ qr_string: raw }),
-    });
-    if (ok && data?.success && data?.data) {
-      const p = data.data;
-      setForm((prev) => ({
-        ...prev,
-        full_name: p.full_name || prev.full_name,
-        cccd_number: p.cccd_number || prev.cccd_number,
-        birth_date: normalizeStoredDob(p.birth_date) || prev.birth_date,
-      }));
-      setShowMainQrBox(false);
-      setMainQrRaw('');
-      notify(`Đã đọc QR căn cước: ${p.full_name} (${p.cccd_number})`, 'success');
+    if (mainQrTimerRef.current) clearTimeout(mainQrTimerRef.current);
+    const cleaned = String(raw || '').trim();
+    if (!cleaned.includes('|')) return;
+
+    const runParse = async () => {
+      const { ok, data } = await apiFetch('/api/visitor/parse_cccd', {
+        method: 'POST',
+        body: JSON.stringify({ qr_string: cleaned }),
+      });
+      if (ok && data?.success && data?.data) {
+        const p = data.data;
+        setForm((prev) => ({
+          ...prev,
+          full_name: p.full_name || prev.full_name,
+          cccd_number: p.cccd_number || prev.cccd_number,
+          birth_date: normalizeStoredDob(p.birth_date) || prev.birth_date,
+        }));
+        setShowMainQrBox(false);
+        setMainQrRaw('');
+        notify(`Đã đọc QR căn cước: ${p.full_name} (${p.cccd_number})`, 'success');
+      }
+    };
+
+    const parts = cleaned.split('|');
+    const looksComplete =
+      immediate ||
+      String(raw || '').includes('\n') ||
+      String(raw || '').includes('\r') ||
+      (parts.length >= 6 && parts[2].trim() && parts[3].trim());
+
+    if (looksComplete) {
+      runParse();
+    } else {
+      // Wait briefly for HID barcode scanner to finish typing the remaining fields
+      mainQrTimerRef.current = setTimeout(runParse, 320);
     }
   };
 
@@ -184,13 +210,15 @@ export default function AppointmentsPage({
   };
 
   const handleResetForm = () => {
+    const curDate = getLocalDateStr();
+    const curTime = getLocalTimeStr();
     setForm((prev) => ({
       ...prev,
       full_name: '',
       birth_date: '',
-      from_date: todayStr,
-      from_time: nowTimeStr,
-      to_date: todayStr,
+      from_date: curDate,
+      from_time: curTime,
+      to_date: curDate,
       to_time: '16:45',
       purpose: '',
       cccd_number: '',

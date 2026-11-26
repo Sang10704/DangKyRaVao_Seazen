@@ -446,78 +446,100 @@ def insert_attendance_logs_bulk(scans: List[Dict[str, Any]]) -> int:
                     in_out = int(raw_io)
                 else:
                     in_out = 0 if str(raw_io).strip().lower() in ("in", "vào", "0", "") else 1
-                is_staff = 1 if (scan.get("is_staff", True) and not str(atid).startswith("8000")) else 0
+                is_guest_slot = atid.isdigit() and (
+                    int(atid) >= 80000000 or (56235 <= int(atid) <= 56254)
+                )
+                is_staff = 1 if (scan.get("is_staff", True) and not is_guest_slot) else 0
                 sync_source = str(scan.get("SyncSource") or "ADMS_PUSH_BRIDGE")
 
-                direction = str(scan.get("Direction") or ("IN" if "vào" in device_name.lower() else "OUT"))
+                direction = str(scan.get("Direction") or ("IN" if "vào" in device_name.lower() or "vao" in device_name.lower() else "OUT")).upper()[:10]
 
-                cursor.execute("""
-                    IF NOT EXISTS (
-                        SELECT 1 FROM tbl_AttendanceLogs 
-                        WHERE EmployeeATID = ? AND CheckTime = ? AND DeviceSerialNumber = ?
-                    )
-                    BEGIN
-                        INSERT INTO tbl_AttendanceLogs (
-                            EmployeeATID, FullName, Department, DeviceSerialNumber, DeviceName,
-                            CheckTime, VerifyMode, VerifyModeValue, InOutMode, IsStaff, SyncSource
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    END
-                """, (
-                    atid, dt_obj, device_sn,
-                    atid, full_name, dept, device_sn, device_name,
-                    dt_obj, verify_mode, verify_val, in_out, is_staff, sync_source
-                ))
-                if cursor.rowcount > 0:
-                    inserted += 1
-                    # Also upsert daily timekeeping summary row for staff
-                    if is_staff:
-                        try:
-                            work_date = dt_obj.date()
-                            cursor.execute("""
-                                IF NOT EXISTS (
-                                    SELECT 1 FROM tbl_DailyTimekeeping
-                                    WHERE WorkDate = ? AND EmployeeATID = ?
-                                )
-                                BEGIN
-                                    INSERT INTO tbl_DailyTimekeeping (
-                                        WorkDate, EmployeeATID, EmployeeCode, FullName, DepartmentName,
-                                        ShiftCode, FirstInTime, LastOutTime, TotalScans, LateMinutes, EarlyLeaveMinutes, TotalHours, AttendanceStatus
-                                    ) VALUES (
-                                        ?, ?, ?, ?, ?, 'HC_0745_1645', ?, NULL, 1,
-                                        CASE WHEN (? * 60 + ?) > (7 * 60 + 45) THEN (? * 60 + ?) - (7 * 60 + 45) ELSE 0 END,
-                                        0, 0,
-                                        CASE WHEN (? * 60 + ?) > (7 * 60 + 45) THEN 'LATE' ELSE 'MISSING_OUT' END
+                try:
+                    cursor.execute("""
+                        IF NOT EXISTS (
+                            SELECT 1 FROM tbl_AttendanceLogs 
+                            WHERE EmployeeATID = ? AND CheckTime = ? AND DeviceSerialNumber = ?
+                        )
+                        BEGIN
+                            INSERT INTO tbl_AttendanceLogs (
+                                EmployeeATID, FullName, Department, DeviceSerialNumber, DeviceName,
+                                CheckTime, VerifyMode, VerifyModeValue, InOutMode, IsStaff, SyncSource, Direction
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        END
+                    """, (
+                        atid, dt_obj, device_sn,
+                        atid, full_name, dept, device_sn, device_name,
+                        dt_obj, verify_mode, verify_val, in_out, is_staff, sync_source, direction
+                    ))
+                    if cursor.rowcount > 0:
+                        inserted += 1
+                        if is_staff:
+                            try:
+                                work_date = dt_obj.date()
+                                cursor.execute("""
+                                    IF NOT EXISTS (
+                                        SELECT 1 FROM tbl_DailyTimekeeping
+                                        WHERE WorkDate = ? AND EmployeeATID = ?
                                     )
-                                END
-                                ELSE
-                                BEGIN
-                                    UPDATE tbl_DailyTimekeeping
-                                    SET FirstInTime = CASE WHEN ? < FirstInTime THEN ? ELSE FirstInTime END,
-                                        LastOutTime = CASE WHEN ? > FirstInTime THEN ? ELSE LastOutTime END,
-                                        TotalScans = TotalScans + 1,
-                                        TotalHours = CASE
-                                            WHEN ? > FirstInTime THEN ROUND(CAST(DATEDIFF(MINUTE, FirstInTime, ?) AS FLOAT) / 60.0, 2)
-                                            ELSE TotalHours
-                                        END,
-                                        AttendanceStatus = CASE
-                                            WHEN LateMinutes > 0 THEN 'LATE'
-                                            WHEN ? > FirstInTime THEN 'PRESENT'
-                                            ELSE AttendanceStatus
-                                        END,
-                                        UpdatedAt = GETDATE()
-                                    WHERE WorkDate = ? AND EmployeeATID = ?
-                                END
-                            """, (
-                                work_date, atid,
-                                work_date, atid, atid, full_name or f"Nhân sự {atid}", dept or "Nhân sự SeaZen", dt_obj,
-                                dt_obj.hour, dt_obj.minute, dt_obj.hour, dt_obj.minute,
-                                dt_obj.hour, dt_obj.minute,
-                                dt_obj, dt_obj, dt_obj, dt_obj, dt_obj, dt_obj, dt_obj,
-                                work_date, atid
-                            ))
-                        except Exception as tk_err:
-                            logger.debug("DailyTimekeeping upsert warning: %s", tk_err)
-            conn.commit()
+                                    BEGIN
+                                        INSERT INTO tbl_DailyTimekeeping (
+                                            WorkDate, EmployeeATID, EmployeeCode, FullName, DepartmentName,
+                                            ShiftCode, FirstInTime, LastOutTime, TotalScans, LateMinutes, EarlyLeaveMinutes, TotalHours, AttendanceStatus
+                                        ) VALUES (
+                                            ?, ?, ?, ?, ?, 'HC_0745_1645', ?, NULL, 1,
+                                            CASE WHEN (? * 60 + ?) > (7 * 60 + 45) THEN (? * 60 + ?) - (7 * 60 + 45) ELSE 0 END,
+                                            0, 0,
+                                            CASE WHEN (? * 60 + ?) > (7 * 60 + 45) THEN 'LATE' ELSE 'MISSING_OUT' END
+                                        )
+                                    END
+                                    ELSE
+                                    BEGIN
+                                        UPDATE tbl_DailyTimekeeping
+                                        SET FirstInTime = CASE WHEN ? < FirstInTime THEN ? ELSE FirstInTime END,
+                                            LastOutTime = CASE
+                                                WHEN ? > FirstInTime AND (LastOutTime IS NULL OR ? > LastOutTime) THEN ?
+                                                ELSE LastOutTime
+                                            END,
+                                            TotalScans = TotalScans + 1,
+                                            TotalHours = CASE
+                                                WHEN CASE WHEN ? > FirstInTime AND (LastOutTime IS NULL OR ? > LastOutTime) THEN ? ELSE LastOutTime END IS NOT NULL
+                                                THEN ROUND(CAST(DATEDIFF(MINUTE,
+                                                    CASE WHEN ? < FirstInTime THEN ? ELSE FirstInTime END,
+                                                    CASE WHEN ? > FirstInTime AND (LastOutTime IS NULL OR ? > LastOutTime) THEN ? ELSE LastOutTime END
+                                                ) AS FLOAT) / 60.0, 2)
+                                                ELSE TotalHours
+                                            END,
+                                            AttendanceStatus = CASE
+                                                WHEN LateMinutes > 0 THEN 'LATE'
+                                                WHEN (? > FirstInTime OR LastOutTime IS NOT NULL) THEN 'PRESENT'
+                                                ELSE AttendanceStatus
+                                            END,
+                                            UpdatedAt = GETDATE()
+                                        WHERE WorkDate = ? AND EmployeeATID = ?
+                                    END
+                                """, (
+                                    work_date, atid,
+                                    work_date, atid, atid, full_name or f"Nhân sự {atid}", dept or "Nhân sự SeaZen", dt_obj,
+                                    dt_obj.hour, dt_obj.minute, dt_obj.hour, dt_obj.minute,
+                                    dt_obj.hour, dt_obj.minute,
+                                    dt_obj, dt_obj,
+                                    dt_obj, dt_obj, dt_obj,
+                                    dt_obj, dt_obj, dt_obj,
+                                    dt_obj, dt_obj,
+                                    dt_obj, dt_obj, dt_obj,
+                                    dt_obj,
+                                    work_date, atid
+                                ))
+                            except Exception as tk_err:
+                                logger.debug("DailyTimekeeping upsert warning: %s", tk_err)
+                    conn.commit()
+                except Exception as scan_err:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+                    logger.debug("AttendanceLog skip duplicate/err (%s @ %s): %s", atid, dt_obj, scan_err)
+            return inserted
     except Exception as e:
         logger.error("MSSQL insert_attendance_logs_bulk error: %s", e)
     return inserted
@@ -681,11 +703,15 @@ def insert_visitor_db(v: Dict[str, Any]) -> bool:
 
             if existing_row and existing_status != "ACTIVE" and status_val == "ACTIVE":
                 # Hardware slot reuse (e.g. 562xx): archive previous checked-out/pending row
-                # so history is preserved and stale ParentVisitorID/CheckoutTime never leak.
+                # and preserve its historical companion links so stale ParentVisitorID never leaks.
                 arch_suffix = datetime.now().strftime("%Y%m%d%H%M%S%f")[:18]
                 arch_id = f"{v_id[:30]}_h_{arch_suffix}"[:50]
                 cursor.execute(
                     "UPDATE tbl_Visitors SET VisitorID = ? WHERE VisitorID = ?",
+                    (arch_id, v_id),
+                )
+                cursor.execute(
+                    "UPDATE tbl_Visitors SET ParentVisitorID = ? WHERE ParentVisitorID = ? AND Status <> 'ACTIVE'",
                     (arch_id, v_id),
                 )
                 existing_row = None
@@ -784,17 +810,17 @@ def activate_pending_visitor_db(old_visitor_id: str, new_visitor_id: str, card_n
     if not is_mssql_active():
         return False
     try:
+        ensure_extended_schema()
         with pyodbc.connect(get_connection_string(), timeout=4) as conn:
             cur = conn.cursor()
             old_id = str(old_visitor_id)[:50]
             new_id = str(new_visitor_id or old_visitor_id)[:50]
-            # If ZKTeco reused an ATID that already exists in tbl_Visitors (from a past CHECKED_OUT visitor),
-            # rename the historical row's VisitorID so we preserve history and avoid a PK collision.
             if new_id != old_id:
                 cur.execute("SELECT Status FROM tbl_Visitors WHERE VisitorID = ?", (new_id,))
                 existing = cur.fetchone()
                 if existing:
-                    archived_id = f"{new_id}_old_{int(datetime.now().timestamp())}"[:50]
+                    arch_suffix = datetime.now().strftime("%Y%m%d%H%M%S%f")[:18]
+                    archived_id = f"{new_id[:28]}_old_{arch_suffix}"[:50]
                     cur.execute("UPDATE tbl_Visitors SET VisitorID = ? WHERE VisitorID = ?", (archived_id, new_id))
                     cur.execute("UPDATE tbl_Visitors SET ParentVisitorID = ? WHERE ParentVisitorID = ?", (archived_id, new_id))
 
@@ -803,18 +829,20 @@ def activate_pending_visitor_db(old_visitor_id: str, new_visitor_id: str, card_n
                 SET VisitorID = ?,
                     CardNumber = ?,
                     Status = 'ACTIVE',
-                    Operator = ?
+                    Operator = ?,
+                    CheckoutTime = NULL,
+                    DurationMinutes = NULL,
+                    UpdatedAt = GETDATE()
                 WHERE VisitorID = ? AND Status = 'PENDING'
             """, (new_id, str(card_number or "")[:50], str(operator or "Lễ tân")[:100], old_id))
             updated = cur.rowcount > 0
             if updated:
-                # Activate any pending companions attached to this lead appointment so they move
-                # into the lead visitor's active group instead of staying stuck in PENDING.
                 cur.execute("""
                     UPDATE tbl_Visitors
                     SET ParentVisitorID = ?,
                         Status = 'ACTIVE',
-                        Operator = ?
+                        Operator = ?,
+                        UpdatedAt = GETDATE()
                     WHERE ParentVisitorID = ? AND Status = 'PENDING'
                 """, (new_id, str(operator or "Lễ tân")[:100], old_id))
             conn.commit()
@@ -842,20 +870,51 @@ def swap_visitor_card_db(visitor_id: str, old_card: str, new_card: str, new_visi
     if not is_mssql_active():
         return False
     try:
+        ensure_extended_schema()
         with pyodbc.connect(get_connection_string(), timeout=4) as conn:
             cur = conn.cursor()
-            if new_visitor_id and str(new_visitor_id) != str(visitor_id):
-                cur.execute("""
-                    UPDATE tbl_Visitors
-                    SET VisitorID = ?, CardNumber = ?
-                    WHERE (VisitorID = ? OR CardNumber = ?) AND Status = 'ACTIVE'
-                """, (str(new_visitor_id)[:50], str(new_card)[:50], str(visitor_id)[:50], str(old_card)[:50]))
+            v_id = str(visitor_id or "").strip()[:50]
+            new_v_id = str(new_visitor_id or "").strip()[:50]
+            o_card = str(old_card or "").strip()[:50]
+            n_card = str(new_card or "").strip()[:50]
+            if new_v_id and new_v_id != v_id:
+                cur.execute("SELECT Status FROM tbl_Visitors WHERE VisitorID = ?", (new_v_id,))
+                existing = cur.fetchone()
+                if existing and str(existing[0] or "").upper() != "ACTIVE":
+                    arch_suffix = datetime.now().strftime("%Y%m%d%H%M%S%f")[:18]
+                    arch_id = f"{new_v_id[:28]}_h_{arch_suffix}"[:50]
+                    cur.execute("UPDATE tbl_Visitors SET VisitorID = ? WHERE VisitorID = ?", (arch_id, new_v_id))
+                    cur.execute("UPDATE tbl_Visitors SET ParentVisitorID = ? WHERE ParentVisitorID = ? AND Status <> 'ACTIVE'", (arch_id, new_v_id))
+                if o_card:
+                    cur.execute("""
+                        UPDATE tbl_Visitors
+                        SET VisitorID = ?, CardNumber = ?, UpdatedAt = GETDATE()
+                        WHERE (VisitorID = ? OR CardNumber = ?) AND Status = 'ACTIVE'
+                    """, (new_v_id, n_card, v_id, o_card))
+                else:
+                    cur.execute("""
+                        UPDATE tbl_Visitors
+                        SET VisitorID = ?, CardNumber = ?, UpdatedAt = GETDATE()
+                        WHERE VisitorID = ? AND Status = 'ACTIVE'
+                    """, (new_v_id, n_card, v_id))
+                if cur.rowcount > 0:
+                    cur.execute(
+                        "UPDATE tbl_Visitors SET ParentVisitorID = ? WHERE ParentVisitorID = ? AND Status = 'ACTIVE'",
+                        (new_v_id, v_id),
+                    )
             else:
-                cur.execute("""
-                    UPDATE tbl_Visitors
-                    SET CardNumber = ?
-                    WHERE (VisitorID = ? OR CardNumber = ?) AND Status = 'ACTIVE'
-                """, (str(new_card)[:50], str(visitor_id)[:50], str(old_card)[:50]))
+                if o_card:
+                    cur.execute("""
+                        UPDATE tbl_Visitors
+                        SET CardNumber = ?, UpdatedAt = GETDATE()
+                        WHERE (VisitorID = ? OR CardNumber = ?) AND Status = 'ACTIVE'
+                    """, (n_card, v_id, o_card))
+                else:
+                    cur.execute("""
+                        UPDATE tbl_Visitors
+                        SET CardNumber = ?, UpdatedAt = GETDATE()
+                        WHERE VisitorID = ? AND Status = 'ACTIVE'
+                    """, (n_card, v_id))
             conn.commit()
             return cur.rowcount > 0
     except Exception as e:
@@ -875,15 +934,38 @@ def checkout_visitor_db(query_key: str, checkout_time_str: Optional[str] = None)
             except Exception:
                 cout_dt = datetime.now()
 
-            q = str(query_key).strip()
-            clean_q = q.lstrip("0")
-            cursor.execute("""
-                UPDATE tbl_Visitors
-                SET Status = 'CHECKED_OUT', CheckoutTime = ?
-                WHERE Status = 'ACTIVE' AND (
-                    VisitorID = ? OR CardNumber = ? OR CardNumber = ? OR CCCDNumber = ?
-                )
-            """, (cout_dt, q, q, clean_q, q))
+            q = str(query_key or "").strip()
+            if not q:
+                return False
+            clean_q = q.lstrip("0") if q.isdigit() else q
+            if clean_q:
+                cursor.execute("""
+                    UPDATE tbl_Visitors
+                    SET Status = 'CHECKED_OUT',
+                        CheckoutTime = ?,
+                        DurationMinutes = CASE
+                            WHEN CheckinTime IS NOT NULL AND ? >= CheckinTime
+                            THEN DATEDIFF(MINUTE, CheckinTime, ?)
+                            ELSE DurationMinutes
+                        END,
+                        UpdatedAt = GETDATE()
+                    WHERE Status = 'ACTIVE' AND (
+                        VisitorID = ? OR CardNumber = ? OR CardNumber = ? OR CCCDNumber = ?
+                    )
+                """, (cout_dt, cout_dt, cout_dt, q, q, clean_q, q))
+            else:
+                cursor.execute("""
+                    UPDATE tbl_Visitors
+                    SET Status = 'CHECKED_OUT',
+                        CheckoutTime = ?,
+                        DurationMinutes = CASE
+                            WHEN CheckinTime IS NOT NULL AND ? >= CheckinTime
+                            THEN DATEDIFF(MINUTE, CheckinTime, ?)
+                            ELSE DurationMinutes
+                        END,
+                        UpdatedAt = GETDATE()
+                    WHERE Status = 'ACTIVE' AND VisitorID = ?
+                """, (cout_dt, cout_dt, cout_dt, q))
             conn.commit()
             return cursor.rowcount > 0
     except Exception as e:
@@ -896,16 +978,18 @@ def get_visitor_history_db(limit: int = 200) -> List[Dict[str, Any]]:
         return []
     try:
         ensure_extended_schema()
+        safe_limit = max(1, min(2000, int(limit or 200)))
         conn_str = get_connection_string()
         with pyodbc.connect(conn_str, timeout=4) as conn:
             cursor = conn.cursor()
             cursor.execute(f"""
-                SELECT TOP ({limit}) VisitorID, FullName, CCCDNumber, CardNumber, Company, Department,
+                SELECT TOP ({safe_limit}) VisitorID, FullName, CCCDNumber, CardNumber, Company, Department,
                        HostPerson, Purpose, CheckinTime, ExpectedCheckoutTime, CheckoutTime,
                        DurationMinutes, Status, Operator, Phone, BirthDate,
                        ParentVisitorID, ParentVisitorName
                 FROM tbl_Visitors
-                ORDER BY CheckinTime DESC
+                WHERE Status = 'CHECKED_OUT'
+                ORDER BY COALESCE(CheckoutTime, CheckinTime) DESC
             """)
             cols = [col[0] for col in cursor.description]
             items = []
@@ -1046,6 +1130,8 @@ def get_table_rows(table_name: str, limit: int = 200) -> List[Dict[str, Any]]:
                 cur.execute(f"SELECT TOP ({int(limit)}) * FROM tbl_DailyTimekeeping ORDER BY WorkDate DESC, UpdatedAt DESC")
             elif table_name == "tbl_AttendanceLogs":
                 cur.execute(f"SELECT TOP ({int(limit)}) * FROM tbl_AttendanceLogs ORDER BY CheckTime DESC, LogID DESC")
+            elif table_name == "tbl_Visitors":
+                cur.execute(f"SELECT TOP ({int(limit)}) * FROM tbl_Visitors ORDER BY CheckinTime DESC, UpdatedAt DESC")
             else:
                 cur.execute(f"SELECT TOP ({int(limit)}) * FROM [{table_name}] ORDER BY 1 DESC")
             cols = [c[0] for c in cur.description]
@@ -1147,9 +1233,19 @@ def upsert_employee_and_biometrics_db(data: Dict[str, Any]) -> Dict[str, Any]:
                 else:
                     cur.execute("""
                         UPDATE tbl_Employees
-                        SET EmployeeCode = ?, FullName = ?, DepartmentID = ?, DepartmentName = ?,
-                            Position = ?, CardNumber = ?, Privilege = ?, Gender = COALESCE(NULLIF(?, ''), Gender),
-                            Email = ?, Phone = ?, IsStaff = 1, IsActive = ?, UpdatedAt = GETDATE()
+                        SET EmployeeCode = COALESCE(NULLIF(?, ''), EmployeeCode),
+                            FullName = COALESCE(NULLIF(?, ''), FullName),
+                            DepartmentID = COALESCE(?, DepartmentID),
+                            DepartmentName = COALESCE(NULLIF(?, ''), DepartmentName),
+                            Position = COALESCE(NULLIF(?, ''), Position),
+                            CardNumber = ?,
+                            Privilege = ?,
+                            Gender = COALESCE(NULLIF(?, ''), Gender),
+                            Email = COALESCE(NULLIF(?, ''), Email),
+                            Phone = COALESCE(NULLIF(?, ''), Phone),
+                            IsStaff = 1,
+                            IsActive = ?,
+                            UpdatedAt = GETDATE()
                         WHERE EmployeeATID = ?
                     """, (emp_code, full_name, dept_id, dept_name, position, card_num, privilege, gender, email, phone, is_active, atid))
             else:
@@ -1332,7 +1428,12 @@ def check_card_not_blocked_db(card_number: str) -> Dict[str, Any]:
                     "error": f"Thẻ {row[1]} ({row[0]}) đang ở trạng thái {st_label} trong Kho thẻ Admin. Vui lòng kiểm tra hoặc mở khóa thẻ trước khi cấp cho khách!",
                 }
     except Exception as e:
-        logger.debug("check_card_not_blocked_db warning: %s", e)
+        logger.warning("check_card_not_blocked_db warning: %s", e)
+        return {
+            "blocked": True,
+            "status": "DB_ERROR",
+            "error": "Không thể xác minh trạng thái thẻ trên SQL Server — tạm từ chối cấp thẻ để tránh cấp thẻ mất/khóa.",
+        }
     return {"blocked": False}
 
 
@@ -1611,7 +1712,6 @@ def process_card_expiry_and_schedule_db(zk_client: Any = None) -> Dict[str, Any]
         now_dt = datetime.now()
         with pyodbc.connect(get_connection_string(), timeout=6) as conn:
             cur = conn.cursor()
-            # 1. Activate SCHEDULED cards whose ValidFrom has arrived
             cur.execute("""
                 SELECT c.CardID, c.CardNumber, c.LastHolderName, c.LastHolderCCCD, c.ValidFrom, c.ValidTo
                 FROM tbl_CustomerCards c
@@ -1622,32 +1722,25 @@ def process_card_expiry_and_schedule_db(zk_client: Any = None) -> Dict[str, Any]
                   AND (c.ValidTo IS NULL OR CAST(c.ValidTo AS DATE) >= CAST(GETDATE() AS DATE))
             """)
             to_enroll = cur.fetchall()
-            for cid, cnum, hname, hcccd, vf, vt in to_enroll:
-                if zk_client:
-                    try:
-                        zk_client.register_customer_epad(
-                            {"card_number": str(cnum), "full_name": str(hname or f"Khach {cnum}"), "cccd_number": str(hcccd or "")},
-                            auto_sync=True,
-                        )
-                    except Exception:
-                        pass
-                cur.execute(
-                    "UPDATE tbl_CustomerCards SET DeviceSyncState = 'ACTIVE_ON_DEVICE', IsSyncedToDevices = 1, UpdatedAt = GETDATE() WHERE CardID = ?",
-                    (int(cid),),
-                )
-                log_card_history_db(str(cnum), "ENROLLED", card_id=int(cid), holder_name=str(hname or ""), notes="Tự động kích hoạt thẻ đúng giờ hẹn ValidFrom")
-                res["enrolled"] += 1
 
-            # 2. Update LastGateOutAt and revoke cards past 23:59:59 of their ValidTo calendar day
             cur.execute("""
                 SELECT c.CardID, c.CardNumber, c.CurrentHolderName, c.CurrentHolderCCCD,
                        c.LastAssignedAt, c.ValidTo, c.LastGateOutAt,
                        (
                            SELECT MAX(a.CheckTime)
                            FROM tbl_AttendanceLogs a
-                           WHERE (a.EmployeeATID = c.CardNumber OR a.EmployeeATID = RIGHT('0000000000' + c.CardNumber, 10))
-                             AND a.DeviceName LIKE N'%RA%'
+                           WHERE a.DeviceName LIKE N'%RA%'
                              AND a.CheckTime >= ISNULL(c.LastAssignedAt, DATEADD(hour, -24, GETDATE()))
+                             AND (
+                                 a.EmployeeATID = c.CardNumber
+                                 OR a.EmployeeATID = RIGHT('0000000000' + c.CardNumber, 10)
+                                 OR EXISTS (
+                                     SELECT 1 FROM tbl_Visitors v
+                                     WHERE (v.CardNumber = c.CardNumber OR LTRIM(RTRIM(v.CardNumber)) = LTRIM(RTRIM(c.CardNumber)))
+                                       AND v.Status IN ('ACTIVE', 'CHECKED_OUT')
+                                       AND (a.EmployeeATID = v.VisitorID OR a.EmployeeATID = RIGHT('00000000' + v.VisitorID, 8))
+                                 )
+                             )
                        ) AS GateOutTime
                 FROM tbl_CustomerCards c
                 WHERE c.Status = 'IN_USE'
@@ -1655,18 +1748,58 @@ def process_card_expiry_and_schedule_db(zk_client: Any = None) -> Dict[str, Any]
                   AND c.ValidTo IS NOT NULL
             """)
             active_rows = cur.fetchall()
-            for cid, cnum, hname, hcccd, assigned_at, vt_dt, prev_out_dt, gate_out_dt in active_rows:
-                if gate_out_dt is not None and prev_out_dt != gate_out_dt:
+
+        # Perform hardware TCP calls OUTSIDE SQL transactions to avoid holding table locks
+        enrolled_updates = []
+        for cid, cnum, hname, hcccd, vf, vt in to_enroll:
+            hw_ok = not zk_client
+            if zk_client:
+                try:
+                    hw_res = zk_client.register_customer_epad(
+                        {"card_number": str(cnum), "full_name": str(hname or f"Khach {cnum}"), "cccd_number": str(hcccd or "")},
+                        auto_sync=True,
+                    )
+                    hw_ok = bool(hw_res and (hw_res.get("success") or hw_res.get("synced_count", 0) > 0))
+                except Exception as hw_e:
+                    logger.warning("process_card_expiry enroll error (%s): %s", cnum, hw_e)
+                    hw_ok = False
+            if hw_ok:
+                enrolled_updates.append((int(cid), str(cnum), str(hname or "")))
+
+        gate_out_updates = []
+        revoked_updates = []
+        for cid, cnum, hname, hcccd, assigned_at, vt_dt, prev_out_dt, gate_out_dt in active_rows:
+            if gate_out_dt is not None and prev_out_dt != gate_out_dt:
+                gate_out_updates.append((gate_out_dt, int(cid)))
+            if vt_dt is not None and now_dt.date() > vt_dt.date():
+                revoke_ok = not zk_client
+                if zk_client:
+                    try:
+                        revoke_cnt = zk_client.return_or_delete_card(str(cnum))
+                        conn_st = zk_client.check_connection()
+                        all_devs = conn_st.get("devices") or []
+                        online_devs = sum(1 for d in all_devs if d.get("online"))
+                        revoke_ok = bool(revoke_cnt > 0 or (all_devs and online_devs == len(all_devs)))
+                    except Exception as rev_e:
+                        logger.warning("process_card_expiry revoke error (%s): %s", cnum, rev_e)
+                        revoke_ok = False
+                if revoke_ok:
+                    revoked_updates.append((gate_out_dt, int(cid), str(cnum), str(hname or ""), str(hcccd or ""), vt_dt))
+
+        if enrolled_updates or gate_out_updates or revoked_updates:
+            with pyodbc.connect(get_connection_string(), timeout=6) as conn:
+                cur = conn.cursor()
+                for cid, cnum, hname in enrolled_updates:
+                    cur.execute(
+                        "UPDATE tbl_CustomerCards SET DeviceSyncState = 'ACTIVE_ON_DEVICE', IsSyncedToDevices = 1, UpdatedAt = GETDATE() WHERE CardID = ?",
+                        (cid,),
+                    )
+                for g_dt, cid in gate_out_updates:
                     cur.execute(
                         "UPDATE tbl_CustomerCards SET LastGateOutAt = ? WHERE CardID = ?",
-                        (gate_out_dt, int(cid)),
+                        (g_dt, cid),
                     )
-                if vt_dt is not None and now_dt.date() > vt_dt.date():
-                    if zk_client:
-                        try:
-                            zk_client.return_or_delete_card(str(cnum))
-                        except Exception:
-                            pass
+                for g_dt, cid, cnum, hname, hcccd, vt_dt in revoked_updates:
                     cur.execute("""
                         UPDATE tbl_CustomerCards
                         SET DeviceSyncState = 'REVOKED_EXPIRED',
@@ -1674,14 +1807,19 @@ def process_card_expiry_and_schedule_db(zk_client: Any = None) -> Dict[str, Any]
                             LastGateOutAt = COALESCE(?, LastGateOutAt),
                             UpdatedAt = GETDATE()
                         WHERE CardID = ?
-                    """, (gate_out_dt, int(cid)))
-                    log_card_history_db(
-                        str(cnum), "EXPIRED_REVOKED",
-                        card_id=int(cid), holder_name=str(hname or ""), holder_cccd=str(hcccd or ""),
-                        notes=f"Đã qua 23:59 ngày {vt_dt.strftime('%Y-%m-%d')} — tự động thu hồi quyền mở cửa trên 4 máy ZKTeco",
-                    )
-                    res["revoked"] += 1
-            conn.commit()
+                    """, (g_dt, cid))
+                conn.commit()
+
+            for cid, cnum, hname in enrolled_updates:
+                log_card_history_db(cnum, "ENROLLED", card_id=cid, holder_name=hname, notes="Tự động kích hoạt thẻ đúng giờ hẹn ValidFrom")
+                res["enrolled"] += 1
+            for g_dt, cid, cnum, hname, hcccd, vt_dt in revoked_updates:
+                log_card_history_db(
+                    cnum, "EXPIRED_REVOKED",
+                    card_id=cid, holder_name=hname, holder_cccd=hcccd,
+                    notes=f"Đã qua 23:59 ngày {vt_dt.strftime('%Y-%m-%d')} — tự động thu hồi quyền mở cửa trên 4 máy ZKTeco",
+                )
+                res["revoked"] += 1
     except Exception as e:
         logger.debug("process_card_expiry_and_schedule_db warning: %s", e)
     return res
@@ -1716,17 +1854,17 @@ def upload_card_evidence_db(
         clean_num = _normalize_card_number(key_str)
         with pyodbc.connect(get_connection_string(), timeout=5) as conn:
             cur = conn.cursor()
-            if key_str.isdigit() and len(key_str) <= 6:
-                cur.execute(
-                    "SELECT CardID, CardNumber, CardCode, CardName, CASE WHEN CardPhotoBase64 IS NOT NULL AND LEN(CardPhotoBase64) > 20 THEN 1 ELSE 0 END FROM tbl_CustomerCards WHERE CardID = ? OR CardNumber = ? OR CardNumber = ?",
-                    (int(key_str), key_str, clean_num),
-                )
-            else:
-                cur.execute(
-                    "SELECT CardID, CardNumber, CardCode, CardName, CASE WHEN CardPhotoBase64 IS NOT NULL AND LEN(CardPhotoBase64) > 20 THEN 1 ELSE 0 END FROM tbl_CustomerCards WHERE CardNumber = ? OR CardNumber = ? OR CardCode = ?",
-                    (key_str, clean_num, key_str),
-                )
+            cur.execute(
+                "SELECT CardID, CardNumber, CardCode, CardName, CASE WHEN CardPhotoBase64 IS NOT NULL AND LEN(CardPhotoBase64) > 20 THEN 1 ELSE 0 END FROM tbl_CustomerCards WHERE CardNumber = ? OR CardNumber = ? OR CardCode = ?",
+                (key_str, clean_num, key_str),
+            )
             row = cur.fetchone()
+            if not row and key_str.isdigit() and len(key_str) <= 6:
+                cur.execute(
+                    "SELECT CardID, CardNumber, CardCode, CardName, CASE WHEN CardPhotoBase64 IS NOT NULL AND LEN(CardPhotoBase64) > 20 THEN 1 ELSE 0 END FROM tbl_CustomerCards WHERE CardID = ?",
+                    (int(key_str),),
+                )
+                row = cur.fetchone()
             if not row:
                 return {"success": False, "error": f"Không tìm thấy thẻ '{key_str}' trong kho thẻ."}
             cid, cnum, ccode, existing_name, had_photo = int(row[0]), str(row[1]), str(row[2]), str(row[3] or "").strip(), bool(row[4])
@@ -1890,17 +2028,38 @@ def delete_customer_card_db(card_id_or_number: Any) -> Dict[str, Any]:
         clean_num = _normalize_card_number(key_str)
         with pyodbc.connect(get_connection_string(), timeout=5) as conn:
             cur = conn.cursor()
-            if key_str.isdigit() and len(key_str) <= 6:
-                cur.execute("SELECT CardNumber, CardCode FROM tbl_CustomerCards WHERE CardID = ? OR CardNumber = ? OR CardNumber = ?", (int(key_str), key_str, clean_num))
-            else:
-                cur.execute("SELECT CardNumber, CardCode FROM tbl_CustomerCards WHERE CardNumber = ? OR CardNumber = ? OR CardCode = ?", (key_str, clean_num, key_str))
+            cur.execute(
+                "SELECT CardNumber, CardCode, CardID, Status FROM tbl_CustomerCards WHERE CardNumber = ? OR CardNumber = ? OR CardCode = ?",
+                (key_str, clean_num, key_str),
+            )
             row = cur.fetchone()
+            if not row and key_str.isdigit() and len(key_str) <= 6:
+                cur.execute("SELECT CardNumber, CardCode, CardID, Status FROM tbl_CustomerCards WHERE CardID = ?", (int(key_str),))
+                row = cur.fetchone()
             if not row:
                 return {"success": False, "error": f"Không tìm thấy thẻ '{key_str}' trong kho thẻ."}
             target_card_num = str(row[0])
             target_card_code = str(row[1])
-            cur.execute("DELETE FROM tbl_CustomerCards WHERE CardNumber = ?", (target_card_num,))
+            target_card_id = int(row[2])
+            norm_target = _normalize_card_number(target_card_num)
+
+            cur.execute("""
+                SELECT TOP 1 FullName FROM tbl_Visitors
+                WHERE Status = 'ACTIVE' AND (CardNumber = ? OR LTRIM(RTRIM(CardNumber)) = ?)
+            """, (target_card_num, norm_target))
+            active_holder = cur.fetchone()
+            if active_holder:
+                return {
+                    "success": False,
+                    "error": f"Thẻ {target_card_num} đang được khách '{active_holder[0]}' giữ. Vui lòng trả thẻ / Check-out trước khi xóa!",
+                }
+
+            cur.execute("DELETE FROM tbl_CustomerCards WHERE CardID = ?", (target_card_id,))
             conn.commit()
+            log_card_history_db(
+                target_card_num, "DELETED",
+                card_id=target_card_id, notes=f"Xóa thẻ {target_card_code} khỏi Kho thẻ SQL",
+            )
             return {
                 "success": True,
                 "card_number": target_card_num,

@@ -4,9 +4,12 @@ Flask REST API & Web Dashboard for ZKTeco SenseFace Access Control.
 Port: 6868
 """
 
+import io
 import os
+import re
 import sys
 import json
+import secrets
 import socket
 import logging
 import threading
@@ -51,12 +54,47 @@ if not os.path.exists(CONFIG_PATH):
 with open(CONFIG_PATH, "r", encoding="utf-8") as f:
     config = json.load(f)
 
+def _load_or_create_secret_key() -> str:
+    env_key = os.environ.get("SEAZEN_VMS_SECRET_KEY") or config.get("server", {}).get("secret_key")
+    if env_key:
+        return str(env_key)
+    key_dir = os.path.join(BASE_DIR, "data", ".cache")
+    os.makedirs(key_dir, exist_ok=True)
+    key_file = os.path.join(key_dir, "flask_secret.key")
+    if os.path.isfile(key_file):
+        try:
+            existing = open(key_file, "r", encoding="utf-8").read().strip()
+            if len(existing) >= 32:
+                return existing
+        except Exception:
+            pass
+    new_key = secrets.token_hex(32)
+    try:
+        with open(key_file, "w", encoding="utf-8") as kf:
+            kf.write(new_key)
+    except Exception:
+        pass
+    return new_key
+
+
+def _safe_int(val: Any, default: int, min_val: int, max_val: int) -> int:
+    try:
+        parsed = int(str(val).strip())
+    except Exception:
+        return default
+    return max(min_val, min(max_val, parsed))
+
+
 # Initialize Flask App
 app = Flask(__name__, static_folder=STATIC_DIR)
-app.secret_key = config.get("server", {}).get("secret_key", "seazen-security-access-control-super-secret-key-2026")
+app.secret_key = _load_or_create_secret_key()
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-CORS(app, supports_credentials=True)
+_allowed_cors_origins = [
+    re.compile(r"^https?://(localhost|127\.0\.0\.1|172\.16\.\d{1,3}\.\d{1,3})(:\d+)?$"),
+    re.compile(rf"^https?://{re.escape(socket.gethostname())}(?:\.local)?(?::\d+)?$", re.IGNORECASE),
+]
+CORS(app, origins=_allowed_cors_origins, supports_credentials=True)
 
 # Initialize Modules (Direct ZKTeco Hardware + ePAD Enterprise Sync)
 zk_client = ZkDirectClient(config)
@@ -227,19 +265,20 @@ def _background_scan_collector():
     except Exception as ex:
         logger.warning("[Harvester Daemon] Lỗi quét bù ban đầu TCP 4370: %s", ex)
 
-    # 2b. Initial 7-day & Today ADMS Push Mirror Backfill (captures rtlog pushed to WebServerIP=172.16.56.2:4004)
-    try:
-        logs_7d = epad_client.get_log_last_7_days()
-        if logs_7d:
-            added_7d = storage.sync_epad_7day_logs(logs_7d)
-            logger.info("[Harvester Daemon] Đồng bộ ADMS Push 7 ngày gần nhất: +%d bản ghi mới", added_7d)
-    except Exception as ex:
-        logger.debug("[Harvester Daemon] ADMS 7-day backfill skipped: %s", ex)
+    # 2b. Initial 7-day & Today ADMS Push Mirror Backfill ONLY if ePAD is explicitly enabled
+    if EPAD_ENABLED:
+        try:
+            logs_7d = epad_client.get_log_last_7_days()
+            if logs_7d:
+                added_7d = storage.sync_epad_7day_logs(logs_7d)
+                logger.info("[Harvester Daemon] Đồng bộ ADMS Push 7 ngày gần nhất: +%d bản ghi mới", added_7d)
+        except Exception as ex:
+            logger.debug("[Harvester Daemon] ADMS 7-day backfill skipped: %s", ex)
 
     last_clock_sync = time.time()
     last_7d_sync = time.time()
 
-    # 3. Continuous Hybrid Check Loop (4s interval for ADMS rtlog mirror + TCP 4370 fallback)
+    # 3. Continuous Hybrid Check Loop (4s interval for TCP 4370 fallback + optional ePAD if enabled)
     while True:
         try:
             now_ts = time.time()
@@ -250,23 +289,22 @@ def _background_scan_collector():
                 except Exception as ex:
                     logger.debug("[Harvester Daemon] Clock audit cycle warning: %s", ex)
 
-            # Pull latest real-time ADMS Push rtlog events (since 4 terminals have DeviceType=acc -> WebServerIP=172.16.56.2)
-            try:
-                rt_push_logs = epad_client.get_realtime_attendance_logs(limit=60)
-                if rt_push_logs:
-                    storage.merge_and_save_scans(rt_push_logs)
-            except Exception:
-                pass
-
-            # Every 30s, also reconcile today's full bucket from 7-day endpoint so zero scans are ever missed
-            if now_ts - last_7d_sync > 30:
-                last_7d_sync = now_ts
+            if EPAD_ENABLED:
                 try:
-                    logs_7d = epad_client.get_log_last_7_days()
-                    if logs_7d:
-                        storage.sync_epad_7day_logs(logs_7d)
+                    rt_push_logs = epad_client.get_realtime_attendance_logs(limit=60)
+                    if rt_push_logs:
+                        storage.merge_and_save_scans(rt_push_logs)
                 except Exception:
                     pass
+
+                if now_ts - last_7d_sync > 30:
+                    last_7d_sync = now_ts
+                    try:
+                        logs_7d = epad_client.get_log_last_7_days()
+                        if logs_7d:
+                            storage.sync_epad_7day_logs(logs_7d)
+                    except Exception:
+                        pass
 
             recent_scans = zk_client.harvest_new_attendance_records(per_device_limit=50)
             if recent_scans:
@@ -374,25 +412,43 @@ def _is_loopback_request() -> bool:
 
 
 @app.route("/api/server/m365-status", methods=["GET"])
+@require_role(["admin"])
 def api_server_m365_status():
     if not _is_loopback_request():
         return jsonify({"success": False, "error": "Chỉ máy Server cục bộ mới được phép truy cập."}), 403
     try:
         import sharepoint_vms_sync
         tok = sharepoint_vms_sync.get_sharepoint_tokens(allow_interactive=False)
-        return jsonify({"success": True, **tok})
+        return jsonify({
+            "success": True,
+            "ok": bool(tok.get("ok")),
+            "account": tok.get("account"),
+            "cache_path": tok.get("cache_path"),
+            "has_sp_token": bool(tok.get("sp_token")),
+            "has_graph_token": bool(tok.get("graph_token")),
+            "error": tok.get("error"),
+        })
     except Exception as e:
         return jsonify({"success": False, "ok": False, "error": str(e)}), 500
 
 
 @app.route("/api/server/m365-auth", methods=["POST"])
+@require_role(["admin"])
 def api_server_m365_auth():
     if not _is_loopback_request():
         return jsonify({"success": False, "error": "Chỉ máy Server cục bộ mới được phép đăng nhập Token Microsoft."}), 403
     try:
         import sharepoint_vms_sync
         tok = sharepoint_vms_sync.get_sharepoint_tokens(allow_interactive=True)
-        return jsonify({"success": bool(tok.get("ok")), **tok})
+        return jsonify({
+            "success": bool(tok.get("ok")),
+            "ok": bool(tok.get("ok")),
+            "account": tok.get("account"),
+            "cache_path": tok.get("cache_path"),
+            "has_sp_token": bool(tok.get("sp_token")),
+            "has_graph_token": bool(tok.get("graph_token")),
+            "error": tok.get("error"),
+        })
     except Exception as e:
         return jsonify({"success": False, "ok": False, "error": str(e)}), 500
 
@@ -408,6 +464,23 @@ def iclock_cdata():
     """
     sn = (request.args.get("SN") or "").strip()
     table = (request.args.get("table") or "").strip().lower()
+    sn_map = {
+        "1313244800040": ("Làn VÀO phải", "IN"),
+        "1313244800129": ("Làn VÀO trái", "IN"),
+        "1313244800122": ("Làn RA trái", "OUT"),
+        "1313244800130": ("Làn RA phải", "OUT"),
+    }
+    for door_cfg in DOORS_CONFIG:
+        d_dir = str(door_cfg.get("direction") or "IN").upper()
+        for dev in door_cfg.get("devices", []):
+            d_sn = str(dev.get("sn") or "").strip()
+            if d_sn and d_sn not in sn_map:
+                sn_map[d_sn] = (str(dev.get("name") or f"Cổng {d_sn}"), d_dir)
+
+    if sn not in sn_map:
+        logger.warning("[ADMS SECURITY] Từ chối yêu cầu /iclock/cdata từ SN không hợp lệ: '%s' (%s)", sn, request.remote_addr)
+        return ("ERROR: UNKNOWN SN", 403, {"Content-Type": "text/plain"})
+
     if request.method == "GET":
         return (
             f"GET OPTION FROM: {sn}\r\n"
@@ -419,29 +492,43 @@ def iclock_cdata():
 
     raw_body = request.get_data(as_text=True) or ""
     if table in ("rtlog", "attlog", "transaction") and raw_body.strip():
-        sn_map = {
-            "1313244800040": ("Làn VÀO phải", "IN"),
-            "1313244800129": ("Làn VÀO trái", "IN"),
-            "1313244800122": ("Làn RA trái", "OUT"),
-            "1313244800130": ("Làn RA phải", "OUT"),
-        }
-        dev_name, direction = sn_map.get(sn, (f"Cổng {sn}", "IN"))
+        dev_name, direction = sn_map[sn]
         parsed_records = []
         for line in raw_body.splitlines():
             line = line.strip()
             if not line:
                 continue
             kv = {}
-            for part in line.split("\t"):
+            parts = line.split("\t")
+            for part in parts:
                 if "=" in part:
                     k, v = part.split("=", 1)
                     kv[k.strip().lower()] = v.strip()
-            pin = kv.get("pin") or ""
-            chk_time = kv.get("time") or ""
-            card_no = kv.get("cardno") or ""
-            vtype = int(kv.get("verifytype") or 15) if str(kv.get("verifytype") or "").isdigit() else 15
+
+            if kv:
+                # Ignore explicitly denied/failed verification events (e.g. expired card / stranger)
+                ev_code = str(kv.get("event") or kv.get("eventtype") or "").strip()
+                verified_flag = str(kv.get("verified") or "").strip()
+                if verified_flag in ("-1", "255") or (ev_code and ev_code not in ("0", "220", "221") and verified_flag == "0"):
+                    continue
+                pin = kv.get("pin") or ""
+                chk_time = kv.get("time") or ""
+                card_no = kv.get("cardno") or ""
+                vtype = _safe_int(kv.get("verifytype"), 15, 0, 255) if kv.get("verifytype") is not None else 15
+            elif len(parts) >= 2:
+                # Standard ATTLOG tab-positional fallback: PIN\tTime\tStatus\tVerify...
+                pin = parts[0].strip()
+                chk_time = parts[1].strip()
+                card_no = ""
+                vtype = _safe_int(parts[3], 15, 0, 255) if len(parts) > 3 else 15
+            else:
+                continue
+
+            if (not pin or pin == "0") and card_no and card_no != "0":
+                pin = card_no
             if not pin or pin == "0" or not chk_time:
                 continue
+
             p_info = zk_client._lookup_person(pin)
             is_staff = p_info.get("is_staff", True)
             mode_str = "Card" if (card_no and card_no != "0") or vtype in (1, 2, 3, 4) else "FaceTemplate"
@@ -483,6 +570,8 @@ def index():
 
 @app.route("/<path:path>")
 def static_files(path):
+    if path.startswith("api/") or path == "api":
+        return jsonify({"success": False, "error": f"Endpoint '/{path}' không tồn tại."}), 404
     if os.path.isfile(os.path.join(REACT_DIST_DIR, path)):
         return send_from_directory(REACT_DIST_DIR, path)
     return send_from_directory(REACT_DIST_DIR, "index.html")
@@ -491,6 +580,7 @@ def static_files(path):
 # ---------------- System Status API ----------------
 
 @app.route("/api/status", methods=["GET"])
+@require_auth
 def get_system_status():
     """Returns general system health, direct ZKTeco hardware connection, and door states."""
     conn_info = zk_client.check_connection()
@@ -635,6 +725,7 @@ def lock_all_endpoint():
 
 
 @app.route("/api/door/status", methods=["GET"])
+@require_auth
 def door_status():
     """Returns real-time door open/close status."""
     if EPAD_ENABLED:
@@ -752,12 +843,13 @@ def realtime_logs():
     and person category into STAFF vs VISITOR.
     Query params: ?date=YYYY-MM-DD&category=ALL|STAFF|VISITOR&direction=ALL|IN|OUT&limit=1000
     """
-    target_date = request.args.get("date") or datetime.now().strftime("%Y-%m-%d")
+    raw_date = (request.args.get("date") or "").strip()
+    target_date = raw_date if raw_date else datetime.now().strftime("%Y-%m-%d")
     is_today = (target_date == datetime.now().strftime("%Y-%m-%d"))
     category_filter = (request.args.get("category") or "ALL").upper()
     direction_filter = (request.args.get("direction") or "ALL").upper()
     search_query = (request.args.get("search") or "").strip().lower()
-    limit = int(request.args.get("limit", 1000))
+    limit = _safe_int(request.args.get("limit", 1000), 1000, 1, 5000)
 
     # Scans are continuously collected and merged 24/7 by background thread
     scans = storage.get_saved_scans(target_date)
@@ -817,7 +909,7 @@ def realtime_logs():
         item["TimeFormatted"] = time_part
 
         if search_query:
-            text_corpus = f"{item.get('FullName', '')} {item.get('EmployeeATID', '')} {item.get('Department', '')} {item.get('DeviceName', '')}".lower()
+            text_corpus = f"{item.get('FullName', '')} {item.get('EmployeeATID', '')} {item.get('CardNumber', '')} {item.get('Department', '')} {item.get('DeviceName', '')}".lower()
             if search_query not in text_corpus:
                 continue
 
@@ -1037,10 +1129,26 @@ def register_visitor():
     # 0b. Pre-validate companion cards against active holders and main visitor card
     companions_in = data.get("companions") or []
     seen_batch_cards = {card_number.lstrip("0") or "0"} if card_number else set()
+    seen_batch_cccds = {cccd_num} if cccd_num else set()
     if isinstance(companions_in, list):
         for comp in companions_in:
             comp_name = str(comp.get("full_name") or "").strip() or "Nhân sự đi cùng"
             comp_card = str(comp.get("card_number") or "").strip()
+            comp_cccd = str(comp.get("cccd_number") or "").strip()
+            if comp_cccd:
+                if comp_cccd in seen_batch_cccds:
+                    return jsonify({
+                        "success": False,
+                        "error": f"Số CCCD {comp_cccd} của người đi cùng ({comp_name}) bị trùng ngay trong cùng phiếu!",
+                    }), 400
+                seen_batch_cccds.add(comp_cccd)
+                for item in active_now:
+                    existing_cccd = str(item.get("cccd_number", "")).strip() or str(item.get("id_number", "")).strip()
+                    if existing_cccd and existing_cccd == comp_cccd:
+                        return jsonify({
+                            "success": False,
+                            "error": f"Số CCCD {comp_cccd} ({comp_name}) đã được đăng ký và đang có mặt trong tòa nhà!",
+                        }), 400
             if not comp_card:
                 continue
             comp_clean = comp_card.lstrip("0") or "0"
@@ -1063,27 +1171,22 @@ def register_visitor():
                     }), 400
 
     # 0c. Block cards explicitly marked LOST / LOCKED in Admin Card Inventory
-    try:
-        import db_mssql
-        if db_mssql.is_mssql_active():
-            cards_to_check = ([card_number] if card_number else []) + [
-                str(c.get("card_number") or "").strip()
-                for c in (companions_in if isinstance(companions_in, list) else [])
-                if str(c.get("card_number") or "").strip()
-            ]
-            for chk_card in cards_to_check:
-                blk = db_mssql.check_card_not_blocked_db(chk_card)
-                if blk.get("blocked"):
-                    return jsonify({
-                        "success": False,
-                        "error": blk.get("error"),
-                        "blocked_card": chk_card,
-                    }), 400
-    except Exception:
-        pass
+    import db_mssql
+    if db_mssql.is_mssql_active():
+        cards_to_check = ([card_number] if card_number else []) + [
+            str(c.get("card_number") or "").strip()
+            for c in (companions_in if isinstance(companions_in, list) else [])
+            if str(c.get("card_number") or "").strip()
+        ]
+        for chk_card in cards_to_check:
+            blk = db_mssql.check_card_not_blocked_db(chk_card)
+            if blk.get("blocked"):
+                return jsonify({
+                    "success": False,
+                    "error": blk.get("error"),
+                    "blocked_card": chk_card,
+                }), 400
 
-    # 1. Register customer & sync permissions to door devices (TCP 4370 parallel across 4 devices)
-    # SharePoint sync runs strictly asynchronously via storage.add_visitor() & push_table_async() so check-in never stalls.
     def _combine_dt_str(d_part, t_part, fallback_str=""):
         s_t = str(t_part or "").strip()
         if len(s_t) >= 16 and "-" in s_t[:10]:
@@ -1093,14 +1196,18 @@ def register_visitor():
             return f"{s_d} {s_t}"[:19]
         return str(fallback_str or "").replace("T", " ")[:19]
 
-    valid_from_str = _combine_dt_str(data.get("from_date"), data.get("from_time"), data.get("checkin_time"))
-    valid_to_str = _combine_dt_str(data.get("to_date"), data.get("expected_checkout_time"), data.get("expected_checkout_time"))
+    today_ymd = datetime.now().strftime("%Y-%m-%d")
+    valid_from_str = _combine_dt_str(data.get("from_date") or today_ymd, data.get("from_time"), data.get("checkin_time"))
+    valid_to_str = _combine_dt_str(data.get("to_date") or data.get("from_date") or today_ymd, data.get("expected_checkout_time"), data.get("expected_checkout_time"))
     is_future_scheduled = False
+    is_future_day = False
     if valid_from_str:
         try:
             vf_parsed = datetime.strptime(valid_from_str[:16], "%Y-%m-%d %H:%M")
             if (vf_parsed - datetime.now()).total_seconds() > 60:
                 is_future_scheduled = True
+            if vf_parsed.date() > datetime.now().date():
+                is_future_day = True
         except Exception:
             pass
 
@@ -1120,7 +1227,6 @@ def register_visitor():
             epad_sync_info = f"Lỗi nạp thẻ phần cứng TCP 4370: {direct_res.get('error')}"
             logger.warning("Nạp thẻ phần cứng lỗi: %s", direct_res.get("error"))
 
-        # 2b. Only call ePAD if EPAD_ENABLED is explicitly True in config.json
         if EPAD_ENABLED:
             try:
                 epad_res = epad_client.register_customer_epad(data, auto_sync=True)
@@ -1131,26 +1237,32 @@ def register_visitor():
             except Exception as ex:
                 logger.debug("ADMS dual-provisioning fallback: %s", ex)
 
-    # 2. Save into local persistent database (active_visitors.json)
-    try:
-        record = storage.add_visitor(data)
-    except ValueError as ve:
-        conflict_v = None
-        c_num = str(data.get("card_number") or "").strip()
-        if c_num:
-            clean_c = c_num.lstrip("0")
-            for av in storage.get_active_visitors():
-                av_c = str(av.get("card_number") or "").strip()
-                av_clean = av_c.lstrip("0")
-                if av_c and (av_c == c_num or (clean_c and av_clean == clean_c)):
-                    conflict_v = av
-                    break
-        return jsonify({
-            "success": False,
-            "error": str(ve),
-            "conflict_card": c_num,
-            "conflict_visitor": conflict_v
-        }), 400
+    # 2. Save into local persistent database
+    if is_future_day:
+        data_pending = dict(data)
+        data_pending["checkin_time"] = valid_from_str
+        data_pending["expected_checkout_time"] = valid_to_str
+        record = storage.add_pending_visitor(data_pending)
+    else:
+        try:
+            record = storage.add_visitor(data)
+        except ValueError as ve:
+            conflict_v = None
+            c_num = str(data.get("card_number") or "").strip()
+            if c_num:
+                clean_c = c_num.lstrip("0")
+                for av in storage.get_active_visitors():
+                    av_c = str(av.get("card_number") or "").strip()
+                    av_clean = av_c.lstrip("0")
+                    if av_c and (av_c == c_num or (clean_c and av_clean == clean_c)):
+                        conflict_v = av
+                        break
+            return jsonify({
+                "success": False,
+                "error": str(ve),
+                "conflict_card": c_num,
+                "conflict_visitor": conflict_v
+            }), 400
 
     # 3. Explicit, highly visible terminal stdout logging
     total_active = len(storage.get_active_visitors())
@@ -1171,6 +1283,7 @@ def register_visitor():
     # 4. Process accompanying visitors (Thông tin nhân sự đi cùng) linked via parent_visitor_id
     companions = data.get("companions") or []
     companion_records = []
+    companion_warnings = []
     if isinstance(companions, list):
         for comp in companions:
             c_name = str(comp.get("full_name") or "").strip()
@@ -1187,24 +1300,36 @@ def register_visitor():
                 "department": data.get("department") or "",
                 "host_person": data.get("host_person") or "",
                 "host_phone": data.get("host_phone") or "",
+                "phone": comp.get("phone") or "",
+                "access_area": data.get("access_area") or "",
                 "purpose": f"Đi cùng đoàn: {full_name}" + (f" - {data.get('purpose')}" if data.get("purpose") else ""),
                 "operator": data.get("operator") or "Lễ tân",
-                "from_date": data.get("from_date"),
+                "from_date": data.get("from_date") or today_ymd,
                 "from_time": comp.get("from_time") or data.get("from_time"),
-                "to_date": data.get("to_date"),
+                "to_date": data.get("to_date") or data.get("from_date") or today_ymd,
                 "expected_checkout_time": comp.get("to_time") or data.get("expected_checkout_time"),
                 "parent_visitor_id": record.get("id"),
                 "parent_visitor_name": full_name or cccd_num,
             }
-            if comp_payload.get("card_number") and not is_future_scheduled:
-                c_hw = zk_client.enroll_visitor_card(comp_payload)
-                if c_hw.get("success"):
-                    comp_payload["epad_atid"] = c_hw.get("employee_atid")
             try:
-                c_rec = storage.add_visitor(comp_payload)
-                companion_records.append(c_rec)
+                if is_future_day:
+                    c_rec = storage.add_pending_visitor(comp_payload)
+                    companion_records.append(c_rec)
+                else:
+                    if comp_payload.get("card_number") and not is_future_scheduled:
+                        c_hw = zk_client.enroll_visitor_card(comp_payload)
+                        if c_hw.get("success"):
+                            comp_payload["epad_atid"] = c_hw.get("employee_atid")
+                    c_rec = storage.add_visitor(comp_payload)
+                    companion_records.append(c_rec)
             except Exception as ce:
-                logger.warning("Companion registration warning: %s", ce)
+                logger.warning("Companion registration error (%s): %s", c_name, ce)
+                companion_warnings.append(f"{c_name}: {ce}")
+                if comp_payload.get("card_number") and not is_future_scheduled and not is_future_day:
+                    try:
+                        zk_client.return_or_delete_card(str(comp_payload["card_number"]))
+                    except Exception:
+                        pass
 
     # 4b. Progressive Card Onboarding (Cách 1): auto-register unseen RFID cards into tbl_CustomerCards + SharePoint
     new_cards_detected = []
@@ -1225,7 +1350,7 @@ def register_visitor():
                     data.get("host_phone") or "",
                     valid_from_str or record.get("checkin_time"),
                     valid_to_str or record.get("expected_checkout_time"),
-                    "SCHEDULED" if is_future_scheduled else "ACTIVE_ON_DEVICE",
+                    "SCHEDULED" if is_future_scheduled else ("ACTIVE_ON_DEVICE" if epad_sync_ok else "SYNC_FAILED"),
                 ))
             for cr in companion_records:
                 if cr.get("card_number"):
@@ -1278,15 +1403,16 @@ def register_visitor():
         )
 
     extra_comp_msg = f" (kèm {len(companion_records)} nhân sự đi cùng)" if companion_records else ""
+    warn_comp_msg = f" Lưu ý lỗi người đi cùng: {'; '.join(companion_warnings)}." if companion_warnings else ""
     new_card_msg = (
         f" Hệ thống đã tự động thêm thẻ mới ({', '.join(new_cards_detected)}) vào Kho thẻ Admin ở trạng thái chờ ảnh bằng chứng."
         if new_cards_detected
         else ""
     )
     resp_msg = (
-        f"Đã đăng ký thành công cho khách {full_name or cccd_num}{extra_comp_msg}. Đã lưu hệ thống & đồng bộ thiết bị cửa.{new_card_msg}"
+        f"Đã đăng ký thành công cho khách {full_name or cccd_num}{extra_comp_msg}. Đã lưu hệ thống & đồng bộ thiết bị cửa.{new_card_msg}{warn_comp_msg}"
         if epad_sync_ok or not card_number
-        else f"Đã lưu hồ sơ cho khách {full_name or cccd_num}{extra_comp_msg} nhưng {epad_sync_info}.{new_card_msg}"
+        else f"Đã lưu hồ sơ cho khách {full_name or cccd_num}{extra_comp_msg} nhưng {epad_sync_info}.{new_card_msg}{warn_comp_msg}"
     )
 
     return jsonify({
@@ -1406,6 +1532,10 @@ def batch_checkout():
     success_count = 0
     fail_count = 0
 
+    current_u = get_current_user()
+    op_name = (current_u.get("full_name") if current_u else None) or "Lễ tân"
+    cards_released = False
+
     for q in items:
         q_str = str(q).strip()
         if not q_str:
@@ -1416,16 +1546,33 @@ def batch_checkout():
             target_card = record.get("card_number")
             if target_card:
                 try:
-                    if not EPAD_ENABLED:
-                        zk_client.return_or_delete_card(target_card)
-                    else:
-                        epad_client.return_or_delete_card(target_card)
-                except Exception:
-                    pass
+                    zk_client.return_or_delete_card(str(target_card))
+                    if EPAD_ENABLED:
+                        epad_client.return_or_delete_card(str(target_card))
+                except Exception as hw_e:
+                    logger.warning("Batch checkout hardware warning (%s): %s", target_card, hw_e)
+                try:
+                    import db_mssql
+                    if db_mssql.is_mssql_active() and db_mssql.release_card_on_checkout(str(target_card), operator=op_name, notes="Đã trả thẻ (Check-out hàng loạt)"):
+                        cards_released = True
+                except Exception as sql_e:
+                    logger.warning("Batch checkout card release warning: %s", sql_e)
+            try:
+                import sharepoint_vms_sync
+                sharepoint_vms_sync.checkout_visitor_on_sharepoint_async(record)
+            except Exception:
+                pass
             results.append({"query": q_str, "success": True, "name": record.get("full_name")})
         else:
             fail_count += 1
             results.append({"query": q_str, "success": False, "error": "Không tìm thấy"})
+
+    if cards_released:
+        try:
+            import sharepoint_vms_sync
+            sharepoint_vms_sync.push_table_async("tbl_CustomerCards", 200)
+        except Exception:
+            pass
 
     logger.info("[BATCH CHECKOUT] Đã check-out hàng loạt: %d thành công, %d thất bại", success_count, fail_count)
     return jsonify({
@@ -1453,16 +1600,33 @@ def checkout_visitor_group():
     if not records:
         return jsonify({"success": False, "error": f"Không tìm thấy khách đang hoạt động '{q}'"}), 404
 
+    current_u = get_current_user()
+    op_name = (current_u.get("full_name") if current_u else None) or "Lễ tân"
+    cards_released = False
+
     for rec in records:
         target_card = rec.get("card_number")
         if target_card:
             try:
                 zk_client.return_or_delete_card(str(target_card))
-            except Exception:
-                pass
+            except Exception as hw_e:
+                logger.warning("Group checkout hardware warning (%s): %s", target_card, hw_e)
+            try:
+                import db_mssql
+                if db_mssql.is_mssql_active() and db_mssql.release_card_on_checkout(str(target_card), operator=op_name, notes="Đã trả thẻ theo đoàn"):
+                    cards_released = True
+            except Exception as sql_e:
+                logger.warning("Group checkout card release warning: %s", sql_e)
         try:
             import sharepoint_vms_sync
             sharepoint_vms_sync.checkout_visitor_on_sharepoint_async(rec)
+        except Exception:
+            pass
+
+    if cards_released:
+        try:
+            import sharepoint_vms_sync
+            sharepoint_vms_sync.push_table_async("tbl_CustomerCards", 200)
         except Exception:
             pass
 
@@ -1569,8 +1733,8 @@ def get_employees():
     """
     dept = request.args.get("department")
     q = (request.args.get("q") or "").strip().lower()
-    page = max(1, int(request.args.get("page", 1)))
-    limit = min(500, max(10, int(request.args.get("limit", 25))))
+    page = _safe_int(request.args.get("page", 1), 1, 1, 10000)
+    limit = _safe_int(request.args.get("limit", 25), 25, 10, 2000)
     include_inactive = str(request.args.get("include_inactive") or "").strip() in ("1", "true", "yes")
 
     all_emps = storage.get_employees(department=dept, include_inactive=include_inactive)
@@ -1604,6 +1768,22 @@ def get_employees():
     start_idx = (page - 1) * limit
     end_idx = start_idx + limit
     paginated = all_emps[start_idx:end_idx]
+
+    curr_u = get_current_user()
+    if curr_u and curr_u.get("role") == "guest_inviter":
+        paginated = [
+            {
+                "atid": e.get("atid"),
+                "code": e.get("code"),
+                "fullname": e.get("fullname"),
+                "department": e.get("department"),
+                "position": e.get("position", ""),
+                "phone": e.get("phone", ""),
+                "email": e.get("email", ""),
+                "is_active": e.get("is_active", True),
+            }
+            for e in paginated
+        ]
 
     depts = storage.get_departments()
 
@@ -1769,7 +1949,7 @@ def get_active_visitors():
         card_label = card_name_map.get(cnum) or card_name_map.get(cnum.lstrip("0") or "0") or cnum or "không gắn thẻ"
         v["card_display_name"] = card_label
         fname = str(v.get("full_name") or "Khách").strip()
-        out_count = int(v.get("gate_out_count") or 0)
+        out_count = int(v.get("gate_out_count") or v.get("out_scan_count") or 0)
         last_out = str(v.get("gate_last_out_time") or v.get("last_gate_out_time") or v.get("gate_out_time") or "").strip()
         if out_count > 0 or last_out:
             out_hhmm = last_out[11:16] if len(last_out) >= 16 else (last_out[:5] or "đã quẹt cổng RA")
@@ -2011,11 +2191,13 @@ def assign_card_to_pending_visitor():
             pass
 
     epad_atid = visitor_id
+    hw_enroll_ok = True
     if not is_future:
         hw_payload = dict(target)
         hw_payload["card_number"] = card_number
         hw_res = zk_client.enroll_visitor_card(hw_payload)
-        if hw_res.get("success") and hw_res.get("employee_atid"):
+        hw_enroll_ok = bool(hw_res.get("success"))
+        if hw_enroll_ok and hw_res.get("employee_atid"):
             epad_atid = str(hw_res["employee_atid"])
 
     activated = storage.activate_pending_visitor(visitor_id, epad_atid, card_number, operator=op_name)
@@ -2034,7 +2216,7 @@ def assign_card_to_pending_visitor():
             contact_phone=activated.get("host_phone") or "",
             valid_from=activated.get("checkin_time"),
             valid_to=activated.get("expected_checkout_time"),
-            device_sync_state="SCHEDULED" if is_future else "ACTIVE_ON_DEVICE",
+            device_sync_state="SCHEDULED" if is_future else ("ACTIVE_ON_DEVICE" if hw_enroll_ok else "SYNC_FAILED"),
         )
         try:
             import pyodbc
@@ -2045,8 +2227,8 @@ def assign_card_to_pending_visitor():
                     (str(card_number)[:50], str(visitor_id)[:50]),
                 )
                 conn.commit()
-        except Exception:
-            pass
+        except Exception as sql_ex:
+            logger.warning("PreRegisteredGuests CHECKED_IN update warning: %s", sql_ex)
         try:
             import sharepoint_vms_sync
             sharepoint_vms_sync.push_table_async("tbl_CustomerCards", 200)
@@ -2057,8 +2239,13 @@ def assign_card_to_pending_visitor():
 
     return jsonify({
         "success": True,
+        "hw_enroll_ok": hw_enroll_ok,
         "visitor": activated,
-        "message": f"Đã cấp thẻ {card_number} và kích hoạt cửa cho {activated.get('full_name')}.",
+        "message": (
+            f"Đã cấp thẻ {card_number} và kích hoạt cửa cho {activated.get('full_name')}."
+            if hw_enroll_ok
+            else f"Đã cấp thẻ {card_number} cho {activated.get('full_name')}, nhưng có lỗi nạp xuống cổng ZKTeco — cần kiểm tra kết nối máy cửa."
+        ),
     })
 
 
@@ -2107,22 +2294,27 @@ def swap_visitor_card_endpoint():
     u = get_current_user()
     op_name = (u["full_name"] if u else None) or "Lễ tân"
 
-    # 1. Revoke old card on hardware + release in SQL
+    # 1. Enroll new card on 4 ZKTeco devices FIRST so guest is never stranded with old card revoked & new card failed
+    hw_payload = dict(target)
+    hw_payload["card_number"] = new_card
+    hw_res = zk_client.enroll_visitor_card(hw_payload)
+    if not hw_res.get("success"):
+        return jsonify({
+            "success": False,
+            "error": f"Không thể nạp thẻ mới {new_card} lên 4 máy cửa ZKTeco ({hw_res.get('error') or 'thiết bị bận/mất kết nối'}). Thẻ cũ vẫn được giữ nguyên.",
+        }), 502
+    new_epad_atid = str(hw_res.get("employee_atid") or "")
+
+    # 2. Revoke old card on hardware + release in SQL
     if old_card_actual:
         try:
             zk_client.return_or_delete_card(old_card_actual)
-        except Exception:
-            pass
+        except Exception as hw_rel_err:
+            logger.warning("swap_visitor_card revoke old card warning (%s): %s", old_card_actual, hw_rel_err)
         if db_mssql.is_mssql_active():
             db_mssql.release_card_on_checkout(
                 old_card_actual, operator=op_name, notes=f"Đổi sang thẻ mới {new_card}"
             )
-
-    # 2. Enroll new card on 4 ZKTeco devices
-    hw_payload = dict(target)
-    hw_payload["card_number"] = new_card
-    hw_res = zk_client.enroll_visitor_card(hw_payload)
-    new_epad_atid = str(hw_res.get("employee_atid") or "") if hw_res.get("success") else None
 
     # 3. Update visitor record + new card inventory
     updated = storage.swap_visitor_card(visitor_id, old_card_actual, new_card, new_visitor_id=new_epad_atid)
@@ -2168,11 +2360,13 @@ def get_visitor_history():
 @app.route("/api/export/visitors", methods=["GET"])
 @require_role(["admin"])
 def export_visitors():
-    export_path = os.path.join(BASE_DIR, "data", "Bao_Cao_Khach_Ra_Vao.xlsx")
-    storage.export_visitors_excel(export_path)
+    buf = io.BytesIO()
+    storage.export_visitors_excel(buf)
+    buf.seek(0)
     return send_file(
-        export_path,
+        buf,
         as_attachment=True,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         download_name=f"Bao_Cao_Khach_Ra_Vao_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
     )
 
@@ -2211,20 +2405,25 @@ def api_clock_sync_ntp():
 
     res = zk_client.sync_all_device_clocks(confirm_layer2_code="CONFIRM_VN_NTP_SYNC")
     audit = zk_client.audit_all_clocks()
+    ntp_ok = bool(res.get("success"))
     db_mssql.log_clock_sync_audit_db(
         audit_type="CONFIRMED_2LAYER_SYNC",
         audit_data=audit,
         confirm_code=code,
         operator=operator,
-        status="SYNCED_TO_VN_NTP"
+        status="SYNCED_TO_VN_NTP" if ntp_ok else "SYNC_FAILED"
     )
     db_mssql.log_device_command_db(
         cmd_code="SYNC_CLOCK_VN_NTP_2LAYER",
         target_serial="ALL",
         target_name="Toàn bộ 4 máy ZKTeco SenseFace 4A",
         payload=res,
-        status="COMPLETED",
-        result_msg="Đã đồng bộ giờ chuẩn NTP Việt Nam (UTC+7) qua xác nhận 2 lớp.",
+        status="COMPLETED" if ntp_ok else "FAILED",
+        result_msg=(
+            "Đã đồng bộ giờ chuẩn NTP Việt Nam (UTC+7) qua xác nhận 2 lớp."
+            if ntp_ok
+            else str(res.get("error") or "Không thể lấy giờ chuẩn NTP để đồng bộ thiết bị.")
+        ),
         operator=operator
     )
     try:
@@ -2234,10 +2433,13 @@ def api_clock_sync_ntp():
         sharepoint_vms_sync.push_table_async("tbl_Devices", 20)
     except Exception:
         pass
+    if not ntp_ok:
+        return jsonify({"success": False, "error": res.get("error") or "Đồng bộ giờ chuẩn NTP thất bại.", "sync_result": res, "audit": audit}), 503
     return jsonify({"success": True, "sync_result": res, "audit": audit})
 
 
 @app.route("/api/sql/overview", methods=["GET"])
+@require_role(["admin"])
 def api_sql_overview():
     """Returns overview and row counts for all 18 SQL Server tables in SeaZen_AccessControl."""
     import db_mssql
@@ -2253,10 +2455,11 @@ def api_sql_overview():
 
 
 @app.route("/api/sql/table/<table_name>", methods=["GET"])
+@require_role(["admin"])
 def api_sql_table_rows(table_name: str):
     """Returns rows for any of the 18 SQL Server tables."""
     import db_mssql
-    limit = min(1000, max(10, int(request.args.get("limit", 200))))
+    limit = _safe_int(request.args.get("limit", 200), 200, 10, 1000)
     rows = db_mssql.get_table_rows(table_name, limit=limit)
     vn_label = db_mssql.ALLOWED_TABLES.get(table_name, table_name)
     return jsonify({
@@ -3654,6 +3857,7 @@ def api_upsert_shift():
 
 
 @app.route("/api/sharepoint/vms_status", methods=["GET"])
+@require_auth
 def api_sharepoint_vms_status():
     import sharepoint_vms_sync
     return jsonify(sharepoint_vms_sync.get_vms_sharepoint_status())

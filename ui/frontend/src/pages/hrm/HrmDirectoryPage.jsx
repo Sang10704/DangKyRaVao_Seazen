@@ -47,7 +47,7 @@ export default function HrmDirectoryPage({
       const { ok, data } = await apiFetch(
         `/api/employees?q=${encodeURIComponent(empSearch)}&department=${encodeURIComponent(
           empDeptFilter
-        )}&page=1&limit=400&include_inactive=${includeInactive ? '1' : '0'}`
+        )}&page=1&limit=2000&include_inactive=${includeInactive ? '1' : '0'}`
       );
       if (ok && data?.employees) {
         setAllEmployeesList(data.employees);
@@ -58,8 +58,11 @@ export default function HrmDirectoryPage({
   }, [empSearch, empDeptFilter, includeInactive]);
 
   useEffect(() => {
-    loadDirectoryList();
-  }, [loadDirectoryList, employees.length]);
+    const t = setTimeout(() => {
+      loadDirectoryList();
+    }, 200);
+    return () => clearTimeout(t);
+  }, [loadDirectoryList]);
 
   const stats = useMemo(() => {
     const activeCount = allEmployeesList.filter((e) => e.is_active !== false).length;

@@ -338,7 +338,7 @@ def sync_employees_and_biometrics(
 
     for atid, su in stg_users.items():
         pe = prod_emps.get(atid)
-        is_visitor_atid = (atid.isdigit() and int(atid) >= 80000000) or su["emp_type"] == 2
+        is_visitor_atid = (atid.isdigit() and (int(atid) >= 80000000 or 56200 <= int(atid) <= 56299)) or su["emp_type"] == 2
         if not pe:
             dept_n = su["dept_name"] or ("Khách" if is_visitor_atid else "Khác")
             dept_id = dept_name_to_id.get(dept_n)
