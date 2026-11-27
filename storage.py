@@ -166,6 +166,51 @@ def determine_scan_person_type(scan: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+SAME_LANE_SPAM_WINDOW_SEC = 10
+
+
+def _parse_scan_dt(rec: Dict[str, Any]) -> Optional[datetime]:
+    raw = str(rec.get("CheckTime") or rec.get("Time") or "").replace("T", " ").strip()[:19]
+    if not raw:
+        return None
+    try:
+        return datetime.strptime(raw, "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return None
+
+
+def _scan_person_lane_key(rec: Dict[str, Any]):
+    who = str(rec.get("EmployeeATID") or rec.get("FullName") or "").strip()
+    who_key = (who.lstrip("0") or who) if who.isdigit() else who.lower()
+    sn = str(rec.get("SerialNumber") or rec.get("DeviceSerialNumber") or "").strip()
+    dev_name = str(rec.get("DeviceName") or "").strip().lower()
+    return who_key, (sn or dev_name)
+
+
+def collapse_same_lane_spam(scans: List[Dict[str, Any]], window_sec: int = SAME_LANE_SPAM_WINDOW_SEC) -> List[Dict[str, Any]]:
+    """Collapses rapid repeat scans of the same person on the exact same lane within window_sec into 1 event."""
+    if not scans or len(scans) <= 1 or window_sec <= 0:
+        return list(scans)
+    asc = sorted(scans, key=lambda x: str(x.get("CheckTime") or x.get("Time") or "").replace("T", " "))
+    kept: List[Dict[str, Any]] = []
+    last_burst_ts: Dict[tuple, datetime] = {}
+    for rec in asc:
+        dt = _parse_scan_dt(rec)
+        who_key, lane_key = _scan_person_lane_key(rec)
+        if not dt or not who_key or not lane_key:
+            kept.append(rec)
+            continue
+        burst_k = (who_key, lane_key)
+        prev_dt = last_burst_ts.get(burst_k)
+        if prev_dt is not None and 0 <= (dt - prev_dt).total_seconds() <= window_sec:
+            last_burst_ts[burst_k] = dt
+            continue
+        last_burst_ts[burst_k] = dt
+        kept.append(rec)
+    kept.sort(key=lambda x: str(x.get("CheckTime") or x.get("Time") or "").replace("T", " "), reverse=True)
+    return kept
+
+
 class StorageManager:
     def __init__(self, config: Dict[str, Any]):
         self.config = config
@@ -1135,6 +1180,7 @@ class StorageManager:
             saved_logs = self._load_scans_cache()
 
             seen_keys = set()
+            lane_times: Dict[tuple, List[datetime]] = {}
             merged = []
             for l in saved_logs:
                 chk = str(l.get("CheckTime") or l.get("Time") or "").replace("T", " ").strip()[:19]
@@ -1145,10 +1191,18 @@ class StorageManager:
                 if key not in seen_keys:
                     seen_keys.add(key)
                     merged.append(l)
+                    dt_exist = _parse_scan_dt(l)
+                    pk, lk = _scan_person_lane_key(l)
+                    if dt_exist and pk and lk:
+                        lane_times.setdefault((pk, lk), []).append(dt_exist)
 
             added_count = 0
             actually_added = []
-            for l in new_logs:
+            ordered_new = sorted(
+                new_logs,
+                key=lambda x: str(x.get("CheckTime") or x.get("Time") or "").replace("T", " ")
+            )
+            for l in ordered_new:
                 if "CheckTime" not in l and "Time" in l:
                     l["CheckTime"] = l["Time"]
                 chk = str(l.get("CheckTime") or l.get("Time") or "").replace("T", " ").strip()[:19]
@@ -1156,6 +1210,15 @@ class StorageManager:
                 who_key = who.lstrip("0") or who if who.isdigit() else who
                 dev = str(l.get("SerialNumber") or l.get("DeviceSerialNumber") or "").strip()
                 key = f"{chk}_{who_key}_{dev}"
+
+                if key in seen_keys:
+                    continue
+
+                dt_new = _parse_scan_dt(l)
+                pk, lk = _scan_person_lane_key(l)
+                if dt_new and pk and lk:
+                    if any(abs((dt_new - prev_dt).total_seconds()) <= SAME_LANE_SPAM_WINDOW_SEC for prev_dt in lane_times.get((pk, lk), ())):
+                        continue
 
                 atid = str(l.get("EmployeeATID") or "").strip()
                 name = str(l.get("FullName") or "").strip()
@@ -1166,11 +1229,12 @@ class StorageManager:
                     if not l.get("FullName") or l.get("FullName") == "--" or str(l.get("FullName")).startswith("User "):
                         l["FullName"] = matched_emp.get("fullname")
 
-                if key not in seen_keys:
-                    seen_keys.add(key)
-                    merged.append(l)
-                    actually_added.append(l)
-                    added_count += 1
+                seen_keys.add(key)
+                if dt_new and pk and lk:
+                    lane_times.setdefault((pk, lk), []).append(dt_new)
+                merged.append(l)
+                actually_added.append(l)
+                added_count += 1
 
             if added_count > 0:
                 merged.sort(key=lambda x: str(x.get("CheckTime", "")).replace("T", " "), reverse=True)
@@ -1276,8 +1340,7 @@ class StorageManager:
                             filtered.append(dl)
             except Exception:
                 pass
-        filtered.sort(key=lambda x: str(x.get("CheckTime", "")).replace("T", " "), reverse=True)
-        return filtered
+        return collapse_same_lane_spam(filtered, window_sec=SAME_LANE_SPAM_WINDOW_SEC)
 
     def get_available_dates(self) -> List[str]:
         """Returns all unique dates (YYYY-MM-DD) available in scan and visitor history in <20ms."""
