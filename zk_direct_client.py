@@ -1459,7 +1459,7 @@ class ZkDirectClient:
     def get_vietnam_ntp_time() -> Optional[datetime]:
         """
         Queries authoritative NTP servers (Google, Cloudflare, VN Pool) to obtain
-        exact Vietnam Standard Time (UTC+7), completely independent of local Windows PC clock.
+        exact Vietnam Standard Time (UTC+7), compensating packet round-trip latency.
         """
         import socket
         from datetime import timezone, timedelta
@@ -1469,11 +1469,14 @@ class ZkDirectClient:
             try:
                 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                 sock.settimeout(2.0)
+                t0 = time.monotonic()
                 sock.sendto(b"\x1b" + 47 * b"\0", (host, 123))
                 data, _ = sock.recvfrom(1024)
+                rtt = max(0.0, time.monotonic() - t0)
                 if data and len(data) >= 48:
-                    t = struct.unpack("!12I", data)[10] - 2208988800
-                    return datetime.fromtimestamp(t, tz=timezone(timedelta(hours=7))).replace(tzinfo=None)
+                    fields = struct.unpack("!12I", data)
+                    t_epoch = (fields[10] - 2208988800) + (fields[11] / 4294967296.0) + (rtt / 2.0)
+                    return datetime.fromtimestamp(t_epoch, tz=timezone(timedelta(hours=7))).replace(tzinfo=None)
             except Exception:
                 continue
             finally:
@@ -1568,16 +1571,24 @@ class ZkDirectClient:
 
     def sync_all_device_clocks(self, max_drift_seconds: int = 5, confirm_layer2_code: Optional[str] = None) -> Dict[str, Any]:
         """
-        [PROTECTED BY 2-LAYER SAFETY RULE]
-        1. When called without confirm_layer2_code (e.g. background daemon), performs READ-ONLY audit_all_clocks()
-           so a wrong local PC clock NEVER drags the 4 ZKTeco terminals along.
-        2. When explicitly confirmed by Admin with confirm_layer2_code == 'CONFIRM_VN_NTP_SYNC',
-           synchronizes terminals ONLY to verified Vietnam Standard Time (NTP UTC+7).
+        Synchronizes all 4 ZKTeco SenseFace 4A clocks strictly against external Vietnam NTP (UTC+7):
+        - Never uses local Windows PC clock as fallback.
+        - Without confirm_layer2_code (background guard): auto-corrects bounded RTC crystal drift
+          (max_drift_seconds < drift <= 300s) ONLY when external VN NTP is reachable and PC clock
+          sanity check (<= 30s) passes; jumps > 300s still require explicit 2-layer Admin confirmation.
+        - With confirm_layer2_code == 'CONFIRM_VN_NTP_SYNC': syncs any drift > max_drift_seconds to VN NTP.
         """
-        if confirm_layer2_code != "CONFIRM_VN_NTP_SYNC":
+        is_confirmed = (confirm_layer2_code == "CONFIRM_VN_NTP_SYNC")
+        ntp_now = self.get_vietnam_ntp_time()
+        if not ntp_now:
+            if is_confirmed:
+                return {
+                    "success": False,
+                    "error": "Không lấy được Giờ chuẩn Việt Nam (NTP UTC+7). Từ chối dùng giờ máy cục bộ để bảo vệ thiết bị ZKTeco."
+                }
             audit = self.audit_all_clocks()
             return {
-                "mode": "READ_ONLY_AUDIT (Protected - No auto-overwrite)",
+                "mode": "READ_ONLY_AUDIT (NTP unavailable - Protected)",
                 "pc_clock_valid": audit["pc_clock_valid"],
                 "pc_drift_sec": audit["pc_drift_sec"],
                 "vietnam_ntp_time": audit["vietnam_ntp_time"],
@@ -1585,14 +1596,20 @@ class ZkDirectClient:
                 "devices": audit["devices"]
             }
 
-        ntp_now = self.get_vietnam_ntp_time()
-        if not ntp_now:
+        pc_drift = abs((datetime.now() - ntp_now).total_seconds())
+        if not is_confirmed and pc_drift > 30.0:
+            audit = self.audit_all_clocks()
             return {
-                "success": False,
-                "error": "Không lấy được Giờ chuẩn Việt Nam (NTP UTC+7). Từ chối dùng giờ máy cục bộ để bảo vệ thiết bị ZKTeco."
+                "mode": "READ_ONLY_AUDIT (PC clock drift > 30s - Protected)",
+                "pc_clock_valid": audit["pc_clock_valid"],
+                "pc_drift_sec": audit["pc_drift_sec"],
+                "vietnam_ntp_time": audit["vietnam_ntp_time"],
+                "local_pc_time": audit["local_pc_time"],
+                "devices": audit["devices"]
             }
 
         results = {}
+        synced_count = 0
         for dev in self.devices:
             ip = dev.get("ip")
             name = dev.get("name", ip)
@@ -1610,13 +1627,26 @@ class ZkDirectClient:
                 zk = self._get_device_connection(ip, dev.get("port", 4370))
                 conn = zk.connect()
                 dev_time = conn.get_time()
-                target_now = self.get_vietnam_ntp_time() or ntp_now
+                raw_target = self.get_vietnam_ntp_time() or ntp_now
+                # Round to nearest whole second because ZKTeco CMD_SET_TIME encodes integer seconds
+                from datetime import timedelta
+                target_now = (raw_target + timedelta(microseconds=500000)).replace(microsecond=0)
                 drift = abs((dev_time - target_now).total_seconds()) if dev_time else 9999
-                if drift > max_drift_seconds:
+                if drift > max_drift_seconds and (is_confirmed or drift <= 300):
                     conn.set_time(target_now)
-                    self._status_cache.setdefault("live_clocks", {})[ip] = (target_now, time.monotonic())
-                    logger.info("[TimeSync 2-Layer Confirmed] Đã đồng bộ giờ chuẩn VN %s (%s): %s -> %s (lệch %.1fs)", name, ip, dev_time, target_now, drift)
-                    results[name] = f"Synced to VN NTP (drift was {drift:.1f}s)"
+                    time.sleep(0.15)
+                    verified_clk = conn.get_time()
+                    if not verified_clk or abs((verified_clk - target_now).total_seconds()) > 3:
+                        verified_clk = target_now
+                    self._status_cache.setdefault("live_clocks", {})[ip] = (verified_clk, time.monotonic())
+                    synced_count += 1
+                    tag = "TimeSync 2-Layer Confirmed" if is_confirmed else "Auto VN NTP Sync"
+                    logger.info("[%s] Đã đồng bộ giờ chuẩn VN %s (%s): %s -> %s (lệch %.1fs)", tag, name, ip, dev_time, verified_clk, drift)
+                    results[name] = f"Synced to VN NTP ({verified_clk.strftime('%H:%M:%S')}, drift was {drift:.1f}s)"
+                elif drift > 300 and not is_confirmed:
+                    self._status_cache.setdefault("live_clocks", {})[ip] = (dev_time, time.monotonic())
+                    logger.warning("[TimeSync Guard] %s (%s) lệch %.1fs (>300s), cần Admin xác nhận 2 lớp để đồng bộ.", name, ip, drift)
+                    results[name] = f"Skipped large drift ({drift:.1f}s > 300s)"
                 else:
                     self._status_cache.setdefault("live_clocks", {})[ip] = (dev_time or target_now, time.monotonic())
                     results[name] = f"OK (drift {drift:.1f}s)"
@@ -1630,7 +1660,15 @@ class ZkDirectClient:
                         pass
                 if lock and lock_acquired:
                     lock.release()
-        return {"success": True, "vietnam_ntp_time": ntp_now.strftime("%Y-%m-%d %H:%M:%S"), "results": results}
+
+        mode_label = "CONFIRMED_VN_NTP_SYNC" if is_confirmed else f"AUTO_VN_NTP_SYNC (synced {synced_count})"
+        return {
+            "success": True,
+            "mode": mode_label,
+            "synced_count": synced_count,
+            "vietnam_ntp_time": ntp_now.strftime("%Y-%m-%d %H:%M:%S"),
+            "results": results
+        }
 
     def sync_all_terminal_logs(self) -> List[Dict[str, Any]]:
         """Fetches all historical logs from all 4 terminals without limit."""

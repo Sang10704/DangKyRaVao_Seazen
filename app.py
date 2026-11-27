@@ -335,7 +335,7 @@ def _background_scan_collector():
     while True:
         try:
             now_ts = time.time()
-            if now_ts - last_clock_sync > 3600:
+            if now_ts - last_clock_sync > 900:
                 try:
                     zk_client.sync_all_device_clocks()
                     last_clock_sync = now_ts
