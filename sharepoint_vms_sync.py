@@ -747,6 +747,86 @@ def provision_vms_sharepoint_lists(selected_tables: Optional[List[str]] = None) 
     }
 
 
+_SP_INDEXED_COLUMNS: Dict[str, List[str]] = {
+    "tbl_AttendanceLogs": ["Title", "MaChamCongATID", "ThoiGianQuet", "SerialThietBi"],
+    "tbl_DailyTimekeeping": ["Title", "NgayLamViec", "MaChamCongATID"],
+    "tbl_Visitors": ["Title", "MaHoSoKhach", "SoCCCD", "SoTheRFID", "TrangThai", "GioVao"],
+    "tbl_DoorAuditLogs": ["Title", "MaCua", "ThoiGianThaoTac"],
+    "tbl_CustomerCards": ["Title", "SoTheRFID"],
+    "tbl_Employees": ["Title", "MaChamCongATID"],
+    "tbl_EmployeeBiometrics": ["Title", "MaChamCongATID"],
+    "tbl_PreRegisteredGuests": ["Title", "MaLichHen", "SoCCCD", "TrangThai"],
+    "tbl_Contractors": ["Title", "MaNhaThau", "SoCCCD"],
+    "tbl_DeviceCommands": ["Title", "MaLenh"],
+}
+
+
+def ensure_sharepoint_list_indexes(selected_tables: Optional[List[str]] = None) -> Dict[str, Any]:
+    """Ensures key SharePoint columns are indexed while ItemCount < 5000 so $filter queries never hit threshold."""
+    tok_info = get_sharepoint_tokens()
+    if not tok_info.get("ok"):
+        return {"success": False, "error": tok_info.get("error")}
+    sp_token = tok_info["sp_token"]
+    digest = _get_cached_digest(sp_token)
+    if not digest:
+        return {"success": False, "error": "Không lấy được FormDigestValue từ SharePoint."}
+
+    headers_nometadata = {"Authorization": f"Bearer {sp_token}", "Accept": "application/json;odata=nometadata"}
+    headers_verbose = {"Authorization": f"Bearer {sp_token}", "Accept": "application/json;odata=verbose"}
+    headers_merge = {
+        "Authorization": f"Bearer {sp_token}",
+        "Accept": "application/json;odata=verbose",
+        "Content-Type": "application/json;odata=verbose",
+        "X-RequestDigest": digest,
+        "X-HTTP-Method": "MERGE",
+        "If-Match": "*"
+    }
+
+    targets = selected_tables or list(VMS_SHAREPOINT_LIST_SCHEMAS.keys())
+    results = []
+    for tbl in targets:
+        if tbl not in VMS_SHAREPOINT_LIST_SCHEMAS:
+            continue
+        lid = _ensure_list_id_cached(tbl)
+        if not lid:
+            continue
+        r_meta = _sp_request_with_retry("GET", f"{SP_SITE_URL}/_api/web/lists(guid'{lid}')?$select=Title,ItemCount", headers=headers_nometadata, timeout=10)
+        if r_meta.status_code != 200:
+            results.append({"sql_table": tbl, "success": False, "error": f"HTTP {r_meta.status_code}"})
+            continue
+        item_count = int(r_meta.json().get("ItemCount") or 0)
+        cols = _SP_INDEXED_COLUMNS.get(tbl, ["Title"])
+        col_statuses = {}
+        for col_name in cols:
+            r_fld = _sp_request_with_retry(
+                "GET",
+                f"{SP_SITE_URL}/_api/web/lists(guid'{lid}')/fields/getbyinternalnameortitle('{col_name}')?$select=InternalName,Indexed",
+                headers=headers_verbose,
+                timeout=10
+            )
+            if r_fld.status_code != 200:
+                col_statuses[col_name] = f"GET HTTP {r_fld.status_code}"
+                continue
+            d_fld = r_fld.json().get("d", {})
+            if d_fld.get("Indexed") is True:
+                col_statuses[col_name] = "already_indexed"
+                continue
+            if item_count >= 5000:
+                col_statuses[col_name] = f"skipped_over_5000 ({item_count})"
+                continue
+            meta_type = d_fld.get("__metadata", {}).get("type", "SP.FieldText")
+            r_m = _sp_request_with_retry(
+                "POST",
+                f"{SP_SITE_URL}/_api/web/lists(guid'{lid}')/fields/getbyinternalnameortitle('{col_name}')",
+                headers=headers_merge,
+                json={"__metadata": {"type": meta_type}, "Indexed": True},
+                timeout=10
+            )
+            col_statuses[col_name] = "indexed" if r_m.status_code in (200, 204) else f"MERGE HTTP {r_m.status_code}"
+        results.append({"sql_table": tbl, "item_count": item_count, "columns": col_statuses, "success": True})
+    return {"success": True, "results": results}
+
+
 def _build_sp_unique_key(sql_table: str, row: Dict[str, Any]) -> str:
     """Computes a collision-free unique SharePoint Title key for both master tables and time-series logs."""
     if sql_table == "tbl_AttendanceLogs":
@@ -892,10 +972,11 @@ def sync_table_to_sharepoint(sql_table: str, max_rows: int = 200, ensure_schema:
     elif sql_table == "tbl_CustomerCards":
         select_fields.extend(["SoTheRFID"])
 
+    top_fetch = min(2000, max(500, int(max_rows or 200) * 4))
     try:
         r_items = _sp_request_with_retry(
             "GET",
-            f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items?$select={','.join(select_fields)}&$top=5000&$orderby=Id desc",
+            f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items?$select={','.join(select_fields)}&$top={top_fetch}&$orderby=Id desc",
             headers=headers_read,
             timeout=15
         )
@@ -1183,7 +1264,7 @@ def _warm_scan_sigs_cache(sp_token: str) -> None:
         headers_read = {"Authorization": f"Bearer {sp_token}", "Accept": "application/json;odata=nometadata"}
         r = _sp_request_with_retry(
             "GET",
-            f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items?$select=Id,Title,MaChamCongATID,ThoiGianQuet&$top=5000&$orderby=Id desc",
+            f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items?$select=Id,Title,MaChamCongATID,ThoiGianQuet&$top=1500&$orderby=Id desc",
             headers=headers_read,
             timeout=12
         )
