@@ -962,9 +962,10 @@ def sync_table_to_sharepoint(sql_table: str, max_rows: int = 200, ensure_schema:
 
     # Fetch existing items to prevent duplicate inserts (plus extra signature fields for log/timekeeping tables)
     existing_by_key: Dict[str, Dict[str, Any]] = {}
+    sp_lane_times: Dict[tuple, List[datetime]] = {}
     select_fields = ["Id", "Title"]
     if sql_table == "tbl_AttendanceLogs":
-        select_fields.extend(["MaChamCongATID", "ThoiGianQuet"])
+        select_fields.extend(["MaChamCongATID", "ThoiGianQuet", "SerialThietBi", "TenThietBiCua"])
     elif sql_table == "tbl_DailyTimekeeping":
         select_fields.extend(["NgayLamViec", "MaChamCongATID", "TongSoLanQuet", "GioRaCuoiCung"])
     elif sql_table == "tbl_DoorAuditLogs":
@@ -986,6 +987,7 @@ def sync_table_to_sharepoint(sql_table: str, max_rows: int = 200, ensure_schema:
                 invalidate_sharepoint_token_cache()
             logger.warning("[SP Sync ABORT %s] GET existing items failed HTTP %s: %s", sql_table, r_items.status_code, r_items.text[:160])
             return {"success": False, "sql_table": sql_table, "error": f"SharePoint GET HTTP {r_items.status_code}"}
+        from storage import _parse_scan_dt, _scan_person_lane_key, SAME_LANE_SPAM_WINDOW_SEC
         for it in r_items.json().get("value", []):
             if it.get("Title") is not None:
                 existing_by_key.setdefault(str(it["Title"]).strip(), it)
@@ -994,6 +996,16 @@ def sync_table_to_sharepoint(sql_table: str, max_rows: int = 200, ensure_schema:
                 s_ts = str(it.get("ThoiGianQuet") or "").replace("T", " ").strip()[:19]
                 if s_atid and s_ts:
                     existing_by_key.setdefault(f"{s_atid}_{s_ts}", it)
+                    sp_norm_rec = {
+                        "EmployeeATID": s_atid,
+                        "CheckTime": s_ts,
+                        "SerialNumber": it.get("SerialThietBi") or "",
+                        "DeviceName": it.get("TenThietBiCua") or "",
+                    }
+                    sp_dt = _parse_scan_dt(sp_norm_rec)
+                    pk, lk = _scan_person_lane_key(sp_norm_rec)
+                    if sp_dt and pk and lk:
+                        sp_lane_times.setdefault((pk, lk), []).append(sp_dt)
             elif sql_table == "tbl_DailyTimekeeping":
                 s_wd = str(it.get("NgayLamViec") or "")[:10]
                 s_atid = str(it.get("MaChamCongATID") or "").strip()
@@ -1015,6 +1027,11 @@ def sync_table_to_sharepoint(sql_table: str, max_rows: int = 200, ensure_schema:
 
     # Read rows from SQL Server
     rows = db_mssql.get_table_rows(sql_table, limit=max_rows)
+    if sql_table == "tbl_AttendanceLogs":
+        from storage import collapse_same_lane_spam, _parse_scan_dt, _scan_person_lane_key, SAME_LANE_SPAM_WINDOW_SEC
+        # Collapse consecutive <=10s same-lane spam ascending (oldest kept), then process chronologically
+        rows = sorted(collapse_same_lane_spam(rows, window_sec=SAME_LANE_SPAM_WINDOW_SEC), key=lambda r: str(r.get("CheckTime") or ""))
+
     inserted = 0
     updated = 0
     skipped = 0
@@ -1046,6 +1063,13 @@ def sync_table_to_sharepoint(sql_table: str, max_rows: int = 200, ensure_schema:
             rfid_k = str(row.get("CardNumber") or "").strip()
             if rfid_k:
                 existing_it = existing_by_key.get(f"RFID_{rfid_k}")
+        if not existing_it and sql_table == "tbl_AttendanceLogs":
+            row_dt = _parse_scan_dt(row)
+            pk, lk = _scan_person_lane_key(row)
+            if row_dt and pk and lk:
+                if any(abs((row_dt - prev_dt).total_seconds()) <= SAME_LANE_SPAM_WINDOW_SEC for prev_dt in sp_lane_times.get((pk, lk), ())):
+                    skipped += 1
+                    continue
         if existing_it:
             # Skip redundant MERGE for immutable append-only logs
             if sql_table in ("tbl_AttendanceLogs", "tbl_DoorAuditLogs", "tbl_DeviceCommands", "tbl_ClockSyncAuditLogs"):
@@ -1084,6 +1108,11 @@ def sync_table_to_sharepoint(sql_table: str, max_rows: int = 200, ensure_schema:
                 inserted += 1
                 created_obj = resp.json() if resp.text else {}
                 existing_by_key[unique_key] = {"Id": created_obj.get("Id")}
+                if sql_table == "tbl_AttendanceLogs":
+                    row_dt = _parse_scan_dt(row)
+                    pk, lk = _scan_person_lane_key(row)
+                    if row_dt and pk and lk:
+                        sp_lane_times.setdefault((pk, lk), []).append(row_dt)
             else:
                 errors += 1
                 logger.warning("[SP Sync POST %s key=%s] HTTP %s: %s", sql_table, unique_key, resp.status_code, resp.text[:200])
@@ -1255,16 +1284,20 @@ def checkout_visitor_on_sharepoint_async(visitor_record: Dict[str, Any]) -> None
     threading.Thread(target=_worker, daemon=True).start()
 
 
+_SP_RECENT_LANE_TIMES: Dict[tuple, List[datetime]] = {}
+
+
 def _warm_scan_sigs_cache(sp_token: str) -> None:
     global _SP_SCAN_SIGS_WARMED
     if _SP_SCAN_SIGS_WARMED:
         return
     try:
+        from storage import _parse_scan_dt, _scan_person_lane_key
         list_id = _SP_KNOWN_LIST_IDS["tbl_AttendanceLogs"]
         headers_read = {"Authorization": f"Bearer {sp_token}", "Accept": "application/json;odata=nometadata"}
         r = _sp_request_with_retry(
             "GET",
-            f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items?$select=Id,Title,MaChamCongATID,ThoiGianQuet&$top=1500&$orderby=Id desc",
+            f"{SP_SITE_URL}/_api/web/lists(guid'{list_id}')/items?$select=Id,Title,MaChamCongATID,ThoiGianQuet,SerialThietBi,TenThietBiCua&$top=1500&$orderby=Id desc",
             headers=headers_read,
             timeout=12
         )
@@ -1276,6 +1309,16 @@ def _warm_scan_sigs_cache(sp_token: str) -> None:
                 s_ts = str(it.get("ThoiGianQuet") or "").replace("T", " ").strip()[:19]
                 if s_atid and s_ts:
                     _SP_RECENT_SCAN_SIGS.add(f"{s_atid}_{s_ts}")
+                    rec = {
+                        "EmployeeATID": s_atid,
+                        "CheckTime": s_ts,
+                        "SerialNumber": it.get("SerialThietBi") or "",
+                        "DeviceName": it.get("TenThietBiCua") or "",
+                    }
+                    dt = _parse_scan_dt(rec)
+                    pk, lk = _scan_person_lane_key(rec)
+                    if dt and pk and lk:
+                        _SP_RECENT_LANE_TIMES.setdefault((pk, lk), []).append(dt)
             _SP_SCAN_SIGS_WARMED = True
     except Exception as e:
         logger.debug("_warm_scan_sigs_cache warning: %s", e)
@@ -1283,9 +1326,9 @@ def _warm_scan_sigs_cache(sp_token: str) -> None:
 
 def push_live_scans_to_sharepoint_async(scans: List[Dict[str, Any]]) -> None:
     """
-    Asynchronously pushes ALL real-time captured scans (from TCP 4370 or ADMS push)
-    to SharePoint List 'VMS SEAZEN - NHẬT KÝ QUẸT THẺ' AND immediately updates
-    the corresponding rows in 'VMS SEAZEN - TỔNG HỢP CHẤM CÔNG'.
+    Asynchronously pushes real-time captured scans (from TCP 4370 or ADMS push)
+    to SharePoint List 'VMS SEAZEN - NHẬT KÝ QUẸT THẺ' (collapsing continuous <=10s same-lane spam)
+    AND immediately updates 'VMS SEAZEN - TỔNG HỢP CHẤM CÔNG'.
     """
     if not scans:
         return
@@ -1293,6 +1336,7 @@ def push_live_scans_to_sharepoint_async(scans: List[Dict[str, Any]]) -> None:
 
     def _worker():
         try:
+            from storage import collapse_same_lane_spam, _parse_scan_dt, _scan_person_lane_key, SAME_LANE_SPAM_WINDOW_SEC
             with _SP_SYNC_LOCK:
                 tok_info = get_sharepoint_tokens()
                 if not tok_info.get("ok"):
@@ -1302,8 +1346,12 @@ def push_live_scans_to_sharepoint_async(scans: List[Dict[str, Any]]) -> None:
                 list_id = _SP_KNOWN_LIST_IDS["tbl_AttendanceLogs"]
                 headers_write = _get_sp_write_headers(sp_token)
 
+                deduped_asc = sorted(
+                    collapse_same_lane_spam(scans_copy, window_sec=SAME_LANE_SPAM_WINDOW_SEC),
+                    key=lambda x: str(x.get("CheckTime") or x.get("Time") or "").replace("T", " ")
+                )
                 staff_dates_to_sync = set()
-                for sc in scans_copy:
+                for sc in deduped_asc:
                     atid = str(sc.get("EmployeeATID") or "").strip()
                     if not atid:
                         continue
@@ -1311,6 +1359,12 @@ def push_live_scans_to_sharepoint_async(scans: List[Dict[str, Any]]) -> None:
                     sig = f"{atid}_{chk_norm}" if chk_norm else atid
                     if sig in _SP_RECENT_SCAN_SIGS:
                         continue
+
+                    sc_dt = _parse_scan_dt(sc)
+                    pk, lk = _scan_person_lane_key(sc)
+                    if sc_dt and pk and lk:
+                        if any(abs((sc_dt - prev_dt).total_seconds()) <= SAME_LANE_SPAM_WINDOW_SEC for prev_dt in _SP_RECENT_LANE_TIMES.get((pk, lk), ())):
+                            continue
 
                     payload = {
                         "Title": sig[:250],
@@ -1332,6 +1386,10 @@ def push_live_scans_to_sharepoint_async(scans: List[Dict[str, Any]]) -> None:
                     )
                     if r_post.status_code in (200, 201):
                         _SP_RECENT_SCAN_SIGS.add(sig)
+                        if sc_dt and pk and lk:
+                            _SP_RECENT_LANE_TIMES.setdefault((pk, lk), []).append(sc_dt)
+                            if len(_SP_RECENT_LANE_TIMES[(pk, lk)]) > 50:
+                                _SP_RECENT_LANE_TIMES[(pk, lk)] = _SP_RECENT_LANE_TIMES[(pk, lk)][-50:]
                         if bool(sc.get("is_staff", True)) and chk_norm:
                             staff_dates_to_sync.add((chk_norm[:10], atid))
                     else:
